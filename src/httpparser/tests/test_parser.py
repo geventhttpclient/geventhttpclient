@@ -1,6 +1,10 @@
 from httpparser._parser import HTTPResponseParser
 from cStringIO import StringIO
 
+# TODO
+# rewrite parser module to be able to parse either Response or Request
+
+
 RESPONSE =u"""HTTP/1.1 301 Moved Permanently
 Location: http://www.google.com/
 Content-Type: text/html; charset=UTF-8
@@ -34,6 +38,14 @@ class ResponseParser(HTTPResponseParser):
         self.__current_header_field = None
         self.__current_header_value = None
         self.body = ""
+
+    @property
+    def status_code(self):
+        return self.get_code()
+
+    @property
+    def content_length(self):
+        return self.get_content_length()
 
     def on_message_begin(self):
         self.message_begin = True
@@ -73,7 +85,6 @@ class ResponseParser(HTTPResponseParser):
     def on_body(self, string):
         self.body += string
 
-
 def test_parse():
     parser = ResponseParser()
     parser.feed(RESPONSE)
@@ -89,6 +100,55 @@ def test_parse_chunk():
     while data:
         parser.feed(data)
         data = response.read(10)
-    assert len(parser.body)
-    print parser.headers
+    assert parser.should_keep_alive()
+    assert parser.status_code == 301
+    assert parser.headers, {
+        'Content-Length': '219',
+        'X-XSS-Protection': '1; mode=block',
+        'Expires': 'Fri, 04 Nov 2011 23:00:34 GMT',
+        'Server': 'gws',
+        'Location': 'http://www.google.com/',
+        'Cache-Control': 'public, max-age=2592000',
+        'Date': 'Wed, 05 Oct 2011 23:00:34 GMT',
+        'Content-Type': 'text/html; charset=UTF-8'}
+    assert len(parser.body) == parser.content_length
 
+STATUS_CODES = {
+  100 : 'Continue',
+  101 : 'Switching Protocols',
+  200 : 'OK',
+  201 : 'Created',
+  202 : 'Accepted',
+  203 : 'Non-Authoritative Information',
+  204 : 'No Content',
+  205 : 'Reset Content',
+  206 : 'Partial Content',
+  300 : 'Multiple Choices',
+  301 : 'Moved Permanently',
+  302 : 'Moved Temporarily',
+  303 : 'See Other',
+  304 : 'Not Modified',
+  305 : 'Use Proxy',
+  400 : 'Bad Request',
+  401 : 'Unauthorized',
+  402 : 'Payment Required',
+  403 : 'Forbidden',
+  404 : 'Not Found',
+  405 : 'Method Not Allowed',
+  406 : 'Not Acceptable',
+  407 : 'Proxy Authentication Required',
+  408 : 'Request Time-out',
+  409 : 'Conflict',
+  410 : 'Gone',
+  411 : 'Length Required',
+  412 : 'Precondition Failed',
+  413 : 'Request Entity Too Large',
+  414 : 'Request-URI Too Large',
+  415 : 'Unsupported Media Type',
+  500 : 'Internal Server Error',
+  501 : 'Not Implemented',
+  502 : 'Bad Gateway',
+  503 : 'Service Unavailable',
+  504 : 'Gateway Time-out',
+  505 : 'HTTP Version not supported'
+}
