@@ -1,0 +1,828 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<html>
+
+
+
+
+
+
+
+<head>
+    
+    <title>inheritance - Change C object instance to Python subclass - Stack Overflow</title>
+    <link rel="shortcut icon" href="http://cdn.sstatic.net/stackoverflow/img/favicon.ico">
+    <link rel="apple-touch-icon" href="http://cdn.sstatic.net/stackoverflow/img/apple-touch-icon.png">
+    <link rel="search" type="application/opensearchdescription+xml" title="Stack Overflow" href="/opensearch.xml">
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+    <script type="text/javascript" src="http://cdn.sstatic.net/js/stub.js?v=49f661361016"></script>
+    <link rel="stylesheet" type="text/css" href="http://cdn.sstatic.net/stackoverflow/all.css?v=8f82c3c15218">
+    
+    <link rel="canonical" href="http://stackoverflow.com/questions/7589861/change-c-object-instance-to-python-subclass">
+    <link rel="alternate" type="application/atom+xml" title="Feed for question 'Change C object instance to Python subclass'" href="/feeds/question/7589861">
+    <meta name="title" content="inheritance - Change C object instance to Python subclass - Stack Overflow">
+    <link rel="image_src" href="http://sstatic.net/stackoverflow/img/apple-touch-icon.png">
+    <script type="text/javascript">
+        
+        StackExchange.ready(function () {
+
+            StackExchange.question.init({showAnswerHelp:true,totalCommentCount:7,shownCommentCount:5,highlightColor:'#F4A83D',backgroundColor:'#FFF',questionId:7589861});
+
+            styleCode();
+        });
+    </script>
+
+
+    <script type="text/javascript">
+        StackExchange.init({"stackAuthUrl":"http://stackauth.com","serverTime":1317858499,"styleCode":true,"newTagEditor":true,"enableUserHovercards":true,"enableTabCompletion":true,"site":{"name":"Stack Overflow","description":"Q&A for professional and enthusiast programmers"},"user":{"isAnonymous":true,"fkey":"e336afa61ca3a9ac759448d0d539935b","inboxUnviewedCount":-1}});
+        StackExchange.using.setCacheBreakers({"js/prettify-full.js":"0324556b7bf7","js/moderator.js":"a2b72d2dcd13","js/full-anon.js":"a57f0dd00554","js/full.js":"8db67406d8bc","js/wmd.js":"281a9a0e2fbc","js/third-party/jquery.autocomplete.min.js":"e5f01e97f7c3","js/mobile.js":"97644ef9b7d4","js/help.js":"afb99d79b91b","js/tageditor.js":"1d9dda61b487","js/tageditornew.js":"3a5a5c0e8473","js/inline-tag-editing.js":"955bc2b8e433","js/mathjax-editing.js":"807037d18f3f"});
+    </script>
+
+</head>
+<body class="question-page">
+    <noscript><div id="noscript-padding"></div></noscript>
+    <div id="notify-container"></div>
+    <div id="overlay-header"></div>
+    <div id="custom-header"></div>
+
+    <div class="container">
+        <div id="header">
+            <div id="portalLink">
+                <a class="genu" href="http://stackexchange.com" onclick="StackExchange.ready(function(){genuwine.click();});return false;">Stack Exchange</a>
+            </div>
+            <div id="topbar">
+                <div id="hlinks">
+                    <span id="hlinks-user">
+                  
+                  </span>
+                  <span id="hlinks-nav">
+                  <a href="/users/login?returnurl=%2fquestions%2f7589861%2fchange-c-object-instance-to-python-subclass">log in</a>
+ <span class="lsep">|</span>
+<a href="http://careers.stackoverflow.com">careers</a>
+ <span class="lsep">|</span>
+
+                  </span>
+                  <span id="hlinks-custom">
+                  <a href="http://chat.stackoverflow.com">chat</a>
+ <span class="lsep">|</span>
+<a href="http://meta.stackoverflow.com">meta</a>
+ <span class="lsep">|</span>
+<a href="/about">about</a>
+ <span class="lsep">|</span>
+<a href="/faq">faq</a>
+                  </span>
+                </div>
+                <div id="hsearch">
+                    <form id="search" action="/search" method="get" autocomplete="off">
+                    <div>
+                        <input autocomplete="off" name="q" class="textbox" placeholder="search" tabindex="1" type="text" maxlength="140" size="28" value="">
+                    </div>
+                    </form>
+                </div>
+            </div>
+            <br class="cbt">
+            <div id="hlogo">
+                <a href="/" >Stack Overflow</a>
+            </div>
+            <div id="hmenus">
+                <div class="nav mainnavs">
+                    <ul>
+                        <li class="youarehere"><a id="nav-questions" href="/questions">Questions</a></li>
+                        <li><a id="nav-tags" href="/tags">Tags</a></li>
+                        <li><a id="nav-users" href="/users">Users</a></li>
+                        <li><a id="nav-badges" href="/badges">Badges</a></li>
+                        <li><a id="nav-unanswered" href="/unanswered">Unanswered</a></li>
+                    </ul>
+                </div>
+                <div class="nav askquestion">
+                    <ul>
+                        <li>
+                            <a id="nav-askquestion"  href="/questions/ask">Ask Question</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        
+
+
+        <div id="content">
+            
+
+
+
+<div id="question-header">
+    <h1><a href="/questions/7589861/change-c-object-instance-to-python-subclass" class="question-hyperlink">Change C object instance to Python subclass</a></h1>
+</div>
+<div id="mainbar">
+
+
+<div id="question">
+
+    <div class="everyonelovesstackoverflow" id="adzerk1">
+    </div>
+
+    
+    <table>
+    <tr>
+    <td class="votecell">
+        
+<div class="vote">
+    <input type="hidden" value="7589861">
+    <a class="vote-up-off" title="This question shows research effort; it is useful and clear (click again to undo)">up vote</a>
+    <span class="vote-count-post">0</span>
+    <a class="vote-down-off" title="This question does not show any research effort; it is unclear or not useful (click again to undo)">down vote</a>
+
+    <a class="star-off" href="#" title="This is a favorite question (click again to undo)">favorite</a>
+    <div class="favoritecount"><b>1</b></div>    
+
+    <script type="text/javascript">
+        StackExchange.ready(function() {
+            var shareUrl = "http%3a%2f%2fstackoverflow.com%2fq%2f7589861";
+            var shareMsg = "Change+C+object+instance+to+Python+subclass";
+            StackExchange.share.facebook($("#fb-share-7589861"), shareUrl, shareMsg);
+            StackExchange.share.twitter($("#twitter-share-7589861"), shareUrl, shareMsg);
+        });
+    </script>
+    <a id="fb-share-7589861" class="fb-share" title="share link to this question on Facebook">share [fb]</a>
+    <a id="twitter-share-7589861" class="twitter-share" title="share link to this question on Twitter">share [tw]</a>    
+
+</div>
+
+    </td>
+
+<td class="postcell">
+<div>          
+    <div class="post-text">
+        <p>Is it possible to change a class of a C object to a python subclass?</p>
+
+<p>I am using PyGTK, and I have a ListModel that I have wrapped my own class around, but I want to turn it into a TreeModelFilter. The directions tell me to create it by doing:</p>
+
+<pre><code>class MyListStore(gtk.ListStore):
+  def __init__(self, title):
+    self.title = title
+
+liststore = MyListStore(gobject.TYPE_INT, gobject.TYPE_STRING)
+modelfilter = liststore.filter_new()
+</code></pre>
+
+<p>So I thought I could just create:</p>
+
+<pre><code>class MyFilteredListStore(gtk.TreeModelFilter):
+  def __init__(self, title):
+    self.title = title
+</code></pre>
+
+<p>But I don't know how to use filter_new to use my class, instead of gtk.TreeModelFilter.</p>
+
+    </div>            
+    <div class="post-taglist">
+        <a href="/questions/tagged/python" class="post-tag" title="show questions tagged 'python'" rel="tag">python</a> <a href="/questions/tagged/inheritance" class="post-tag" title="show questions tagged 'inheritance'" rel="tag">inheritance</a> <a href="/questions/tagged/pygtk" class="post-tag" title="show questions tagged 'pygtk'" rel="tag">pygtk</a> 
+    </div>
+    <table class="fw">
+    <tr>
+    <td class="vt">
+        <div class="post-menu"><a href="/q/7589861" title="short permalink to this question" id="link-post-7589861">link</a><span class="lsep">|</span><a href="/posts/7589861/edit" >improve this question</a></div>
+    </td>
+    <td align="right" class="post-signature">
+<div class="user-info"><div class="user-action-time">edited <a href="/posts/7589861/revisions" title="show all edits to this post"><span title="2011-09-29 19:19:28Z" class="relativetime">Sep 29 at 19:19</span></a></div><div class="user-gravatar32"></div><div class="user-details"><br></div></div>    </td>
+                        
+
+    <td class="post-signature owner">
+    <div class="user-info"><div class="user-action-time">asked <span title="2011-09-28 21:31:10Z" class="relativetime">Sep 28 at 21:31</span></div><div class="user-gravatar32"><a href="/users/179311/bradlis7"><div class=""><img src="http://www.gravatar.com/avatar/a1083861b16af0bbb2f2aaeef6438fc6?s=32&amp;d=identicon&amp;r=PG" alt=""></div></a></div><div class="user-details"><a href="/users/179311/bradlis7">bradlis7</a><br><span class="reputation-score" title="reputation score">442</span><span title="3 silver badges"><span class="badge2"></span><span class="badgecount">3</span></span><span title="10 bronze badges"><span class="badge3"></span><span class="badgecount">10</span></span></div></div>
+        <br class="cbt">
+        <div class="accept-rate accept-answer-link" title="this user has accepted an answer for 8 of 9 eligible questions">89% accept rate</div>
+    </td>
+    </tr>
+    </table>
+</div>
+</td>
+    </tr>
+
+
+<tr>
+<td class="votecell"></td>
+<td>
+    <div id="comments-7589861" class="comments">
+        <table>
+        <tbody>
+                    
+    <tr id="comment-9206265" class="comment">
+        <td></td>
+        <td class="comment-text"><div><span class="comment-copy">@agf is that a better title? It&#39;s more about the parent/child of general Python, but the PyGTK is just to give an example.</span> &ndash;&nbsp;<a href="/users/179311/bradlis7" title="442 reputation" class="comment-user owner">bradlis7</a> <span class="comment-date"><span title="2011-09-28 21:44:08Z">Sep 28 at 21:44</span></span></div></td>
+    </tr>
+            
+    <tr id="comment-9206414" class="comment">
+        <td></td>
+        <td class="comment-text"><div><span class="comment-copy"><a href="http://stackoverflow.com/questions/2153295/python-object-conversion" title="python object conversion">stackoverflow.com/questions/2153295/python-object-conversion</a> This question is close, but I may want to use the <b>init</b> in my own program. I haven&#39;t decided.</span> &ndash;&nbsp;<a href="/users/179311/bradlis7" title="442 reputation" class="comment-user owner">bradlis7</a> <span class="comment-date"><span title="2011-09-28 21:55:42Z">Sep 28 at 21:55</span></span></div></td>
+    </tr>
+            
+    <tr id="comment-9206420" class="comment">
+        <td class="comment-actions"><table><tbody><tr>
+<td class="comment-score">
+<span title="number of 'great comment' votes received" class="cool">2</span>
+</td>
+<td>
+&nbsp;
+</td></tr>
+</tbody></table></td>
+        <td class="comment-text"><div><span class="comment-copy">What is it you&#39;re asking? How to take a class instance that exists, and change it into an instance of a subclass of its class? Or how to get a method to return a different type than it&#39;s written to? The answer to the first is &quot;switch the <code>__class__</code>&quot; and the answer to the second is &quot;rewrite the method&quot;. Whatever it is, your current title isn&#39;t much better than the old one; maybe you mean &quot;Create class instance from subclass of it&#39;s usual parent class&quot; or something like that?</span> &ndash;&nbsp;<a href="/users/500584/agf" title="15129 reputation" class="comment-user">agf</a> <span class="comment-date"><span title="2011-09-28 21:55:58Z">Sep 28 at 21:55</span></span><span class="edited-yes" title="this comment was edited"></span></div></td>
+    </tr>
+            
+    <tr id="comment-9206539" class="comment">
+        <td></td>
+        <td class="comment-text"><div><span class="comment-copy">Nevermind to question 2153295. I can&#39;t assign to <b>class</b>, as the object is defined in C.</span> &ndash;&nbsp;<a href="/users/179311/bradlis7" title="442 reputation" class="comment-user owner">bradlis7</a> <span class="comment-date"><span title="2011-09-28 22:05:38Z">Sep 28 at 22:05</span></span></div></td>
+    </tr>
+            
+    <tr id="comment-9223374" class="comment">
+        <td></td>
+        <td class="comment-text"><div><span class="comment-copy">How do I handle a question if there&#39;s not an answer (I can&#39;t answer it myself either)? I think I may just take another route to solve my problem. Do I delete the question, or just choose the best available?</span> &ndash;&nbsp;<a href="/users/179311/bradlis7" title="442 reputation" class="comment-user owner">bradlis7</a> <span class="comment-date"><span title="2011-09-29 19:16:52Z">Sep 29 at 19:16</span></span><span class="edited-yes" title="this comment was edited"></span></div></td>
+    </tr>
+
+        </tbody>
+    
+        </table>
+    </div>
+    <a id="comments-link-7589861" class="comments-link" title="expand to show all comments on this post">show <b>2</b> more comments</a>
+    
+    <div class="was-this-helpful">
+        feedback
+    </div>
+    
+</td>
+</tr>    </table>    
+</div>
+
+
+
+<div id="answers">
+
+    <a name="tab-top"></a>
+    <div id="answers-header">
+        <div class="subheader answers-subheader">
+            <h2>2 Answers</h2>
+            <div id="tabs">
+                <a href="/questions/7589861/change-c-object-instance-to-python-subclass?answertab=active#tab-top" title="Answers with the latest activity first">active</a>
+<a href="/questions/7589861/change-c-object-instance-to-python-subclass?answertab=oldest#tab-top" title="Answers in the order they were provided">oldest</a>
+<a class="youarehere" href="/questions/7589861/change-c-object-instance-to-python-subclass?answertab=votes#tab-top" title="Answers with the highest score first">votes</a>
+
+            </div>
+        </div>    
+    </div>    
+
+
+  
+    <a name="7590138"></a>
+    <div id="answer-7590138" class="answer" >
+        <table>
+        <tr>
+        <td class="votecell">
+            
+<div class="vote">
+    <input type="hidden" value="7590138">
+    <a class="vote-up-off" title="This answer is useful (click again to undo)">up vote</a>
+    <span class="vote-count-post">1</span>
+    <a class="vote-down-off" title="This answer is not useful (click again to undo)">down vote</a>
+
+</div>
+
+        </td>
+
+
+<td class="answercell">
+    <div class="post-text"><p>Inheritance can be a very fluid concept in python.  For starters, you should always use new style classes.  To do that, make sure your classes should always inherit from "object".</p>
+
+<p>It's important to note that Classes must inherit from other classes, not instances of other classes, so your example really wouldn't work there.  In fact, I don't really see the difference between inheriting from X or x1.</p>
+
+<p>Inheritance in python is closely tied to the "Method Resolution Order" (MRO).  You can view an objects MRO using the inspect module.</p>
+
+<pre><code>&gt;&gt;&gt; import inspect
+&gt;&gt;&gt; import pprint
+&gt;&gt;&gt;
+&gt;&gt;&gt; class X(object):
+...     pass
+...
+&gt;&gt;&gt; class Y(X):
+...     pass
+...
+&gt;&gt;&gt;
+&gt;&gt;&gt; pprint.pprint(inspect.getmro(Y))
+(&lt;class '__main__.Y'&gt;, &lt;class '__main__.X'&gt;, &lt;type 'object'&gt;)
+&gt;&gt;&gt; 
+</code></pre>
+
+<p>The tuple at the end shows the order in which python will try to resolve method and attribute calls.  You can modify the MRO at runtime by modifying a class's <code>__bases__</code> attribute.</p>
+
+<pre><code>&gt;&gt;&gt; Y.__bases__
+(&lt;class '__main__.X'&gt;,)
+&gt;&gt;&gt;
+&gt;&gt;&gt; class Z(object):
+...     pass
+...
+&gt;&gt;&gt; Y.__bases__ = tuple([Z])
+&gt;&gt;&gt; pprint.pprint(inspect.getmro(Y))
+(&lt;class '__main__.Y'&gt;, &lt;class '__main__.Z'&gt;, &lt;type 'object'&gt;)
+&gt;&gt;&gt;
+</code></pre>
+
+<p>This can get complicated if any of your classes use multiple inheritance, or if you want to preserve certain parts of the inheritance tree but not others.</p>
+</div>
+    <table class="fw">
+    <tr>
+    <td class="vt">
+        <div class="post-menu"><a href="/questions/7589861/change-c-object-instance-to-python-subclass/7590138#7590138" title="permalink to this answer" id="link-post-7590138">link</a><span class="lsep">|</span><a href="/posts/7590138/edit" >improve this answer</a></div>
+    </td>
+            
+
+    <td align="right" class="post-signature">   
+       
+
+    <div class="user-info"><div class="user-action-time">answered <span title="2011-09-28 22:00:49Z" class="relativetime">Sep 28 at 22:00</span></div><div class="user-gravatar32"><a href="/users/297250/brendan"><div class=""><img src="http://www.gravatar.com/avatar/5255289d0269d550a4e80e6bf6b0f590?s=32&amp;d=identicon&amp;r=PG" alt=""></div></a></div><div class="user-details"><a href="/users/297250/brendan">Brendan</a><br><span class="reputation-score" title="reputation score">1,035</span><span title="1 silver badge"><span class="badge2"></span><span class="badgecount">1</span></span><span title="14 bronze badges"><span class="badge3"></span><span class="badgecount">14</span></span></div></div>
+    </td>
+    </tr>
+    </table>
+</td>        </tr>
+
+
+<tr>
+<td class="votecell"></td>
+<td>
+    <div id="comments-7590138" class="comments">
+        <table>
+        <tbody>
+                    
+    <tr id="comment-9206531" class="comment">
+        <td></td>
+        <td class="comment-text"><div><span class="comment-copy">Well, the Python programmers don&#39;t have a way to directly create a TreeModelFilter, so instead, I&#39;m wanting to turn the instance from one object to a subclass of the object. I can&#39;t change <b>class</b> unfortunately.</span> &ndash;&nbsp;<a href="/users/179311/bradlis7" title="442 reputation" class="comment-user owner">bradlis7</a> <span class="comment-date"><span title="2011-09-28 22:05:09Z">Sep 28 at 22:05</span></span></div></td>
+    </tr>
+            
+    <tr id="comment-9211459" class="comment">
+        <td></td>
+        <td class="comment-text"><div><span class="comment-copy">@bradlis7 : if you have problems with TreeModelFilter, open a new question showing the code snippet you try to run, and we will have a serious look at it !</span> &ndash;&nbsp;<a href="/users/665991/louis" title="845 reputation" class="comment-user">Louis</a> <span class="comment-date"><span title="2011-09-29 07:26:39Z">Sep 29 at 7:26</span></span></div></td>
+    </tr>
+
+        </tbody>
+    
+        </table>
+    </div>
+    
+    
+    <div class="was-this-helpful">
+        feedback
+    </div>
+    
+</td>
+</tr>    </table>
+</div>
+
+    <div class="everyonelovesstackoverflow" id="adzerk3">
+    </div>
+
+    
+  
+    <a name="7602417"></a>
+    <div id="answer-7602417" class="answer" >
+        <table>
+        <tr>
+        <td class="votecell">
+            
+<div class="vote">
+    <input type="hidden" value="7602417">
+    <a class="vote-up-off" title="This answer is useful (click again to undo)">up vote</a>
+    <span class="vote-count-post">1</span>
+    <a class="vote-down-off" title="This answer is not useful (click again to undo)">down vote</a>
+
+</div>
+
+        </td>
+
+
+<td class="answercell">
+    <div class="post-text"><p>The best way to handle this problem is not to subclass the TreeModel, but to assign a variable to the object that can be the ListStore or the TreeModelFilter.</p>
+
+<pre><code>class MyListStore(object):
+  def __init__(self, title, filter=None):
+    self.title = title
+    self._model = gtk.ListStore(gobject.TYPE_INT, gobject.TYPE_STRING)
+    if filter_func:
+      self._model = self.model.filter_new()
+      self._model.set_visible_func(filter)
+</code></pre>
+
+<p>I think this is the best way to get around this.</p>
+
+<h2>Edit</h2>
+
+<p>For anyone interested, I found the following to be helpful to keep from breaking old code. It acts like inheritance, without actually doing so:</p>
+
+<pre><code>  def __getattr__(self, name):
+    'Get the attribute from the model if possible.'
+    if hasattr(self._model, name):
+      return getattr(self._model, name)
+    if isinstance(self._model, gtk.TreeModelFilter):
+      if hasattr(self._model.get_model(), name):
+        return getattr(self._model.get_model(), name)
+</code></pre>
+</div>
+    <table class="fw">
+    <tr>
+    <td class="vt">
+        <div class="post-menu"><a href="/questions/7589861/change-c-object-instance-to-python-subclass/7602417#7602417" title="permalink to this answer" id="link-post-7602417">link</a><span class="lsep">|</span><a href="/posts/7602417/edit" >improve this answer</a></div>
+    </td>
+    <td align="right" class="post-signature">
+<div class="user-info"><div class="user-action-time">edited <a href="/posts/7602417/revisions" title="show all edits to this post"><span title="2011-09-29 21:37:03Z" class="relativetime">Sep 29 at 21:37</span></a></div><div class="user-gravatar32"></div><div class="user-details"><br></div></div>    </td>
+            
+
+    <td align="right" class="post-signature owner">   
+       
+
+    <div class="user-info"><div class="user-action-time">answered <span title="2011-09-29 19:27:34Z" class="relativetime">Sep 29 at 19:27</span></div><div class="user-gravatar32"><a href="/users/179311/bradlis7"><div class=""><img src="http://www.gravatar.com/avatar/a1083861b16af0bbb2f2aaeef6438fc6?s=32&amp;d=identicon&amp;r=PG" alt=""></div></a></div><div class="user-details"><a href="/users/179311/bradlis7">bradlis7</a><br><span class="reputation-score" title="reputation score">442</span><span title="3 silver badges"><span class="badge2"></span><span class="badgecount">3</span></span><span title="10 bronze badges"><span class="badge3"></span><span class="badgecount">10</span></span></div></div>
+    </td>
+    </tr>
+    </table>
+</td>        </tr>
+
+
+<tr>
+<td class="votecell"></td>
+<td>
+    <div id="comments-7602417" class="comments dno">
+        <table>
+        <tbody>
+        
+            <tr><td></td><td></td></tr>
+        
+        </tbody>
+    
+        </table>
+    </div>
+    
+    
+    <div class="was-this-helpful">
+        feedback
+    </div>
+    
+</td>
+</tr>    </table>
+</div>
+    <a name='new-answer'></a>
+    <form id="post-form" action="/questions/7589861/answer/submit" method="post"  class="post-form">
+        <h2 class="space">Your Answer</h2>
+       
+
+<script type="text/javascript">
+    StackExchange.ready(function() {
+    
+        initTagRenderer("".split(" "), "".split(" "));
+
+              
+            prepareEditor({
+                
+                heartbeatType: 'answer',
+                bindNavPrevention: true,
+                postfix: "",
+                onDemand: true                ,immediatelyShowMarkdownHelp:true
+            });
+            
+    });  
+</script>
+
+
+<div id="post-editor" class="post-editor">  
+
+    
+    <div class="wmd-container">
+        <div id="wmd-button-bar" class="wmd-button-bar"></div>
+        <textarea id="wmd-input" class="wmd-input" name="post-text" cols="92" rows="15" tabindex="101"></textarea>
+    </div>
+
+    <div class="fl" style="margin-top: 8px; height:24px;">&nbsp;</div>
+    <div id="draft-saved" class="draft-saved community-option fl" style="margin-top: 8px; height:24px; display:none;">draft saved</div>
+
+
+
+    <div id="wmd-preview" class="wmd-preview"></div>
+    <div></div>
+    <div class="edit-block">
+        <input id="fkey" name="fkey" type="hidden" value="e336afa61ca3a9ac759448d0d539935b">
+        <input id="author" name="author" type="text">
+    </div>
+</div>   
+    <div class="form-item">
+        <table>
+        <tr>
+        <td class="vm open-id-login">
+            <a id="login-link" style="font-size: 200%; margin-left: 30px;" href="/users/login?returnurl=%2fquestions%2f7589861%2fchange-c-object-instance-to-python-subclass">log in</a>
+            <script type="text/javascript">
+                StackExchange.ready(function () {
+                    StackExchange.helpers.onClickDraftSave('#login-link');
+                });
+            </script>
+        </td>
+
+    
+        <td class="orcell">
+            <div class="orword">or</div>
+            <div class="orline"></div>
+        </td>
+        <td class="vm">
+            <div>
+                <label for="display-name">Name</label>
+                <input id="display-name" name="display-name" type="text" size="30" maxlength="30" value="" tabindex="105">
+            </div>
+            <div>
+                <label for="m-address">Email</label>
+                <input id="m-address" name="m-address" type="text" size="40" maxlength="100" value="" tabindex="106">
+                <span class="edit-field-overlay">required, but never shown</span>
+            </div>
+            <div>
+                <label for="home-page">Home Page</label>
+                <input id="home-page" name="home-page" type="text" size="40" maxlength="200" value="" tabindex="107">
+            </div>
+        </td>
+    
+        </tr>
+        </table>
+    </div>
+               
+        <div class="form-submit cbt"><input id="submit-button" type="submit" value="Post Your Answer" tabindex="110"></div>
+    </form>
+
+
+        <h2 class="bottom-notice">
+                Not the answer you're looking for? 
+            Browse other questions tagged <a href="/questions/tagged/python" class="post-tag" title="show questions tagged 'python'" rel="tag">python</a> <a href="/questions/tagged/inheritance" class="post-tag" title="show questions tagged 'inheritance'" rel="tag">inheritance</a> <a href="/questions/tagged/pygtk" class="post-tag" title="show questions tagged 'pygtk'" rel="tag">pygtk</a> 
+                or <a href="/questions/ask">ask your own question</a>.
+        </h2>
+</div>
+</div>
+<div id="sidebar">
+
+
+
+    <div class="module newuser newuser-greeting" style="display:none">
+        <h4>Hello World!</h4>
+        <div>
+            <p>This is a collaboratively edited question and answer site for <b>professional and enthusiast programmers</b>. It's 100% free, no registration required.</p>
+            <p class="ar"><a href="/about">about &raquo;</a>&nbsp;&nbsp;&nbsp;<a href="/faq">faq &raquo;</a></p>
+        </div>
+    </div>
+    <div class="module">
+        <p class="label-key">tagged</p>
+        <div class="tagged"><a href="/questions/tagged/python" class="post-tag" title="show questions tagged 'python'" rel="tag">python</a>&nbsp;<span class="item-multiplier">&times;&nbsp;75905</span><br>
+<a href="/questions/tagged/inheritance" class="post-tag" title="show questions tagged 'inheritance'" rel="tag">inheritance</a>&nbsp;<span class="item-multiplier">&times;&nbsp;5068</span><br>
+<a href="/questions/tagged/pygtk" class="post-tag" title="show questions tagged 'pygtk'" rel="tag">pygtk</a>&nbsp;<span class="item-multiplier">&times;&nbsp;772</span><br>
+</div>
+        <table id="qinfo">
+            <tr>
+                <td><p class="label-key">asked</p></td>
+                <td style="padding-left:10px"><p class="label-key" title="2011-09-28 21:31:10Z"><b>7 days ago</b></p></td>
+            </tr>
+            <tr>
+                <td><p class="label-key">viewed</p></td>
+
+                <td style="padding-left:10px"><p class="label-key"><b>65 times</b></p></td>
+            </tr>
+            <tr>
+                <td><p class="label-key">active</p></td>
+                <td style="padding-left:10px"><p class="label-key"><b><a href="?lastactivity" class="lastactivity-link" title="2011-09-29 21:37:03Z">6 days ago</a></b></p></td>
+            </tr>
+        </table>
+    </div>
+    
+        <script type="text/javascript">
+            var scriptSrc = "http://engine2.adzerk.net/z/8277/adzerk1_2_4_43,adzerk2_2_17_45,adzerk3_2_4_44?keywords=python,inheritance,pygtk";
+            if (document.referrer) {
+                if (/\?/.test(scriptSrc))
+                    scriptSrc += "&";
+                else
+                    scriptSrc += "?";
+                scriptSrc += "xReferrer=" + document.referrer;
+            }
+            var z = document.createElement("script"); z.type = "text/javascript"; z.async = true; z.src = scriptSrc; var s = document.getElementsByTagName("script")[0]; s.parentNode.insertBefore(z, s);
+        </script>
+    
+    <div class="everyonelovesstackoverflow" id="adzerk2">
+    </div>
+
+    
+    <div>
+        <script type="text/javascript">
+            var careers_adurl="http://careers.stackoverflow.com/ad/js",careers_cssurl="http://cdn.sstatic.net/careers/ads/sidebar.min.css?33cf39",careers_leaderboardcssurl="http://cdn.sstatic.net/careers/ads/ninja.min.css?33cf39";(function(){var b="min-height:220px;margin:15px 0",c=$("<div>").addClass("hireme").attr("style",b),a=$("<div>").html(c);document.write(a.html());$.ajax({url:"http://cdn.sstatic.net/careers/ads/adloader.min.js?33cf39",dataType:"script",cache:true})})();
+        </script>
+    </div>
+
+    
+<div class="module" id="chat-feature">
+
+
+
+<h4><a href="http://chat.stackoverflow.com" id="h-chat-link">Visit Chat</a></h4>
+
+
+<div class="related" id="ad502-rooms"></div>
+
+<script type="text/javascript">
+// <!--
+    
+    StackExchange.ready(
+    function () {
+        var options = {
+            chatUrl: 'http://chat.stackoverflow.com',
+            reloadUrl: '/api/recent-chat',
+            preloadData: null,tagBased:true
+        };
+
+        StackExchange.chatAd.init(options);
+    });
+// -->
+</script>
+
+
+
+</div>  
+
+    <div class="module">
+    <h4 id="h-linked">Linked</h4>
+    <div class="linked">
+    <div class="spacer">
+<a href="/questions/2153295/python-object-conversion" class="question-hyperlink">Python object conversion</a>
+</div>
+
+    </div>
+    </div>
+    <div class="module">
+    <h4 id="h-related">Related</h4>
+    <div class="related">
+    <div class="spacer">
+<a href="/questions/482263/beginner-level-python-threading-problems" class="question-hyperlink">Beginner-level Python threading problems</a>
+</div>
+<div class="spacer">
+<a href="/questions/1376232/locking-pc-in-python-on-ubuntu" class="question-hyperlink">Locking PC in Python on Ubuntu</a>
+</div>
+<div class="spacer">
+<a href="/questions/1450982/eye-of-gnome-python-plugins-wont-autogen-because-check-for-pygtk-fails" class="question-hyperlink">Eye of Gnome Python plugins won&#39;t autogen because check for PYGTK fails</a>
+</div>
+<div class="spacer">
+<a href="/questions/1796588/python-thread-and-gobject" class="question-hyperlink">Python, thread and gobject</a>
+</div>
+<div class="spacer">
+<a href="/questions/3102464/python-gtk-treeview-liststore-with-real-time-update" class="question-hyperlink">python - gtk treeview - liststore with real-time update</a>
+</div>
+<div class="spacer">
+<a href="/questions/3336457/continuing-code-execution-after-a-pygtk-main-in-python" class="question-hyperlink">Continuing code execution after a pygtk.main() in python</a>
+</div>
+<div class="spacer">
+<a href="/questions/3488285/how-to-make-gtkliststore-store-object-attribute-in-a-row" class="question-hyperlink">How to make GtkListStore store object attribute in a row?</a>
+</div>
+<div class="spacer">
+<a href="/questions/3653639/how-to-properly-store-object-reference-in-treemodel" class="question-hyperlink">How to properly store object reference in treemodel?</a>
+</div>
+<div class="spacer">
+<a href="/questions/3673340/what-is-a-good-practice-way-to-write-a-python-gtk-application" class="question-hyperlink">What is a &#39;good practice&#39; way to write a Python GTK+ application?</a>
+</div>
+<div class="spacer">
+<a href="/questions/3834570/pygtk-what-class-should-my-custom-widgets-inherit-from" class="question-hyperlink">pygtk: What class should my custom widgets inherit from?</a>
+</div>
+<div class="spacer">
+<a href="/questions/3860021/nautilus-python" class="question-hyperlink">Nautilus python</a>
+</div>
+<div class="spacer">
+<a href="/questions/5022506/python-subclass-inheritance" class="question-hyperlink">Python subclass inheritance</a>
+</div>
+<div class="spacer">
+<a href="/questions/5133140/how-draw-on-gtk-window-without-generating-expose-event" class="question-hyperlink">How draw on gtk window without generating expose event</a>
+</div>
+<div class="spacer">
+<a href="/questions/5222333/authentication-in-python-script-to-run-as-root" class="question-hyperlink">authentication in python script to run as root</a>
+</div>
+<div class="spacer">
+<a href="/questions/5346578/how-can-i-find-out-why-when-a-python-object-loses-attributes" class="question-hyperlink">How can I find out why/when a Python object loses attributes?</a>
+</div>
+<div class="spacer">
+<a href="/questions/5588345/question-about-python-gtk-adding-signal-to-a-combo-box-answered-apr-24-10-at" class="question-hyperlink">Question about &ldquo;Python GTK adding signal to a combo box&rdquo; / answered Apr 24 &#39;10 at 18:21</a>
+</div>
+<div class="spacer">
+<a href="/questions/6167716/why-does-the-popen-function-behave-differently-in-python-and-pygtk" class="question-hyperlink">Why does the Popen() function behave differently in Python and PyGTK?</a>
+</div>
+<div class="spacer">
+<a href="/questions/6212171/python-gtk-window-in-thread" class="question-hyperlink">Python GTK window in Thread</a>
+</div>
+<div class="spacer">
+<a href="/questions/6328990/change-cursor-type-in-pygtk-application" class="question-hyperlink">Change Cursor type in Pygtk Application</a>
+</div>
+<div class="spacer">
+<a href="/questions/6546447/drawing-my-own-object-on-a-layout-problem-with-subclassing-gtk-drawable" class="question-hyperlink">Drawing my own object on a layout: problem with subclassing gtk.drawable</a>
+</div>
+<div class="spacer">
+<a href="/questions/6678822/gtk-textmark-visible-change-symbol-pygtk-python" class="question-hyperlink">gtk.TextMark.visible change symbol? pygtk python</a>
+</div>
+<div class="spacer">
+<a href="/questions/6717916/usr-bin-env-python-getting-command-not-found-and-permission-denied" class="question-hyperlink">#!/usr/bin/env python: Getting command not found and Permission Denied</a>
+</div>
+<div class="spacer">
+<a href="/questions/6819271/change-gtkliststore-model-dynamically" class="question-hyperlink">Change gtkListStore model dynamically</a>
+</div>
+<div class="spacer">
+<a href="/questions/7135743/adding-widgets-from-glade-file-to-a-subclass-of-gtk-window-in-python-how" class="question-hyperlink">Adding widgets from Glade file to a subclass of gtk.Window in Python. How?</a>
+</div>
+<div class="spacer">
+<a href="/questions/7163858/python-aboutdialog-space-between-program-name-version-and-logo" class="question-hyperlink">python aboutdialog space between program name/version and logo</a>
+</div>
+
+    </div>
+    </div>
+</div>
+
+<div id="feed-link">
+    <div id="feed-link-text"><a href="/feeds/question/7589861" title="feed of this question and its answers"><span class="feed-icon"></span>question feed</a></div>
+</div>
+<script type="text/javascript" src="/posts/7589861/ivc/89d8"></script>
+<noscript>
+    <div><img src="/posts/7589861/ivc/89d8" class="dno" alt=""></div>
+</noscript>
+<div style="display:none" id="prettify-lang">default</div>
+        </div>
+    </div>
+    <div id="footer">
+        <div class="footerwrap">
+            <div id="footer-menu">
+                <a href="/about">about</a> |
+                <a href="/faq">faq</a> |
+                
+                    <span onclick="if(window.localStorage){localStorage.setItem('blog-new',1317927611000); $('.new-blog-post').fadeOut();}">
+                        <script type="text/javascript">if(!window.localStorage || new Date(+localStorage.getItem('blog-new'))<new Date())document.write('<span title="SE Podcast #21, by Alex Miller - 4 hours ago" class="new-blog-post">new<\/span>');</script>
+                        <a href="http://blog.stackexchange.com">blog</a>
+                    </span> |
+                    <a href="http://chat.stackoverflow.com">chat</a> |
+                <a href="http://data.stackexchange.com">data</a> |
+                <a href="http://blog.stackoverflow.com/category/podcasts/">podcast</a> |
+                <a href="http://shop.stackexchange.com/">shop</a> |
+                <a href="http://stackexchange.com/legal">legal</a> |
+                <a href="http://engine.adzerk.net/redirect/0/2776/2751/0/4de3c60f719c4dfcb1a57531c7050090/0">advertising info</a> |
+
+                <a onclick="StackExchange.switchMobile('on', '/questions/7589861/change-c-object-instance-to-python-subclass')">mobile</a> |
+
+                <b><a href="mailto:team@stackoverflow.com">contact us</a></b>
+                  | <b><a href="http://meta.stackoverflow.com">feedback</a></b>
+                <div id="footer-sites">
+                    
+                        <span style="color:#FE7A15;font-size:140%">&#9632;</span>&nbsp;<a href="http://stackoverflow.com">stackoverflow.com</a>&nbsp; 
+                        <span style="color:#FE7A15;font-size:140%">&#9632;</span>&nbsp;<a href="http://stackapps.com">api/apps</a>&nbsp; 
+                        <span style="color:#FE7A15;font-size:140%">&#9632;</span>&nbsp;<a href="http://careers.stackoverflow.com">careers</a>&nbsp; 
+                        <span style="color:#E8272C;font-size:140%">&#9632;</span>&nbsp;<a href="http://serverfault.com">serverfault.com</a>&nbsp; 
+                        <span style="color:#00AFEF;font-size:140%">&#9632;</span>&nbsp;<a href="http://superuser.com">superuser.com</a>&nbsp; 
+                        <span style="color:#969696;font-size:140%">&#9632;</span>&nbsp;<a href="http://meta.stackoverflow.com">meta</a>&nbsp; 
+                        <span style="color:#46937D;font-size:140%">&#9632;</span>&nbsp;<a href="http://area51.stackexchange.com">area&nbsp;51</a>&nbsp; 
+                        <span style="color:#C0D0DC;font-size:140%">&#9632;</span>&nbsp;<a href="http://webapps.stackexchange.com">webapps</a>&nbsp; 
+                        <span style="color:#000000;font-size:140%">&#9632;</span>&nbsp;<a href="http://gaming.stackexchange.com">gaming</a>&nbsp; 
+                        <span style="color:#dd4814;font-size:140%">&#9632;</span>&nbsp;<a href="http://askubuntu.com">ubuntu</a>&nbsp; 
+                        <span style="color:#9ce4fe;font-size:140%">&#9632;</span>&nbsp;<a href="http://webmasters.stackexchange.com">webmasters</a>&nbsp; 
+                        <span style="color:#cf4d3f;font-size:140%">&#9632;</span>&nbsp;<a href="http://cooking.stackexchange.com">cooking</a>&nbsp; 
+                        <span style="color:#f4f28d;font-size:140%">&#9632;</span>&nbsp;<a href="http://gamedev.stackexchange.com">game development</a>&nbsp; 
+                        <span style="color:#0f3559;font-size:140%">&#9632;</span>&nbsp;<a href="http://math.stackexchange.com">math</a>&nbsp; 
+                        <span style="color:#f2f2f2;font-size:140%">&#9632;</span>&nbsp;<a href="http://photo.stackexchange.com">photography</a>&nbsp; 
+                        <span style="color:#037187;font-size:140%">&#9632;</span>&nbsp;<a href="http://stats.stackexchange.com">stats</a>&nbsp; 
+                        <span style="color:#f1e7cc;font-size:140%">&#9632;</span>&nbsp;<a href="http://tex.stackexchange.com">tex</a>&nbsp; 
+                        <span style="color:#e1cdae;font-size:140%">&#9632;</span>&nbsp;<a href="http://english.stackexchange.com">english</a>&nbsp; 
+                        <span style="color:#a2d9f6;font-size:140%">&#9632;</span>&nbsp;<a href="http://cstheory.stackexchange.com">theoretical cs</a>&nbsp; 
+                        <span style="color:#1b3e6c;font-size:140%">&#9632;</span>&nbsp;<a href="http://programmers.stackexchange.com">programmers</a>&nbsp; 
+                        <span style="color:#293a5d;font-size:140%">&#9632;</span>&nbsp;<a href="http://unix.stackexchange.com">unix</a>&nbsp;
+                        <span style="color:#bec0cb;font-size:140%">&#9632;</span>&nbsp;<a href="http://apple.stackexchange.com">apple</a>&nbsp;
+                        <span style="color:#939185;font-size:140%">&#9632;</span>&nbsp;<a href="http://wordpress.stackexchange.com">wordpress</a>&nbsp;
+                        <span style="color:#b5cda4;font-size:140%">&#9632;</span>&nbsp;<a href="http://physics.stackexchange.com">physics</a>&nbsp;
+                        <span style="color:#4176ab;font-size:140%">&#9632;</span>&nbsp;<a href="http://diy.stackexchange.com">home&nbsp;improvement</a>&nbsp;
+                        <span style="color:#d1d8d7;font-size:140%">&#9632;</span>&nbsp;<a href="http://gis.stackexchange.com">gis</a>&nbsp;
+                        <span style="color:#e5e2d3;font-size:140%">&#9632;</span>&nbsp;<a href="http://electronics.stackexchange.com">electronics</a>&nbsp;
+                        <span style="color:#a4c639;font-size:140%">&#9632;</span>&nbsp;<a href="http://android.stackexchange.com">android</a>&nbsp;
+                        <span style="color:#2e4e60;font-size:140%">&#9632;</span>&nbsp;<a href="http://security.stackexchange.com">security</a>&nbsp;
+                        <span style="color:#45bcb5;font-size:140%">&#9632;</span>&nbsp;<a href="http://bicycles.stackexchange.com">bicycles</a>&nbsp;
+                        <span style="color:#00adee;font-size:140%">&#9632;</span>&nbsp;<a href="http://dba.stackexchange.com">dba</a>&nbsp;
+                        <span style="color:#2edaf0;font-size:140%">&#9632;</span>&nbsp;<a href="http://drupal.stackexchange.com">drupal</a>&nbsp;
+                        <span style="color:#213951;font-size:140%">&#9632;</span>&nbsp;<a href="http://sharepoint.stackexchange.com">sharepoint</a>&nbsp;
+                </div>
+            </div>
+            <div id="footer-flair">
+                <a class="peer1" href="http://www.peer1.com/stackoverflow"></a>  
+	            <a href="http://creativecommons.org/licenses/by-sa/3.0/" class="cc-wiki-link"></a>
+                <div id="svnrev">rev 2011.10.5.1</div>
+            </div>
+            <div id="copyright">
+                site design / logo &copy; 2011 stack exchange inc; 
+                user contributions licensed under <a href="http://creativecommons.org/licenses/by-sa/3.0/" rel="license">cc-wiki</a> with <a href="http://blog.stackoverflow.com/2009/06/attribution-required/" rel="license">attribution required</a>
+            </div>
+            
+
+        </div>
+    </div>
+    
+    <noscript>
+        <div id="noscript-warning">Stack Overflow works best with JavaScript enabled<img src="http://pixel.quantserve.com/pixel/p-c1rF4kxgLUzNc.gif" alt="" class="dno"></div>
+    </noscript>
+    
+    <script type="text/javascript">var _gaq=_gaq||[];_gaq.push(['_setAccount','UA-5620270-1']);_gaq.push(['_trackPageview']);(function(){var ga=document.createElement('script');ga.type='text/javascript';ga.async=true;ga.src='http://www.google-analytics.com/ga.js';var s=document.getElementsByTagName('script')[0];s.parentNode.insertBefore(ga,s);})();_qoptions={qacct:"p-c1rF4kxgLUzNc"};</script>
+    <script type="text/javascript" src="http://edge.quantserve.com/quant.js"></script>
+    
+
+</body>
+</html>
