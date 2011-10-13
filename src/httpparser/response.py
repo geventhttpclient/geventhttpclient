@@ -1,5 +1,11 @@
-from httpparser._parser import HTTPResponseParser
+from httpparser._parser import HTTPResponseParser, HTTPParseError
 import errno
+import sys
+import gevent.queue
+import gevent.event
+import gevent.coros
+import gevent.pool
+from gevent import socket
 
 
 class HeaderField(object):
@@ -32,32 +38,35 @@ HEADER_STATE_FIELD = 1
 HEADER_STATE_VALUE = 2
 HEADER_STATE_DONE = 3
 
-#from gevent import socket
-#import gevent
-import socket
 
 class Client(object):
 
     HTTP_11 = 'HTTP/1.1'
     HTTP_10 = 'HTTP/1.0'
 
-    CHUNK_SIZE = 8192 # 8KB
+    CHUNK_SIZE = 1024 * 16 # 16KB
     CONNECTION_TIMEOUT = 10
     NETWORK_TIMEOUT = 10
 
-    DEFAULT_FIELDS = {
-        HeaderField('User-Agent'): 'gevent-http-1.1',
+    DEFAULT_HEADERS = {
+        HeaderField('User-Agent'): 'python/gevent-http-1.1',
     }
 
-    def __init__(self, host, port):
+    def __init__(self, host, port, headers={},
+            chunk_size=None, connection_timeout=None,
+            network_timeout=None, disable_ipv6=False):
         self.__host = host
         self.__port = port
         self.version = self.HTTP_11
         self.__socket = None
+        self.__pool = gevent.pool.Pool(1)
+        self.default_headers = self.DEFAULT_HEADERS.copy()
+        for field, value in headers.iteritems():
+            self.default_headers[HeaderField(field)] = value
 
-        self.chunk_size = self.CHUNK_SIZE
-        self.connection_timeout = self.CONNECTION_TIMEOUT
-        self.disable_ipv6 = False
+        self.chunk_size = chunk_size or self.CHUNK_SIZE
+        self.connection_timeout = connection_timeout or self.CONNECTION_TIMEOUT
+        self.disable_ipv6 = disable_ipv6
 
         family = 0
         if self.disable_ipv6:
@@ -82,27 +91,27 @@ class Client(object):
         if self._sock is not None:
             try:
                 self._sock.close()
-                self._sock = None
-            except socket.error:
+            except:
                 pass
+            finally:
+                self._sock = None
 
     def connect(self):
         self.close()
         sock = socket.socket(self.sock_family, self.sock_type, self.sock_protocol)
-        # sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        # sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        #with gevent.Timeout(self.connection_timeout):
-        sock.connect(self.sock_address)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        with gevent.Timeout(self.connection_timeout):
+            sock.connect(self.sock_address)
         self._sock = sock
         return sock
 
     def request(self, method, query_string, body=b"", headers={}, retry=False):
-        header_fields = self.DEFAULT_FIELDS.copy()
+        header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
             header_fields[HeaderField(field)] = value
         if self.version == self.HTTP_11 and 'Host' not in header_fields:
             header_fields[HeaderField('Host')] = \
-                    self.__host # + ":" + str(self.__port)
+                    self.__host + ":" + str(self.__port)
         if body:
             header_fields[HeaderField('Content-Length'), len(body)]
 
@@ -111,70 +120,117 @@ class Client(object):
             request += str(field) + ': ' + value + "\r\n"
         request += "\r\n"
 
+        # used like a RLock but much faster, join the last job
+        # to prevent from reusing the socket before the last response
+        # has been full consumed
+        self.__pool.join()
+
         if self._sock is None:
             self.connect()
 
-        response = Response()
-        # XXX: network timeout
-        sent = 0
         try:
-            sent = self._sock.send(request)
-        except socket.error as e:
-            if e.errno == errno.EPIPE:
-                pass
-            else:
-                raise
-        if sent == 0:
-            self.connect()
-            self._sock.sendall(request)
-        elif sent != len(request):
-            self._sock.sendall(request[sent:])
+            response = Response()
+            # XXX: network timeout
+            sent = 0
+            try:
+                sent = self._sock.send(request)
+            except socket.error as e:
+                if e.errno == errno.EPIPE:
+                    pass
+                else:
+                    raise
+            if sent == 0:
+                self.connect()
+                self._sock.sendall(request)
+            elif sent != len(request):
+                self._sock.sendall(request[sent:])
 
-        if body:
-            self._sock.sendall(body)
-
-        def _retry():
-            self.connect()
-            self._sock.sendall(request)
             if body:
                 self._sock.sendall(body)
-            return self._sock.recv(self.chunk_size)
 
-        try:
-            data = self._sock.recv(self.chunk_size)
-        except socket.error as e:
-            if e.errno == errno.ECONNRESET:
-                if retry:
-                    data = _retry()
-        else:
-            if len(data) == 0:
-                if retry:
-                    data = _retry()
+            def _retry():
+                self.connect()
+                self._sock.sendall(request)
+                if body:
+                    self._sock.sendall(body)
+                return self._sock.recv(self.chunk_size)
 
-        response.feed(data)
-        while data:
-            if response.message_complete:
-                break
-            data = self._sock.recv(self.chunk_size)
+            data = ""
+            try:
+                data = self._sock.recv(self.chunk_size)
+            except socket.error as e:
+                if e.errno == errno.ECONNRESET:
+                    if retry:
+                        data = _retry()
+            else:
+                if len(data) == 0:
+                    if retry:
+                        data = _retry()
+
             response.feed(data)
 
-        if not response.should_keep_alive():
+            if not response.message_complete_event.is_set():
+                job = self.__pool.spawn(self._read_until_eof, response)
+                job.link_exception(response._read_failed)
+                job.link(self._job_done)
+            else:
+                self._finalize(response)
+
+            return response
+
+        except:
+            self._finalize(None, close=True)
+            raise
+
+    def _job_done(self, job):
+        if job.successful():
+            response = job.get()
+            self._finalize(response)
+            if response.status_code == 0:
+                raise HTTPParseError('invalid response from server')
+        else:
+            self._finalize(None, close=True)
+
+    def _finalize(self, response, close=False):
+        if close or (response is not None and not response.should_keep_alive()):
             self.close()
-        return response
+
+    def _read_until_eof(self, response):
+        try:
+            data = True
+            while data:
+                if response.message_complete_event.is_set():
+                    break
+                data = self._sock.recv(self.chunk_size)
+                response.feed(data)
+            return response
+        except:
+            self._finalize(response, close=True)
+            raise
+        else:
+            self._finalize(response)
 
 
 class Response(HTTPResponseParser):
 
-    def __init__(self, on_body=None):
-        self.headers_complete = False
-        self.message_begin = False
-        self.message_complete = False
+    EOF = sys.maxint
+
+    def __init__(self):
+        self.headers_complete_event = gevent.event.Event()
+        self.message_begin_event = gevent.event.Event()
+        self.message_complete_event = gevent.event.Event()
+        self.__body_event = gevent.event.Event()
+        self.__body_queue = gevent.queue.Queue()
         self.__headers_index = {}
         self.__header_state = HEADER_STATE_INIT
         self.__current_header_field = None
         self.__current_header_value = None
         self.__header_position = 1
-        self.body = b""
+        self.__eof = False
+
+    def _read_failed(self, g):
+        self.__body_queue.put(self.EOF)
+        raise g.exception
 
     def __getitem__(self, key):
         return self.__headers_index[key]
@@ -192,6 +248,29 @@ class Response(HTTPResponseParser):
     def __contains__(self, key):
         return key in self.__headers_index
 
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self.__eof:
+            raise StopIteration
+        self.__body_event.wait()
+        data = self.__body_queue.get()
+        if data == self.EOF:
+            self.__eof = True
+            raise StopIteration
+        return data
+
+    @property
+    def body(self):
+        if hasattr(self, '_body'):
+            return self._body
+        buf = b""
+        for chunk in self:
+            buf += chunk
+        self._body = buf
+        return buf
+
     @property
     def status_code(self):
         return self.get_code()
@@ -207,15 +286,17 @@ class Response(HTTPResponseParser):
         return None
 
     def _on_message_begin(self):
-        self.message_begin = True
+        self.message_begin_event.set()
 
     def _on_message_complete(self):
-        self.message_complete = True
+        self.message_complete_event.set()
+        self.__body_event.set()
+        self.__body_queue.put(self.EOF)
 
     def _on_headers_complete(self):
         self.__flush_header()
         self.__header_state = HEADER_STATE_DONE
-        self.headers_complete = True
+        self.headers_complete_event.set()
 
     def _on_header_field(self, string):
         if self.__header_state == HEADER_STATE_FIELD:
@@ -236,14 +317,18 @@ class Response(HTTPResponseParser):
         self.__header_state = HEADER_STATE_VALUE
 
     def _on_body(self, string):
-        self.body += string
+        if not self.__body_event.is_set():
+            self.__body_event.set()
+        self.__body_queue.put(string)
 
     def __flush_header(self):
-        field = HeaderField(self.__current_header_field, self.__header_position)
-        self.__headers_index[field] = self.__current_header_value
-        self.__header_position += 1
-        self.__current_header_field = None
-        self.__current_header_value = None
+        if self.__current_header_field is not None:
+            field = HeaderField(self.__current_header_field,
+                    self.__header_position)
+            self.__headers_index[field] = self.__current_header_value
+            self.__header_position += 1
+            self.__current_header_field = None
+            self.__current_header_value = None
 
 
 if __name__ == "__main__":

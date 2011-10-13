@@ -1,117 +1,74 @@
-from httpparser._parser import HTTPResponseParser
+from httpparser.response import Response, Client
+from httpparser._parser import HTTPParseError
 from cStringIO import StringIO
+import sys
 
-# TODO
-# rewrite parser module to be able to parse either Response or Request
+RESPONSE = 'HTTP/1.1 301 Moved Permanently\r\nLocation: http://www.google.fr/\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Thu, 13 Oct 2011 15:03:12 GMT\r\nExpires: Sat, 12 Nov 2011 15:03:12 GMT\r\nCache-Control: public, max-age=2592000\r\nServer: gws\r\nContent-Length: 218\r\nX-XSS-Protection: 1; mode=block\r\n\r\n<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF="http://www.google.fr/">here</A>.\r\n</BODY></HTML>\r\n'
 
-
-RESPONSE =u"""HTTP/1.1 301 Moved Permanently
-Location: http://www.google.com/
-Content-Type: text/html; charset=UTF-8
-Date: Wed, 05 Oct 2011 23:00:34 GMT
-Expires: Fri, 04 Nov 2011 23:00:34 GMT
-Cache-Control: public, max-age=2592000
-Server: gws
-Content-Length: 219
-X-XSS-Protection: 1; mode=block
-
-<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
-<TITLE>301 Moved</TITLE></HEAD><BODY>
-<H1>301 Moved</H1>
-The document has moved
-<A HREF="http://www.google.com/">here</A>.
-</BODY></HTML>"""
-
-HEADER_STATE_INIT = 0
-HEADER_STATE_FIELD = 1
-HEADER_STATE_VALUE = 2
-HEADER_STATE_DONE = 3
-
-class ResponseParser(HTTPResponseParser):
-
-    def __init__(self):
-        self.headers = {}
-        self.message_begin = False
-        self.message_complete = False
-        self.headers_complete = False
-        self.__header_state = HEADER_STATE_INIT
-        self.__current_header_field = None
-        self.__current_header_value = None
-        self.body = ""
-
-    @property
-    def status_code(self):
-        return self.get_code()
-
-    @property
-    def content_length(self):
-        return self.get_content_length()
-
-    def on_message_begin(self):
-        self.message_begin = True
-
-    def on_message_complete(self):
-        self.message_complete = True
-
-    def on_headers_complete(self):
-        self.__flush_header()
-        self.__current_header_field = None
-        self.__current_header_value = None
-        self.headers_complete = True
-        self.__header_state = HEADER_STATE_DONE
-
-    def on_header_field(self, string):
-        if self.__header_state == HEADER_STATE_VALUE:
-            self.__flush_header()
-
-        if self.__header_state == HEADER_STATE_FIELD:
-            self.__current_header_field += string
-        else:
-            self.__current_header_field = string
-
-        self.__header_state = HEADER_STATE_FIELD
-
-    def on_header_value(self, string):
-        if self.__header_state == HEADER_STATE_VALUE:
-            self.__current_header_value += string
-        else:
-            self.__current_header_value = string
-
-        self.__header_state = HEADER_STATE_VALUE
-
-    def __flush_header(self):
-        self.headers[self.__current_header_field] = self.__current_header_value
-
-    def on_body(self, string):
-        self.body += string
+def test_refcount():
+    import gc
+    gc.set_debug(gc.DEBUG_LEAK)
+    try:
+        parser = Response()
+        assert parser.feed(RESPONSE), len(RESPONSE)
+        del parser
+        print gc.garbage
+    finally:
+        gc.set_debug(0)
 
 def test_parse():
-    parser = ResponseParser()
-    parser.feed(RESPONSE)
-    assert parser.message_begin
-    assert parser.headers_complete
-    assert parser.message_complete
+    parser = Response()
+    assert parser.feed(RESPONSE), len(RESPONSE)
+    assert parser.message_begin_event.is_set()
+    assert parser.headers_complete_event.is_set()
+    assert parser.message_complete_event.is_set()
+    assert len(parser.body) == parser.content_length
 
 def test_parse_chunk():
-    parser = ResponseParser()
+    parser = Response()
     parser.feed(RESPONSE)
     response = StringIO(RESPONSE)
     data = response.read(10)
     while data:
         parser.feed(data)
         data = response.read(10)
+    assert parser.message_begin_event.is_set()
+    assert parser.headers_complete_event.is_set()
+    assert parser.message_complete_event.is_set()
     assert parser.should_keep_alive()
     assert parser.status_code == 301
-    assert parser.headers, {
-        'Content-Length': '219',
-        'X-XSS-Protection': '1; mode=block',
-        'Expires': 'Fri, 04 Nov 2011 23:00:34 GMT',
-        'Server': 'gws',
-        'Location': 'http://www.google.com/',
-        'Cache-Control': 'public, max-age=2592000',
-        'Date': 'Wed, 05 Oct 2011 23:00:34 GMT',
-        'Content-Type': 'text/html; charset=UTF-8'}
+    assert parser.items() == [
+        ('Location', 'http://www.google.fr/'),
+        ('Content-Type', 'text/html; charset=UTF-8'),
+        ('Date', 'Thu, 13 Oct 2011 15:03:12 GMT'),
+        ('Expires', 'Sat, 12 Nov 2011 15:03:12 GMT'),
+        ('Cache-Control', 'public, max-age=2592000'),
+        ('Server', 'gws'),
+        ('Content-Length', '218'),
+        ('X-XSS-Protection', '1; mode=block'),
+    ]
     assert len(parser.body) == parser.content_length
+
+def test_parse_error():
+    response =  Response()
+    try:
+        response.feed("HTTP/1.1 800\r\n\r\n")
+        response.feed("")
+        assert response.status_code, 0
+        assert response.message_begin_event.is_set()
+        assert response.body, None
+    except HTTPParseError as e:
+        assert str(e) == ""
+    else:
+        assert False, "should have raised"
+
+
+def test_client():
+    client = Client('google.fr', 80)
+    response = client.request("GET", "/")
+    assert response.status_code == 301
+    print repr(response.body)
+
 
 STATUS_CODES = {
   100 : 'Continue',
