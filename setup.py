@@ -11,5 +11,6 @@ setup(name='httpparser',
        description = 'http parser from joyent and client',
        packages=find_packages('src'),
        package_dir={'': 'src'},
-       ext_modules = [httpparser])
+       ext_modules = [httpparser],
+       include_package_data=True)
 
