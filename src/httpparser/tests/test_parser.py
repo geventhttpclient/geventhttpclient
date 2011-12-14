@@ -1,7 +1,6 @@
-from httpparser.response import Response, Client
+from httpparser.response import HTTPResponse, Client
 from httpparser._parser import HTTPParseError
 from cStringIO import StringIO
-import sys
 
 RESPONSE = 'HTTP/1.1 301 Moved Permanently\r\nLocation: http://www.google.fr/\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Thu, 13 Oct 2011 15:03:12 GMT\r\nExpires: Sat, 12 Nov 2011 15:03:12 GMT\r\nCache-Control: public, max-age=2592000\r\nServer: gws\r\nContent-Length: 218\r\nX-XSS-Protection: 1; mode=block\r\n\r\n<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF="http://www.google.fr/">here</A>.\r\n</BODY></HTML>\r\n'
 
@@ -9,7 +8,7 @@ def test_refcount():
     import gc
     gc.set_debug(gc.DEBUG_LEAK)
     try:
-        parser = Response()
+        parser = HTTPResponse()
         assert parser.feed(RESPONSE), len(RESPONSE)
         del parser
         print gc.garbage
@@ -17,24 +16,23 @@ def test_refcount():
         gc.set_debug(0)
 
 def test_parse():
-    parser = Response()
+    parser = HTTPResponse()
     assert parser.feed(RESPONSE), len(RESPONSE)
-    assert parser.message_begin_event.is_set()
-    assert parser.headers_complete_event.is_set()
-    assert parser.message_complete_event.is_set()
-    assert len(parser.body) == parser.content_length
+    assert parser.message_begun
+    assert parser.headers_complete
+    assert parser.message_complete
 
 def test_parse_chunk():
-    parser = Response()
+    parser = HTTPResponse()
     parser.feed(RESPONSE)
     response = StringIO(RESPONSE)
     data = response.read(10)
     while data:
         parser.feed(data)
         data = response.read(10)
-    assert parser.message_begin_event.is_set()
-    assert parser.headers_complete_event.is_set()
-    assert parser.message_complete_event.is_set()
+    assert parser.message_begun
+    assert parser.headers_complete
+    assert parser.message_complete
     assert parser.should_keep_alive()
     assert parser.status_code == 301
     assert parser.items() == [
@@ -47,27 +45,23 @@ def test_parse_chunk():
         ('Content-Length', '218'),
         ('X-XSS-Protection', '1; mode=block'),
     ]
-    assert len(parser.body) == parser.content_length
 
 def test_parse_error():
-    response =  Response()
+    response =  HTTPResponse()
     try:
-        response.feed("HTTP/1.1 800\r\n\r\n")
+        response.feed("HTTP/1.1 asdf\r\n\r\n")
         response.feed("")
         assert response.status_code, 0
-        assert response.message_begin_event.is_set()
-        assert response.body, None
+        assert response.message_begun
     except HTTPParseError as e:
-        assert str(e) == ""
+        assert str(e) == 'invalid HTTP status code: HTTP/1.1 '
     else:
         assert False, "should have raised"
-
 
 def test_client():
     client = Client('google.fr', 80)
     response = client.request("GET", "/")
     assert response.status_code == 301
-    print repr(response.body)
 
 
 STATUS_CODES = {
