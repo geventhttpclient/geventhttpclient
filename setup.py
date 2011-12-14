@@ -2,13 +2,15 @@ from distutils.core import setup
 from setuptools.extension import Extension
 from setuptools import find_packages
 
-httpparser = Extension('httpparser._parser',
+httpparser = Extension('geventhttpclient._parser',
                     sources = ['ext/_parser.c', 'ext/http_parser.c'],
                     include_dirs = ['ext'])
 
-setup(name='httpparser',
+setup(name='geventhttpclient',
        version = '1.0',
-       description = 'http parser from joyent and client',
+       description = 'http client library for gevent',
+       author="Antonin Amand",
+       author_email="antonin.amand@gmail.com",
        packages=find_packages('src'),
        package_dir={'': 'src'},
        ext_modules = [httpparser],
