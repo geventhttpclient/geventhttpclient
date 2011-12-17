@@ -7,26 +7,32 @@ static PyObject * PyExc_HTTPParseError;
 
 static int on_message_begin(http_parser* parser)
 {
+    int fail = 0;
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, "_on_message_begin")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_message_begin");
         PyObject* result = PyObject_CallObject(callable, NULL);
+        if (PyObject_IsTrue(result))
+            fail = 1;
         Py_XDECREF(result);
         Py_DECREF(callable);
     }
-    return 0;
+    return fail;
 }
 
 static int on_message_complete(http_parser* parser)
 {
+    int fail = 0;
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, "_on_message_complete")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_message_complete");
         PyObject* result = PyObject_CallObject(callable, NULL);
+        if (PyObject_IsTrue(result))
+            fail = 1;
         Py_XDECREF(result);
         Py_DECREF(callable);
     }
-    return 0;
+    return fail;
 }
 
 static int on_headers_complete(http_parser* parser)
@@ -46,44 +52,54 @@ static int on_headers_complete(http_parser* parser)
 
 static int on_header_field(http_parser* parser, const char *at, size_t length)
 {
+    int fail = 0;
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, "_on_header_field")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_header_field");
         PyObject* args = Py_BuildValue("(s#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
+        if (PyObject_IsTrue(result))
+            fail = 1;
         Py_XDECREF(result);
         Py_DECREF(callable);
         Py_DECREF(args);
     }
-    return 0;
+    return fail;
 }
 
 static int on_header_value(http_parser* parser, const char *at, size_t length)
 {
+    int fail = 0;
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, "_on_header_value")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_header_value");
         PyObject* args = Py_BuildValue("(s#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
+        if (PyObject_IsTrue(result))
+            fail = 1;
         Py_XDECREF(result);
         Py_DECREF(callable);
         Py_DECREF(args);
     }
-    return 0;
+    return fail;
 }
 
 static int on_body(http_parser* parser, const char *at, size_t length)
 {
+    int fail = 0;
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, "_on_body")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_body");
-        PyObject* args = Py_BuildValue("(s#)", at, length);
-        PyObject* result = PyObject_CallObject(callable, args);
+        PyObject* bytearray = PyByteArray_FromStringAndSize(at, length);
+        PyObject* result = PyObject_CallFunctionObjArgs(
+            callable, bytearray, NULL);
+        if (PyObject_IsTrue(result))
+            fail = 1;
         Py_XDECREF(result);
         Py_DECREF(callable);
-        Py_DECREF(args);
+        Py_DECREF(bytearray);
     }
-    return 0;
+    return fail;
 }
 
 static http_parser_settings _parser_settings = {
@@ -131,22 +147,10 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
         size_t nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
         if (self->parser->http_errno != HPE_OK) {
-            PyObject* repr = PyString_FromStringAndSize(
-                buf + nread,
-                unsigned_buf_len - nread);
-            if (repr == NULL) return PyErr_NoMemory();
-            const char middle_buf[3] = ": ";
-            PyObject* middle = PyString_FromString(middle_buf);
-            if (middle == NULL) return PyErr_NoMemory();
             PyObject* msg = PyString_FromString(
                     http_errno_description(self->parser->http_errno));
-            PyString_Concat(&msg, middle);
-            if (msg == NULL) return PyErr_NoMemory();
-            PyString_Concat(&msg, repr);
             if (msg == NULL) return PyErr_NoMemory();
             PyErr_SetObject(PyExc_HTTPParseError, msg);
-            Py_DECREF(repr);
-            Py_DECREF(middle);
             Py_DECREF(msg);
             return NULL;
         }
