@@ -1,31 +1,6 @@
 from geventhttpclient._parser import HTTPResponseParser
 
 
-class HeaderField(object):
-
-    def __init__(self, string, pos=0):
-        self.pos = pos
-        self._string = string
-        self._lower = string.lower()
-
-    def __hash__(self):
-        return hash(self._lower)
-
-    def __lt__(self, other):
-        return self.pos < other.pos
-
-    def __eq__(self, other):
-        if isinstance(other, basestring):
-            return self._lower == other.lower()
-        return self._lower == other._lower
-
-    def __str__(self):
-        return self._string
-
-    def __repr__(self):
-        return repr(self._string)
-
-
 HEADER_STATE_INIT = 0
 HEADER_STATE_FIELD = 1
 HEADER_STATE_VALUE = 2
@@ -34,9 +9,9 @@ HEADER_STATE_DONE = 3
 
 class HTTPResponse(HTTPResponseParser):
 
-    def __init__(self, no_body=False):
+    def __init__(self, bodyless=False):
         super(HTTPResponse, self).__init__()
-        self.no_body = no_body
+        self.bodyless = bodyless
         self.headers_complete = False
         self.message_begun = False
         self.message_complete = False
@@ -45,12 +20,14 @@ class HTTPResponse(HTTPResponseParser):
         self._current_header_field = None
         self._current_header_value = None
         self._header_position = 1
+        self._dirty = False
+        self.has_body = False
 
     def __getitem__(self, key):
-        return self._headers_index[key]
+        return self._headers_index[key.lower()]
 
     def get(self, key, default=None):
-        return self._headers_index.get(key, default)
+        return self._headers_index.get(key.lower(), default)
 
     def iteritems(self):
         for field in sorted(self._headers_index.keys()):
@@ -58,6 +35,11 @@ class HTTPResponse(HTTPResponseParser):
 
     def items(self):
         return list(self.iteritems())
+
+    def should_keep_alive(self):
+        return not self._dirty and \
+            self.message_complete and \
+            super(HTTPResponse, self).should_keep_alive()
 
     headers = property(items)
 
@@ -79,6 +61,9 @@ class HTTPResponse(HTTPResponseParser):
         return None
 
     def _on_message_begin(self):
+        if self.message_begun:
+            # stop the parser we have a new response
+            return True
         self.message_begun = True
 
     def _on_message_complete(self):
@@ -88,7 +73,23 @@ class HTTPResponse(HTTPResponseParser):
         self._flush_header()
         self._header_state = HEADER_STATE_DONE
         self.headers_complete = True
-        return self.no_body
+
+        # http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
+        # return True if the response doesn't or shouldn't have a body
+        # this instruct the parser to skip it and to consider the message
+        # complete.
+        if not self.content_length and \
+                self.get('Transfer-Encoding', 'identity') is 'identity':
+            return True
+        elif self.bodyless or \
+                self.status_code / 100 == 1 or \
+                self.status_code in (204, 304):
+            # a body is present but the rfc forbids it
+            # the connection will be closed after the request
+            self._dirty = True
+            return True
+        self.has_body = True
+        return False
 
     def _on_header_field(self, string):
         if self._header_state == HEADER_STATE_FIELD:
@@ -110,9 +111,8 @@ class HTTPResponse(HTTPResponseParser):
 
     def _flush_header(self):
         if self._current_header_field is not None:
-            field = HeaderField(self._current_header_field,
-                    self._header_position)
-            self._headers_index[field] = self._current_header_value
+            self._headers_index[self._current_header_field.lower()] = \
+                self._current_header_value
             self._header_position += 1
             self._current_header_field = None
             self._current_header_value = None
@@ -123,21 +123,21 @@ NO_DATA = object()
 
 class HTTPSocketResponse(HTTPResponse):
 
-    DEFAULT_CHUNK_SIZE = 1024 * 16 # 16KB
+    DEFAULT_CHUNK_SIZE = 1024 * 4 # 4KB
 
     def __init__(self, sock, pool, chunk_size=DEFAULT_CHUNK_SIZE,
-            no_body=False):
-        super(HTTPSocketResponse, self).__init__(no_body=no_body)
+            bodyless=False):
+        super(HTTPSocketResponse, self).__init__(bodyless=bodyless)
         self._sock = sock
         self._pool = pool
         self.chunk_size = chunk_size
-        self._last_body_piece = NO_DATA
+        self._body_buffer = bytearray()
         self._read_headers()
 
     def release(self):
         try:
             if self._sock is not None:
-                if self.should_keep_alive() and self.message_complete:
+                if self.should_keep_alive():
                     self._pool.return_socket(self._sock)
                 else:
                     self._pool.release_socket(self._sock)
@@ -160,34 +160,58 @@ class HTTPSocketResponse(HTTPResponse):
             self.release()
             raise
 
-    def _on_body(self, string):
-        self._last_body_piece = string
+    def _on_body(self, buf):
+        self._body_buffer += buf
 
-    def read_iter(self):
-        try:
-            if self._last_body_piece != NO_DATA:
-                yield self._last_body_piece
+    def readline(self, sep="\r\n"):
+        cursor = 0
+        while True:
+            cursor = self._body_buffer.find(sep, cursor)
+            if cursor >= 0:
+                length = cursor + len(sep)
+                line = str(self._body_buffer[:length])
+                del self._body_buffer[:length]
+                cursor = 0
+                return line
             else:
-                yield ''
-            while not self.message_complete:
+                cursor = len(self._body_buffer)
+            if self.message_complete:
+                return ''
+            try:
                 data = self._sock.recv(self.chunk_size)
                 self.feed(data)
-                if self._last_body_piece != NO_DATA:
-                    yield self._last_body_piece
-                    self._last_body_piece = NO_DATA
-        finally:
-            self.release()
+            except:
+                self.release()
+                raise
 
-    @property
-    def body(self):
-        if hasattr(self, '_body'):
-            return self._body
-        if self.content_length == 0:
-            return ""
-        buf = ""
-        for chunk in self.read_iter():
-            buf += chunk
-        self._body = buf
-        return buf
+    def read(self, length=None):
+        # get the existing body that may have already been parsed
+        # during headers parsing
+        if length is not None and len(self._body_buffer) >= length:
+            read = self._body_buffer[0:length]
+            del self._body_buffer[0:length]
+            return str(read)
+
+        try:
+            while not(self.message_complete) and (
+                    length is None or len(self._body_buffer) < length):
+                data = self._sock.recv(length or self.chunk_size)
+                self.feed(data)
+        except:
+            self.release()
+            raise
+
+        if length is not None:
+            read = str(self._body_buffer[0:length])
+            del self._body_buffer[0:length]
+            return read
+
+        read = str(self._body_buffer)
+        del self._body_buffer[:]
+        return read
+
+    def _on_message_complete(self):
+        super(HTTPSocketResponse, self)._on_message_complete()
+        self.release()
 
 

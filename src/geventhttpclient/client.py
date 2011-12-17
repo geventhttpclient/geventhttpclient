@@ -1,6 +1,7 @@
 import errno
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
-from geventhttpclient.response import HeaderField, HTTPSocketResponse
+from geventhttpclient.response import HTTPSocketResponse
+from geventhttpclient.url import URL
 from geventhttpclient import __version__
 import gevent.socket
 import gevent.pool
@@ -11,60 +12,87 @@ class HTTPClient(object):
     HTTP_11 = 'HTTP/1.1'
     HTTP_10 = 'HTTP/1.0'
 
-    CHUNK_SIZE = 1024 * 16 # 16KB
+    CHUNK_SIZE = 1024 * 4 # 4KB
     CONNECTION_TIMEOUT = 10
     NETWORK_TIMEOUT = 10
 
     DEFAULT_HEADERS = {
-        HeaderField('User-Agent'): 'python/gevent-http-client-' + __version__,
+        'User-Agent': 'python/gevent-http-client-' + __version__
     }
 
-    def __init__(self, host, port, headers={},
-            chunk_size=None, connection_timeout=None,
+    def __init__(self, host, port=None, headers={},
+            chunk_size=CHUNK_SIZE, connection_timeout=None,
             network_timeout=None, disable_ipv6=False,
-            connection_count=5, ssl_options=None):
-        self._host = host
-        self._port = port
+            concurrency=1, ssl_options=None, ssl=False,
+            proxy_host=None, proxy_port=None, version=HTTP_11):
+        self.host = host
+        self.port = port
+        connection_host = self.host
+        connection_port = self.port
+        if proxy_host is not None:
+            assert proxy_port is not None, \
+                'you have to provide proxy_port if you set a proxy_host'
+            self.use_proxy = True
+            connection_host = self.proxy_host
+            connection_port = self.proxy_port
+        else:
+            self.use_proxy = False
+        if ssl and ssl_options is None:
+            ssl_options = {}
         if ssl_options is not None:
+            self.ssl = True
+            self.port = connection_port = self.port or 443
             self._connection_pool = SSLConnectionPool(
-                self._host, self._port, size=connection_count,
+                connection_host, connection_port, size=concurrency,
                 ssl_options=ssl_options)
         else:
+            self.ssl = False
+            self.port = connection_port = self.port or 80
             self._connection_pool = ConnectionPool(
-                self._host, self._port, size=connection_count)
-        self.version = self.HTTP_11
-        self._socket = None
-        self._pool = gevent.pool.Pool(1)
+                connection_host, connection_port, size=concurrency)
+        self.version = version
         self.default_headers = self.DEFAULT_HEADERS.copy()
         for field, value in headers.iteritems():
-            self.default_headers[HeaderField(field)] = value
+            self.default_headers[field] = value
 
-        self.chunk_size = chunk_size or self.CHUNK_SIZE
-        self._sock = None
+        self.chunk_size = chunk_size
+        self._base_url_string = str(self.get_base_url())
+
+    def get_base_url(self):
+        url = URL()
+        url.host = self.host
+        url.port = self.port
+        url.scheme = self.ssl and 'https' or 'http'
+        return url
 
     def close(self):
-        if self._sock is not None:
-            try:
-                self._sock.close()
-            except:
-                pass
-            finally:
-                self._sock = None
+        self._connection_pool.close()
 
     def _build_request(self, method, query_string, body="", headers={}):
         header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
-            header_fields[HeaderField(field)] = value
+            header_fields[field] = value
         if self.version == self.HTTP_11 and 'Host' not in header_fields:
-            header_fields[HeaderField('Host')] = \
-                    self._host + ":" + str(self._port)
+            host_port = self.host
+            if self.port not in (80, 443):
+                host_port += ":" + str(self.port)
+            header_fields['Host'] = host_port
         if body:
-            header_fields[HeaderField('Content-Length'), len(body)]
+            header_fields['Content-Length'] = str(len(body))
 
-        request = method + " " + query_string + " " + self.version + "\r\n"
+        request_url = query_string
+        if self.use_proxy:
+            base_url = self._base_url_string
+            if query_string.startswith('/'):
+                base_url = base_url[:-1]
+            request_url = base_url + query_string
+        request = method + " " + request_url + " " + self.version + "\r\n"
+
         for field, value in header_fields.iteritems():
             request += str(field) + ': ' + value + "\r\n"
         request += "\r\n"
+        if body:
+            request += body
         return request
 
     def _send_request(self, request, max_reset=None):
@@ -90,11 +118,24 @@ class HTTPClient(object):
             else:
                 break
 
-    def request(self, method, query_string, body=b"", headers={}, retry=False):
-        request = self._build_request(method.upper(), query_string, body, headers)
+    def request(self, method, query_string, body=b"", headers={}):
+        request = self._build_request(
+            method.upper(), query_string, body=body, headers=headers)
         sock = self._send_request(request)
         response = HTTPSocketResponse(sock, self._connection_pool,
-            chunk_size=self.chunk_size, no_body=method.upper() in ('HEAD',))
+            chunk_size=self.chunk_size, bodyless=method.upper() in ('HEAD',))
         return response
+
+    def get(self, query_string, headers={}):
+        return self.request('GET', query_string, headers=headers)
+
+    def post(self, query_string, body=u'', headers={}):
+        return self.request('POST', query_string, body=body, headers=headers)
+
+    def put(self, query_string, body=u'', headers={}):
+        return self.request('PUT', query_string, body=body, headers=headers)
+
+    def delete(self, query_string, body=u'', headers={}):
+        return self.request('DELETE', query_string, body=body, headers=headers)
 
 

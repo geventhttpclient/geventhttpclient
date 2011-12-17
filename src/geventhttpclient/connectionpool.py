@@ -20,10 +20,11 @@ class ConnectionPool(object):
             network_timeout=DEFAULT_NETWORK_TIMEOUT):
         self._host = host
         self._port = port
-        self.size = size
         self._semaphore = gevent.coros.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
         self._connection_timeout = connection_timeout
+
+        self.size = size
         self.disable_ipv6 = disable_ipv6
         self._resolve()
 
@@ -43,6 +44,19 @@ class ConnectionPool(object):
         self._sock_type = socktype
         self._sock_protocol  = proto
         self._sock_address = sockaddr
+        self._closed = False
+
+    def close(self):
+        self._closed = True
+        while not self._socket_queue.empty():
+            try:
+                sock = self._socket_queue.get(block=False)
+                try:
+                    sock.close()
+                except:
+                    pass
+            except gevent.queue.Empty:
+                pass
 
     def _create_tcp_socket(self):
         """ tcp socket factory.
@@ -68,6 +82,8 @@ class ConnectionPool(object):
         """ get a socket from the pool. This blocks until one is available.
         """
         self._semaphore.acquire()
+        if self._closed:
+            raise RuntimeError('connection closed')
         try:
             return self._socket_queue.get(block=False)
         except gevent.queue.Empty:
@@ -78,6 +94,12 @@ class ConnectionPool(object):
     def return_socket(self, sock):
         """ return a socket to the pool.
         """
+        if self._closed:
+            try:
+                sock.close()
+            except:
+                pass
+            return
         self._socket_queue.put(sock)
         self._semaphore.release()
 
@@ -88,13 +110,15 @@ class ConnectionPool(object):
             sock.close()
         except:
             pass
-        self._semaphore.release()
+        if not self._closed:
+            self._semaphore.release()
 
 
 class SSLConnectionPool(ConnectionPool):
 
     default_options = {
-        'ca_certs': CA_CERTS
+        'ca_certs': CA_CERTS,
+        'cert_reqs': gevent.ssl.CERT_REQUIRED
     }
 
     def __init__(self, host, port, **kw):
