@@ -39,7 +39,7 @@ An simple example:
     http.close()
 
 
-# High Concurrency
+## High Concurrency
 
 HTTPClient has connection pool built in and is greenlet safe by design.
 You can use the same instance among several greenlets.
@@ -94,7 +94,7 @@ You can use the same instance among several greenlets.
     pool.join()
     http.close()
 
-# Streaming
+## Streaming
 
 **geventhttpclient** supports streaming.
 Response objects have a read(N) and readline() method that read the stream
