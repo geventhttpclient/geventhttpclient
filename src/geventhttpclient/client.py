@@ -20,6 +20,13 @@ class HTTPClient(object):
         'User-Agent': 'python/gevent-http-client-' + __version__
     }
 
+    @staticmethod
+    def from_url(url, **kw):
+        if not isinstance(url, URL):
+            url = URL(url)
+        enable_ssl = url.scheme == 'https'
+        return HTTPClient(url.host, port=url.port, ssl=enable_ssl, **kw)
+
     def __init__(self, host, port=None, headers={},
             chunk_size=CHUNK_SIZE, connection_timeout=None,
             network_timeout=None, disable_ipv6=False,
@@ -115,8 +122,6 @@ class HTTPClient(object):
                     reset_count += 1
                     continue
                 raise e
-            else:
-                break
 
     def request(self, method, query_string, body=b"", headers={}):
         request = self._build_request(

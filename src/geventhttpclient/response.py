@@ -153,6 +153,9 @@ class HTTPSocketResponse(HTTPResponse):
         try:
             while not self.headers_complete:
                 data = self._sock.recv(self.chunk_size)
+                if data == '':
+                    raise RuntimeError(
+                        'connection closed before reading headers')
                 self.feed(data)
             if self.message_complete:
                 self.release()
@@ -179,6 +182,9 @@ class HTTPSocketResponse(HTTPResponse):
                 return ''
             try:
                 data = self._sock.recv(self.chunk_size)
+                if data == '':
+                    raise RuntimeError(
+                        'connection closed before reading body')
                 self.feed(data)
             except:
                 self.release()
@@ -196,6 +202,9 @@ class HTTPSocketResponse(HTTPResponse):
             while not(self.message_complete) and (
                     length is None or len(self._body_buffer) < length):
                 data = self._sock.recv(length or self.chunk_size)
+                if data == '':
+                    raise RuntimeError(
+                        'connection closed before reading body')
                 self.feed(data)
         except:
             self.release()
