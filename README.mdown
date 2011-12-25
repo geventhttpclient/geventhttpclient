@@ -119,3 +119,24 @@ Here is a examples on how do download a big file chunk by chunk to save memory:
             data = response.read(CHUNK_SIZE)
 
 
+## httplib Compatibility and monkey patch
+
+*geventhttpclient.httplibcompat* module contains classes for drop in
+replacement of httplib connection and response objects.
+If you use httplib directly you can replace the *httplib* imports
+by *geventhttpclient.httplibcompat*.
+
+    # from httplib import HTTPConnection
+    from geventhttpclient.httplibcompat import HTTPConnection
+
+If you use *httplib2*, *urllib* or *urllib2* you can patch *httplib* to
+use the wrappers from *geventhttpclient*.
+For *httplib2*, make sure you patch before you import or the super
+calls will fail.
+
+    import geventhttpclient.httplibcompat
+    geventhttpclient.httplibcompat.patch()
+
+    import httplib2
+
+
