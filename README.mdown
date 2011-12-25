@@ -138,3 +138,14 @@ Here is a examples on how do download a big file chunk by chunk to save memory:
         while data:
             f.write(data)
             data = response.read(CHUNK_SIZE)
+
+
+## Benchmarks
+
+The benchmark does 1000 get requests against a local nginx server with
+a concurrency of 10. See *benchmarks* folder.
+
+- httplib2 with gevent monkey patch (*benchmarks/httplib2_simple.py*): **~600 req/s**
+- httplib2 with geventhttpclient monkey patch (*benchmarks/httplib2_patched.py*): **~2600 req/s**
+- geventhttpclient.HTTPClient (*benchmarks/httpclient.py*): **~3800 req/s**
+

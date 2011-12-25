@@ -2,8 +2,8 @@ import time
 import gevent.pool
 from geventhttpclient import HTTPClient, URL
 
-N = 10000
-C = 100
+N = 1000
+C = 10
 
 url = URL('http://127.0.0.1/index.html')
 qs = url.query_string
