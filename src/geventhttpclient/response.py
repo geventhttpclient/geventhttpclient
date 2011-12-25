@@ -9,9 +9,9 @@ HEADER_STATE_DONE = 3
 
 class HTTPResponse(HTTPResponseParser):
 
-    def __init__(self, bodyless=False):
+    def __init__(self, method='GET'):
         super(HTTPResponse, self).__init__()
-        self.bodyless = bodyless
+        self.method = method.upper()
         self.headers_complete = False
         self.message_begun = False
         self.message_complete = False
@@ -37,9 +37,21 @@ class HTTPResponse(HTTPResponseParser):
         return list(self.iteritems())
 
     def should_keep_alive(self):
-        return not self._dirty and \
-            self.message_complete and \
-            super(HTTPResponse, self).should_keep_alive()
+        """ return if the headers instruct to keep the connection
+        alive.
+        """
+        return bool(super(HTTPResponse, self).should_keep_alive())
+
+    def should_close(self):
+        """ return if we should close the connection.
+
+        It is not the opposite of should_keep_alive method. It also checks
+        that the body as been consumed completely and that the socket is not
+        in a "dirty" state.
+        """
+        return self._dirty or \
+            not self.message_complete or \
+            not super(HTTPResponse, self).should_keep_alive()
 
     headers = property(items)
 
@@ -52,13 +64,11 @@ class HTTPResponse(HTTPResponseParser):
 
     @property
     def content_length(self):
-        length = self.get('content-length')
-        if length is not None:
-            try:
-                return long(length)
-            except ValueError:
-                pass
-        return None
+        return self.get_content_length()
+
+    @property
+    def version(self):
+        return self.get_http_version()
 
     def _on_message_begin(self):
         if self.message_begun:
@@ -78,10 +88,14 @@ class HTTPResponse(HTTPResponseParser):
         # return True if the response doesn't or shouldn't have a body
         # this instruct the parser to skip it and to consider the message
         # complete.
-        if not self.content_length and \
+        if self.content_length < 0 and \
                 self.get('Transfer-Encoding', 'identity') is 'identity':
-            return True
-        elif self.bodyless or \
+            if self.should_keep_alive():
+                return True
+            else:
+                self.has_body = True
+                return False
+        elif self.method in ('HEAD',) or \
                 self.status_code / 100 == 1 or \
                 self.status_code in (204, 304):
             # a body is present but the rfc forbids it
@@ -123,36 +137,33 @@ NO_DATA = object()
 
 class HTTPSocketResponse(HTTPResponse):
 
-    DEFAULT_CHUNK_SIZE = 1024 * 4 # 4KB
+    DEFAULT_BLOCK_SIZE = 1024 * 4 # 4KB
 
-    def __init__(self, sock, pool, chunk_size=DEFAULT_CHUNK_SIZE,
-            bodyless=False):
-        super(HTTPSocketResponse, self).__init__(bodyless=bodyless)
+    def __init__(self, sock, block_size=DEFAULT_BLOCK_SIZE,
+            method='GET'):
+        super(HTTPSocketResponse, self).__init__(method=method)
         self._sock = sock
-        self._pool = pool
-        self.chunk_size = chunk_size
+        self.block_size = block_size
         self._body_buffer = bytearray()
         self._read_headers()
 
     def release(self):
         try:
-            if self._sock is not None:
-                if self.should_keep_alive():
-                    self._pool.return_socket(self._sock)
-                else:
-                    self._pool.release_socket(self._sock)
+            if self._sock is not None and self.should_close():
+                try:
+                    self._sock.close()
+                except:
+                    pass
         finally:
             self._sock = None
-            self._pool = None
 
     def __del__(self):
-        if self._sock is not None:
-            self._pool.release_socket(self._sock)
+        self.release()
 
     def _read_headers(self):
         try:
             while not self.headers_complete:
-                data = self._sock.recv(self.chunk_size)
+                data = self._sock.recv(self.block_size)
                 if data == '':
                     raise RuntimeError(
                         'connection closed before reading headers')
@@ -181,10 +192,7 @@ class HTTPSocketResponse(HTTPResponse):
             if self.message_complete:
                 return ''
             try:
-                data = self._sock.recv(self.chunk_size)
-                if data == '':
-                    raise RuntimeError(
-                        'connection closed before reading body')
+                data = self._sock.recv(self.block_size)
                 self.feed(data)
             except:
                 self.release()
@@ -198,13 +206,15 @@ class HTTPSocketResponse(HTTPResponse):
             del self._body_buffer[0:length]
             return str(read)
 
+        if self._sock is None:
+            read = str(self._body_buffer)
+            del self._body_buffer[:]
+            return read
+
         try:
             while not(self.message_complete) and (
                     length is None or len(self._body_buffer) < length):
-                data = self._sock.recv(length or self.chunk_size)
-                if data == '':
-                    raise RuntimeError(
-                        'connection closed before reading body')
+                data = self._sock.recv(length or self.block_size)
                 self.feed(data)
         except:
             self.release()
@@ -219,8 +229,39 @@ class HTTPSocketResponse(HTTPResponse):
         del self._body_buffer[:]
         return read
 
+    def __iter__(self):
+        return self
+
+    def next(self):
+        bytes = self.read(self.block_size)
+        if not len(bytes):
+            raise StopIteration()
+        return bytes
+
     def _on_message_complete(self):
         super(HTTPSocketResponse, self)._on_message_complete()
         self.release()
+
+
+class HTTPSocketPoolResponse(HTTPSocketResponse):
+
+    def __init__(self, sock, pool, **kw):
+        self._pool = pool
+        super(HTTPSocketPoolResponse, self).__init__(sock, **kw)
+
+    def release(self):
+        try:
+            if self._sock is not None:
+                if self.should_close():
+                    self._pool.release_socket(self._sock)
+                else:
+                    self._pool.return_socket(self._sock)
+        finally:
+            self._sock = None
+            self._pool = None
+
+    def __del__(self):
+        if self._sock is not None:
+            self._pool.release_socket(self._sock)
 
 

@@ -1,6 +1,6 @@
 import errno
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
-from geventhttpclient.response import HTTPSocketResponse
+from geventhttpclient.response import HTTPSocketPoolResponse
 from geventhttpclient.url import URL
 from geventhttpclient import __version__
 import gevent.socket
@@ -12,7 +12,7 @@ class HTTPClient(object):
     HTTP_11 = 'HTTP/1.1'
     HTTP_10 = 'HTTP/1.0'
 
-    CHUNK_SIZE = 1024 * 4 # 4KB
+    BLOCK_SIZE = 1024 * 4 # 4KB
     CONNECTION_TIMEOUT = 10
     NETWORK_TIMEOUT = 10
 
@@ -28,7 +28,7 @@ class HTTPClient(object):
         return HTTPClient(url.host, port=url.port, ssl=enable_ssl, **kw)
 
     def __init__(self, host, port=None, headers={},
-            chunk_size=CHUNK_SIZE, connection_timeout=None,
+            block_size=BLOCK_SIZE, connection_timeout=None,
             network_timeout=None, disable_ipv6=False,
             concurrency=1, ssl_options=None, ssl=False,
             proxy_host=None, proxy_port=None, version=HTTP_11):
@@ -62,7 +62,7 @@ class HTTPClient(object):
         for field, value in headers.iteritems():
             self.default_headers[field] = value
 
-        self.chunk_size = chunk_size
+        self.block_size = block_size
         self._base_url_string = str(self.get_base_url())
 
     def get_base_url(self):
@@ -127,8 +127,8 @@ class HTTPClient(object):
         request = self._build_request(
             method.upper(), query_string, body=body, headers=headers)
         sock = self._send_request(request)
-        response = HTTPSocketResponse(sock, self._connection_pool,
-            chunk_size=self.chunk_size, bodyless=method.upper() in ('HEAD',))
+        response = HTTPSocketPoolResponse(sock, self._connection_pool,
+            block_size=self.block_size, method=method.upper())
         return response
 
     def get(self, query_string, headers={}):

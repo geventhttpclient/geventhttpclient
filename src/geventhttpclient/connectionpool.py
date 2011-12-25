@@ -9,24 +9,32 @@ CA_CERTS = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "cacert.pem")
 
 
+DEFAULT_CONNECTION_TIMEOUT = 5.0
+DEFAULT_NETWORK_TIMEOUT = 5.0
+
+
+IGNORED = object()
+
+
 class ConnectionPool(object):
 
-    DEFAULT_CONNECTION_TIMEOUT = 5
-    DEFAULT_NETWORK_TIMEOUT = 5
+    DEFAULT_CONNECTION_TIMEOUT = 5.0
+    DEFAULT_NETWORK_TIMEOUT = 5.0
 
     def __init__(self, host, port,
             size=5, disable_ipv6=False,
             connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
             network_timeout=DEFAULT_NETWORK_TIMEOUT):
+        self._closed = False
         self._host = host
         self._port = port
         self._semaphore = gevent.coros.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
-        self._connection_timeout = connection_timeout
 
+        self.connection_timeout = connection_timeout
+        self.network_timeout = network_timeout
         self.size = size
         self.disable_ipv6 = disable_ipv6
-        self._resolve()
 
     def _resolve(self):
         """ resolve (dns) socket informations needed to connect it.
@@ -38,13 +46,8 @@ class ConnectionPool(object):
         info = gevent.socket.getaddrinfo(self._host, self._port,
                 family, 0, gevent.socket.SOL_TCP)
 
-        family, socktype, proto, canonname, sockaddr = info[0]
-
-        self._sock_family = family
-        self._sock_type = socktype
-        self._sock_protocol  = proto
-        self._sock_address = sockaddr
-        self._closed = False
+        # family, socktype, proto, canonname, sockaddr = info[0]
+        return info[0]
 
     def close(self):
         self._closed = True
@@ -58,25 +61,22 @@ class ConnectionPool(object):
             except gevent.queue.Empty:
                 pass
 
-    def _create_tcp_socket(self):
+    def _create_tcp_socket(self, family, socktype, protocol):
         """ tcp socket factory.
         """
-        sock = gevent.socket.socket(self._sock_family,
-            self._sock_type,
-            self._sock_protocol)
+        sock = gevent.socket.socket(family, socktype, protocol)
         return sock
 
     def _create_socket(self):
         """ might be overriden and super for wrapping into a ssl socket
             or set tcp/socket options
         """
-        return self._create_tcp_socket()
-
-    def _connect_socket(self, sock):
-        """ Connect a socket.
-        """
-        with gevent.Timeout(self._connection_timeout):
-            sock.connect(self._sock_address)
+        sock_info = self._resolve()
+        sock = self._create_tcp_socket(*sock_info[:3])
+        sock.settimeout(self.connection_timeout)
+        sock.connect(sock_info[-1])
+        sock.settimeout(self.network_timeout)
+        return sock
 
     def get_socket(self):
         """ get a socket from the pool. This blocks until one is available.
@@ -88,7 +88,6 @@ class ConnectionPool(object):
             return self._socket_queue.get(block=False)
         except gevent.queue.Empty:
             sock = self._create_socket()
-            self._connect_socket(sock)
             return sock
 
     def return_socket(self, sock):

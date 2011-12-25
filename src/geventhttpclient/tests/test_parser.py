@@ -22,7 +22,7 @@ def test_parse():
     assert parser.headers_complete
     assert parser.message_complete
 
-def test_parse_small_chunks():
+def test_parse_small_blocks():
     parser = HTTPResponse()
     parser.feed(RESPONSE)
     response = StringIO(RESPONSE)
@@ -63,7 +63,8 @@ def test_incomplete_response():
     response.feed("""HTTP/1.1 200 Ok\r\nContent-Length:10\r\n\r\n1""")
     with pytest.raises(HTTPParseError):
         response.feed("")
-    assert response.should_keep_alive() == False
+    assert response.should_keep_alive()
+    assert response.should_close()
 
 def test_response_too_long():
     response = HTTPResponse()
