@@ -160,6 +160,24 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
 }
 
 static PyObject*
+PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
+{
+    return PyString_FromFormat("HTTP/%u.%u", self->parser->http_major,
+        self->parser->http_major);
+}
+
+static PyObject*
+PyHTTPResponseParser_get_content_length(PyHTTPResponseParser *self)
+{
+    if (sizeof(signed long long) == 8)
+        return Py_BuildValue("L", self->parser->content_length);
+    if (sizeof(signed long) == 8)
+        return Py_BuildValue("l", self->parser->content_length);
+    // int
+    return Py_BuildValue("i", self->parser->content_length);
+}
+
+static PyObject*
 PyHTTPResponseParser_get_code(PyHTTPResponseParser *self)
 {
     return Py_BuildValue("i", self->parser->status_code);
@@ -184,6 +202,10 @@ static PyMethodDef PyHTTPResponseParser_methods[] = {
         "Feed the parser with data"},
     {"get_code", (PyCFunction)PyHTTPResponseParser_get_code, METH_NOARGS,
         "Get http response code"},
+    {"get_http_version", (PyCFunction)PyHTTPResponseParser_get_http_version, METH_NOARGS,
+        "Get http version"},
+    {"get_content_length", (PyCFunction)PyHTTPResponseParser_get_content_length, METH_NOARGS,
+        "Get http content length -1 if not content"},
     {"should_keep_alive", (PyCFunction)PyHTTPResponseParser_should_keep_alive,
         METH_NOARGS,
         "Tell wether the connection should stay connected (HTTP 1.1)"},
