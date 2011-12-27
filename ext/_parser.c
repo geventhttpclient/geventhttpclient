@@ -147,11 +147,12 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
         size_t nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
         if (self->parser->http_errno != HPE_OK) {
-            PyObject* msg = PyString_FromString(
-                    http_errno_description(self->parser->http_errno));
-            if (msg == NULL) return PyErr_NoMemory();
-            PyErr_SetObject(PyExc_HTTPParseError, msg);
-            Py_DECREF(msg);
+            PyObject* args = Py_BuildValue("(s,B)",
+                http_errno_description(self->parser->http_errno),
+                self->parser->http_errno);
+            if (args == NULL) return PyErr_NoMemory();
+            PyErr_SetObject(PyExc_HTTPParseError, args);
+            Py_DECREF(args);
             return NULL;
         }
         return Py_BuildValue("l", nread);
@@ -258,11 +259,11 @@ static PyMethodDef module_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-#ifndef PyMODINIT_FUNC	/* declarations for DLL import/export */
+#ifndef PyMODINIT_FUNC /* declarations for DLL import/export */
 #define PyMODINIT_FUNC void
 #endif
 PyMODINIT_FUNC
-init_parser(void) 
+init_parser(void)
 {
     PyObject* module;
 
