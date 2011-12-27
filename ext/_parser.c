@@ -276,8 +276,11 @@ init_parser(void)
     Py_INCREF(&HTTPParserType);
     PyModule_AddObject(module, "HTTPResponseParser", (PyObject *)&HTTPParserType);
 
+    PyObject* httplib = PyImport_ImportModule("httplib");
+    PyObject* HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
+
     PyExc_HTTPParseError = PyErr_NewException(
-            "_parser.HTTPParseError", NULL, NULL);
+            "_parser.HTTPParseError", HTTPException, NULL);
     Py_INCREF(PyExc_HTTPParseError);
     PyModule_AddObject(module, "HTTPParseError", PyExc_HTTPParseError);
 }
