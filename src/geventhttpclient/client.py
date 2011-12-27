@@ -51,12 +51,15 @@ class HTTPClient(object):
             self.port = connection_port = self.port or 443
             self._connection_pool = SSLConnectionPool(
                 connection_host, connection_port, size=concurrency,
-                ssl_options=ssl_options)
+                ssl_options=ssl_options,
+                disable_ipv6=disable_ipv6)
         else:
             self.ssl = False
             self.port = connection_port = self.port or 80
             self._connection_pool = ConnectionPool(
-                connection_host, connection_port, size=concurrency)
+                connection_host, connection_port,
+                size=concurrency,
+                disable_ipv6=disable_ipv6)
         self.version = version
         self.default_headers = self.DEFAULT_HEADERS.copy()
         for field, value in headers.iteritems():
