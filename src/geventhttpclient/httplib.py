@@ -1,4 +1,5 @@
-import httplib
+httplib = __import__('httplib')
+from geventhttpclient._parser import HTTPParseError
 from geventhttpclient import response
 import gevent.socket
 import gevent.ssl
@@ -13,6 +14,13 @@ class HTTPResponse(response.HTTPSocketResponse):
         else:
             method = method.upper()
         super(HTTPResponse, self).__init__(sock, method=method, **kw)
+
+    @property
+    def version(self):
+        v = self.get_http_version()
+        if v == 'HTTP/1.1':
+            return 11
+        return 10
 
     @property
     def status(self):
@@ -53,6 +61,12 @@ class HTTPResponse(response.HTTPSocketResponse):
 
     def _check_close(self):
         return not self._dirty and not self.should_keep_alive()
+
+    def feed(self, data):
+        try:
+            return super(HTTPResponse, self).feed(data)
+        except HTTPParseError, e:
+            raise httplib.HTTPException(e.message)
 
 
 class HTTPConnection(httplib.HTTPConnection):

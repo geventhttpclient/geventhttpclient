@@ -41,21 +41,21 @@ An simple example:
 
 ## httplib compatibility and monkey patch
 
-**geventhttpclient.httplibcompat** module contains classes for drop in
+**geventhttpclient.httplib** module contains classes for drop in
 replacement of httplib connection and response objects.
 If you use httplib directly you can replace the **httplib** imports
-by **geventhttpclient.httplibcompat**.
+by **geventhttpclient.httplib**.
 
     # from httplib import HTTPConnection
-    from geventhttpclient.httplibcompat import HTTPConnection
+    from geventhttpclient.httplib import HTTPConnection
 
 If you use **httplib2**, **urllib** or **urllib2**; you can patch **httplib** to
 use the wrappers from **geventhttpclient**.
 For **httplib2**, make sure you patch before you import or the *super*
 calls will fail.
 
-    import geventhttpclient.httplibcompat
-    geventhttpclient.httplibcompat.patch()
+    import geventhttpclient.httplib
+    geventhttpclient.httplib.patch()
 
     import httplib2
 

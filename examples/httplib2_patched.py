@@ -1,5 +1,5 @@
-from geventhttpclient import httplibcompat
-httplibcompat.patch()
+from geventhttpclient import httplib
+httplib.patch()
 
 from httplib2 import Http
 
