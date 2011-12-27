@@ -30,8 +30,8 @@ class HTTPResponse(HTTPResponseParser):
         return self._headers_index.get(key.lower(), default)
 
     def iteritems(self):
-        for field in sorted(self._headers_index.keys()):
-            yield (str(field), self._headers_index[field])
+        for field in self._headers_index.keys():
+            yield (field, self._headers_index[field])
 
     def items(self):
         return list(self.iteritems())
@@ -132,9 +132,6 @@ class HTTPResponse(HTTPResponseParser):
             self._current_header_value = None
 
 
-NO_DATA = object()
-
-
 class HTTPSocketResponse(HTTPResponse):
 
     DEFAULT_BLOCK_SIZE = 1024 * 4 # 4KB
@@ -164,9 +161,6 @@ class HTTPSocketResponse(HTTPResponse):
         try:
             while not self.headers_complete:
                 data = self._sock.recv(self.block_size)
-                if data == '':
-                    raise RuntimeError(
-                        'connection closed before reading headers')
                 self.feed(data)
             if self.message_complete:
                 self.release()
