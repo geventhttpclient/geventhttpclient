@@ -52,6 +52,8 @@ class HTTPClient(object):
             self._connection_pool = SSLConnectionPool(
                 connection_host, connection_port, size=concurrency,
                 ssl_options=ssl_options,
+                network_timeout=network_timeout,
+                connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6)
         else:
             self.ssl = False
@@ -59,6 +61,8 @@ class HTTPClient(object):
             self._connection_pool = ConnectionPool(
                 connection_host, connection_port,
                 size=concurrency,
+                network_timeout=network_timeout,
+                connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6)
         self.version = version
         self.default_headers = self.DEFAULT_HEADERS.copy()
