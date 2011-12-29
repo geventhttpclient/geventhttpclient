@@ -148,6 +148,6 @@ The benchmark does 1000 get requests against a local nginx server with
 a concurrency of 10. See *benchmarks* folder.
 
 - httplib2 with gevent monkey patch (*benchmarks/httplib2_simple.py*): **~600 req/s**
-- httplib2 with geventhttpclient monkey patch (*benchmarks/httplib2_patched.py*): **~2600 req/s**
-- geventhttpclient.HTTPClient (*benchmarks/httpclient.py*): **~3800 req/s**
+- httplib2 with geventhttpclient monkey patch (*benchmarks/httplib2_patched.py*): **~2500 req/s**
+- geventhttpclient.HTTPClient (*benchmarks/httpclient.py*): **~4000 req/s**
 
