@@ -66,6 +66,12 @@ class HTTPConnection(httplib.HTTPConnection):
 
     response_class = HTTPResponse
 
+    def __init__(self, *args, **kw):
+        httplib.HTTPConnection.__init__(self, *args, **kw)
+        # python 2.6 compat
+        if not hasattr(self, "source_address"):
+            self.source_address = None
+
     def connect(self):
         self.sock = gevent.socket.create_connection(
             (self.host,self.port),
@@ -79,11 +85,8 @@ class HTTPSConnection(HTTPConnection):
 
     default_port = 443
 
-    def __init__(self, host, port=None, key_file=None, cert_file=None,
-                 strict=None, timeout=gevent.socket._GLOBAL_DEFAULT_TIMEOUT,
-                 source_address=None):
-        HTTPConnection.__init__(self, host, port, strict, timeout,
-                                source_address)
+    def __init__(self, host, port=None, key_file=None, cert_file=None, **kw):
+        HTTPConnection.__init__(self, host, port, **kw)
         self.key_file = key_file
         self.cert_file = cert_file
 
