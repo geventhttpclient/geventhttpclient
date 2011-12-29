@@ -35,7 +35,7 @@ def close(sock, addr):
 def test_close():
     with server(close):
         client = HTTPClient(*listener)
-        with pytest.raises(gevent.socket.error):
+        with pytest.raises(HTTPException):
             client.get('/')
 
 def close_after_recv(sock, addr):

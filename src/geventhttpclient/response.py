@@ -1,4 +1,6 @@
+import errno
 from geventhttpclient._parser import HTTPResponseParser, HTTPParseError
+import gevent.socket
 
 
 HEADER_STATE_INIT = 0
@@ -165,11 +167,19 @@ class HTTPSocketResponse(HTTPResponse):
     def _read_headers(self):
         try:
             while not self.headers_complete:
-                data = self._sock.recv(self.block_size)
-                self.feed(data)
-                if not len(data) and not self.headers_complete:
-                    raise HTTPParseError('connection closed before'
-                                        ' end of the headers')
+                try:
+                    data = self._sock.recv(self.block_size)
+                    self.feed(data)
+                    # depending on gevent version we get a conn reset or no data
+                    if not len(data) and not self.headers_complete:
+                        raise HTTPParseError('connection closed before'
+                                            ' end of the headers')
+                except gevent.socket.error as e:
+                    if e.errno == errno.ECONNRESET:
+                        raise HTTPParseError('connection closed before'
+                                             ' end of the headers')
+                    raise
+
             if self.message_complete:
                 self.release()
         except:
