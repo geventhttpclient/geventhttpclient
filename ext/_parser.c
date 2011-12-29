@@ -191,11 +191,11 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
 
         size_t nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
+        PyObject * exception = PyErr_Occurred();
+        if (exception != NULL)
+            return NULL;
         if (self->parser->http_errno != HPE_OK) {
             /* Error in callbacks */
-            PyObject * exception = PyErr_Occurred();
-            if (exception != NULL)
-                return NULL;
             return set_parser_exception(self->parser);
         }
         return Py_BuildValue("l", nread);

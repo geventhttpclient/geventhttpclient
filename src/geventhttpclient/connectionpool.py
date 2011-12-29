@@ -83,7 +83,7 @@ class ConnectionPool(object):
         """
         self._semaphore.acquire()
         if self._closed:
-            raise RuntimeError('connection closed')
+            raise RuntimeError('connection pool closed')
         try:
             return self._socket_queue.get(block=False)
         except gevent.queue.Empty:
