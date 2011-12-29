@@ -64,7 +64,9 @@ class HTTPResponse(HTTPResponseParser):
 
     @property
     def content_length(self):
-        return self.get_content_length()
+        length = self.get('content-length', None)
+        if length is not None:
+            return long(length)
 
     @property
     def version(self):
@@ -88,7 +90,7 @@ class HTTPResponse(HTTPResponseParser):
         # return True if the response doesn't or shouldn't have a body
         # this instruct the parser to skip it and to consider the message
         # complete.
-        if self.content_length < 0 and \
+        if self.get_remaining_content_length() < 0 and \
                 self.get('Transfer-Encoding', 'identity') is 'identity':
             if self.should_keep_alive():
                 return True

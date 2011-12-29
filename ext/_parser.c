@@ -168,7 +168,7 @@ PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
 }
 
 static PyObject*
-PyHTTPResponseParser_get_content_length(PyHTTPResponseParser *self)
+PyHTTPResponseParser_get_remaining_content_length(PyHTTPResponseParser *self)
 {
     if (sizeof(signed long long) == 8)
         return Py_BuildValue("L", self->parser->content_length);
@@ -205,8 +205,10 @@ static PyMethodDef PyHTTPResponseParser_methods[] = {
         "Get http response code"},
     {"get_http_version", (PyCFunction)PyHTTPResponseParser_get_http_version, METH_NOARGS,
         "Get http version"},
-    {"get_content_length", (PyCFunction)PyHTTPResponseParser_get_content_length, METH_NOARGS,
-        "Get http content length -1 if not content"},
+    {"get_remaining_content_length",
+        (PyCFunction)PyHTTPResponseParser_get_remaining_content_length,
+        METH_NOARGS,
+        "Get remaining content length to read"},
     {"should_keep_alive", (PyCFunction)PyHTTPResponseParser_should_keep_alive,
         METH_NOARGS,
         "Tell wether the connection should stay connected (HTTP 1.1)"},
