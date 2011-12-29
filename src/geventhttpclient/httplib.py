@@ -62,12 +62,14 @@ class HTTPResponse(response.HTTPSocketResponse):
         return not self._dirty and not self.should_keep_alive()
 
 
+HTTPLibConnection = httplib.HTTPConnection
+
 class HTTPConnection(httplib.HTTPConnection):
 
     response_class = HTTPResponse
 
     def __init__(self, *args, **kw):
-        httplib.HTTPConnection.__init__(self, *args, **kw)
+        HTTPLibConnection.__init__(self, *args, **kw)
         # python 2.6 compat
         if not hasattr(self, "source_address"):
             self.source_address = None
