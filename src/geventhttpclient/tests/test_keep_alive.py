@@ -43,4 +43,13 @@ def test_keep_alive_bodyless_10x_request_with_body():
     assert response.should_keep_alive()
     assert response.should_close()
 
+def test_close_connection_and_no_content_length():
+    response = HTTPResponse()
+    response.feed("HTTP/1.1 200 Ok\r\n"
+                "Connection: close\r\n\r\n"
+                "Hello World!")
+    assert response.has_body
+    assert response._body_buffer == bytearray("Hello World!")
+    assert not response.should_keep_alive()
+    assert response.should_close()
 

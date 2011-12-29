@@ -18,9 +18,7 @@ def server(handler):
         server.stop()
 
 def wrong_response_status_line(sock, addr):
-    print addr
-    request = sock.recv(4096)
-    print request
+    sock.recv(4096)
     sock.sendall('HTTP/1.1 apfais df0 asdf\r\n\r\n')
 
 def test_httplib_exception():

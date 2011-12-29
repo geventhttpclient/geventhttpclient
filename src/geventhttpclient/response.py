@@ -22,6 +22,7 @@ class HTTPResponse(HTTPResponseParser):
         self._header_position = 1
         self._dirty = False
         self.has_body = False
+        self._body_buffer = bytearray()
 
     def __getitem__(self, key):
         return self._headers_index[key.lower()]
@@ -133,6 +134,9 @@ class HTTPResponse(HTTPResponseParser):
             self._current_header_field = None
             self._current_header_value = None
 
+    def _on_body(self, buf):
+        self._body_buffer += buf
+
 
 class HTTPSocketResponse(HTTPResponse):
 
@@ -143,7 +147,6 @@ class HTTPSocketResponse(HTTPResponse):
         super(HTTPSocketResponse, self).__init__(method=method)
         self._sock = sock
         self.block_size = block_size
-        self._body_buffer = bytearray()
         self._read_headers()
 
     def release(self):
@@ -172,9 +175,6 @@ class HTTPSocketResponse(HTTPResponse):
         except:
             self.release()
             raise
-
-    def _on_body(self, buf):
-        self._body_buffer += buf
 
     def readline(self, sep="\r\n"):
         cursor = 0
