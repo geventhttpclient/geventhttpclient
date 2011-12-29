@@ -12,8 +12,13 @@ static int on_message_begin(http_parser* parser)
     if (PyObject_HasAttrString(self, "_on_message_begin")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_message_begin");
         PyObject* result = PyObject_CallObject(callable, NULL);
-        if (PyObject_IsTrue(result))
+        PyObject* exception = PyErr_Occurred();
+        if (exception != NULL) {
             fail = 1;
+        } else {
+            if (PyObject_IsTrue(result))
+                fail = 1;
+        }
         Py_XDECREF(result);
         Py_DECREF(callable);
     }
@@ -27,8 +32,13 @@ static int on_message_complete(http_parser* parser)
     if (PyObject_HasAttrString(self, "_on_message_complete")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_message_complete");
         PyObject* result = PyObject_CallObject(callable, NULL);
-        if (PyObject_IsTrue(result))
+        PyObject* exception = PyErr_Occurred();
+        if (exception != NULL) {
             fail = 1;
+        } else {
+            if (PyObject_IsTrue(result))
+                fail = 1;
+        }
         Py_XDECREF(result);
         Py_DECREF(callable);
     }
@@ -42,8 +52,13 @@ static int on_headers_complete(http_parser* parser)
     if (PyObject_HasAttrString(self, "_on_headers_complete")) {
         PyObject* callable = PyObject_GetAttrString(self, "_on_headers_complete");
         PyObject* result = PyObject_CallObject(callable, NULL);
-        if (PyObject_IsTrue(result))
+        PyObject* exception = PyErr_Occurred();
+        if (exception != NULL) {
             skip_body = 1;
+        } else {
+            if (PyObject_IsTrue(result))
+                skip_body = 1;
+        }
         Py_XDECREF(result);
         Py_DECREF(callable);
     }
@@ -58,8 +73,13 @@ static int on_header_field(http_parser* parser, const char *at, size_t length)
         PyObject* callable = PyObject_GetAttrString(self, "_on_header_field");
         PyObject* args = Py_BuildValue("(s#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
-        if (PyObject_IsTrue(result))
+        PyObject* exception = PyErr_Occurred();
+        if (exception != NULL) {
             fail = 1;
+        } else {
+            if (PyObject_IsTrue(result))
+                fail = 1;
+        }
         Py_XDECREF(result);
         Py_DECREF(callable);
         Py_DECREF(args);
@@ -75,8 +95,13 @@ static int on_header_value(http_parser* parser, const char *at, size_t length)
         PyObject* callable = PyObject_GetAttrString(self, "_on_header_value");
         PyObject* args = Py_BuildValue("(s#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
-        if (PyObject_IsTrue(result))
+        PyObject* exception = PyErr_Occurred();
+        if (exception != NULL) {
             fail = 1;
+        } else {
+            if (PyObject_IsTrue(result))
+                fail = 1;
+        }
         Py_XDECREF(result);
         Py_DECREF(callable);
         Py_DECREF(args);
@@ -93,8 +118,13 @@ static int on_body(http_parser* parser, const char *at, size_t length)
         PyObject* bytearray = PyByteArray_FromStringAndSize(at, length);
         PyObject* result = PyObject_CallFunctionObjArgs(
             callable, bytearray, NULL);
-        if (PyObject_IsTrue(result))
+        PyObject* exception = PyErr_Occurred();
+        if (exception != NULL) {
             fail = 1;
+        } else {
+            if (PyObject_IsTrue(result))
+                fail = 1;
+        }
         Py_XDECREF(result);
         Py_DECREF(callable);
         Py_DECREF(bytearray);
@@ -147,6 +177,11 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
         size_t nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
         if (self->parser->http_errno != HPE_OK) {
+            /* Error in callbacks */
+            PyObject * exception = PyErr_Occurred();
+            if (exception != NULL)
+                return NULL;
+
             PyObject* args = Py_BuildValue("(s,B)",
                 http_errno_description(self->parser->http_errno),
                 self->parser->http_errno);
@@ -238,12 +273,12 @@ static PyTypeObject HTTPParserType = {
     0,                         /*tp_as_buffer*/
     Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE, /*tp_flags*/
     "HTTP Response Parser instance (non thread-safe)",           /* tp_doc */
-    0,		               /* tp_traverse */
-    0,		               /* tp_clear */
-    0,		               /* tp_richcompare */
-    0,		               /* tp_weaklistoffset */
-    0,		               /* tp_iter */
-    0,		               /* tp_iternext */
+    0,                         /* tp_traverse */
+    0,                         /* tp_clear */
+    0,                         /* tp_richcompare */
+    0,                         /* tp_weaklistoffset */
+    0,                         /* tp_iter */
+    0,                         /* tp_iternext */
     PyHTTPResponseParser_methods,      /* tp_methods */
     0,             /* tp_members */
     0,                         /* tp_getset */
