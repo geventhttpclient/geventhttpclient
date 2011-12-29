@@ -163,6 +163,17 @@ PyHTTPResponseParser_new(PyTypeObject* type, PyObject* args, PyObject* kwds)
     return (PyObject*) self;
 }
 
+static void* set_parser_exception(http_parser* parser)
+{
+    PyObject* args = Py_BuildValue("(s,B)",
+        http_errno_description(parser->http_errno),
+        parser->http_errno);
+    if (args == NULL) return PyErr_NoMemory();
+    PyErr_SetObject(PyExc_HTTPParseError, args);
+    Py_DECREF(args);
+    return NULL;
+}
+
 static size_t size_t_MAX = -1;
 
 static PyObject*
@@ -174,6 +185,10 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
     /* cast Py_ssize_t signed integer to unsigned */
     size_t unsigned_buf_len = buf_len + size_t_MAX + 1;
     if (succeed) {
+        /* in case feed is called again after an error occured */
+        if (self->parser->http_errno != HPE_OK)
+            return set_parser_exception(self->parser);
+
         size_t nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
         if (self->parser->http_errno != HPE_OK) {
@@ -181,14 +196,7 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
             PyObject * exception = PyErr_Occurred();
             if (exception != NULL)
                 return NULL;
-
-            PyObject* args = Py_BuildValue("(s,B)",
-                http_errno_description(self->parser->http_errno),
-                self->parser->http_errno);
-            if (args == NULL) return PyErr_NoMemory();
-            PyErr_SetObject(PyExc_HTTPParseError, args);
-            Py_DECREF(args);
-            return NULL;
+            return set_parser_exception(self->parser);
         }
         return Py_BuildValue("l", nread);
     }
