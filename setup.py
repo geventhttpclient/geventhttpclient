@@ -14,5 +14,8 @@ setup(name='geventhttpclient',
        packages=find_packages('src'),
        package_dir={'': 'src'},
        ext_modules = [httpparser],
-       include_package_data=True)
+       include_package_data=True,
+       install_requires=[
+        'gevent >= 0.13'
+       ])
 
