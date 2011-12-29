@@ -1,4 +1,4 @@
-from geventhttpclient._parser import HTTPResponseParser
+from geventhttpclient._parser import HTTPResponseParser, HTTPParseError
 
 
 HEADER_STATE_INIT = 0
@@ -162,6 +162,9 @@ class HTTPSocketResponse(HTTPResponse):
             while not self.headers_complete:
                 data = self._sock.recv(self.block_size)
                 self.feed(data)
+                if not len(data) and not self.headers_complete:
+                    raise HTTPParseError('connection closed before'
+                                        ' end of the headers')
             if self.message_complete:
                 self.release()
         except:
