@@ -20,7 +20,7 @@ def test_httplib_exception():
         connection = HTTPConnection(*listener)
         connection.request("GET", '/')
         with pytest.raises(HTTPException):
-            response = connection.getresponse()
+            connection.getresponse()
     finally:
         server.stop()
 

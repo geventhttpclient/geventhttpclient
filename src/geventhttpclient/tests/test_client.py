@@ -32,11 +32,16 @@ def test_ssl_fail_invalid_certificate():
 def test_multi_queries_greenlet_safe():
     client = HTTPClient('www.google.fr', concurrency=3)
     group = gevent.pool.Group()
+    event = gevent.event.Event()
+
     def run(i):
+        event.wait()
         response = client.get('/')
         return response, response.read()
 
     count = 0
+
+    gevent.spawn_later(0.2, event.set)
     for response, content in group.imap_unordered(run, xrange(5)):
         assert response.status_code == 200
         assert len(content)
