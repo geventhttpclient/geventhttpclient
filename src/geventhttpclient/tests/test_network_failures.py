@@ -10,21 +10,14 @@ listener = ('127.0.0.1', 5432)
 
 @contextmanager
 def server(handler):
-    def run_server():
-        try:
-            server = gevent.server.StreamServer(
-                listener,
-                handle=handler)
-            server.serve_forever()
-        except gevent.GreenletExit:
-            server.close()
-
-    job = gevent.spawn(run_server)
-    gevent.sleep(0)
+    server = gevent.server.StreamServer(
+        listener,
+        handle=handler)
+    server.start()
     try:
         yield
     finally:
-        job.kill()
+        server.stop()
 
 def wrong_response_status_line(sock, addr):
     sock.recv(4096)
