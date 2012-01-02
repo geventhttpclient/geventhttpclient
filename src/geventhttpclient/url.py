@@ -1,5 +1,5 @@
 import urlparse
-from urllib import urlencode
+from urllib import quote_plus
 
 
 class URL(object):
@@ -87,7 +87,17 @@ class URL(object):
 
     @property
     def encoded_query(self):
-        return urlencode(self.query)
+        params = []
+        for key, value in self.query.iteritems():
+            if isinstance(value, list):
+                for item in value:
+                    params.append("%s=%s" % (
+                        quote_plus(key), quote_plus(item)))
+            else:
+                params.append("%s=%s" % (quote_plus(key), quote_plus(value)))
+        if params:
+            return "&".join(params)
+        return ''
 
     @property
     def query_string(self):
