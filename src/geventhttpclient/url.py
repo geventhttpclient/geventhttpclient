@@ -80,13 +80,13 @@ class URL(object):
 
     def __iter__(self):
         return iter((self.scheme, self.netloc, self.path,
-                self.encoded_query, self.fragment))
+                self.query_string, self.fragment))
 
     def __str__(self):
         return urlparse.urlunsplit(tuple(self))
 
     @property
-    def encoded_query(self):
+    def query_string(self):
         params = []
         for key, value in self.query.iteritems():
             if isinstance(value, list):
@@ -101,7 +101,7 @@ class URL(object):
 
     @property
     def request_uri(self):
-        query = self.encoded_query
+        query = self.query_string
         if not query:
             return self.path
         return self.path + '?' + query
