@@ -43,7 +43,7 @@ req = oauthlib.Request(method="POST", url=str(url), parameters=params)
 req.sign_request(signature_method, oauthlib_consumer, token)
 
 http = HTTPClient.from_url(url)
-response = http.request('POST', url.query_string,
+response = http.request('POST', url.request_uri,
     body=req.to_postdata(),
     headers={'Content-Type': 'application/x-www-form-urlencoded',
              'Accept': '*/*'})

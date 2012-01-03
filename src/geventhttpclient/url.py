@@ -100,7 +100,7 @@ class URL(object):
         return ''
 
     @property
-    def query_string(self):
+    def request_uri(self):
         query = self.encoded_query
         if not query:
             return self.path

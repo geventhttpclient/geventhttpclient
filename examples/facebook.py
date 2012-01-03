@@ -17,7 +17,7 @@ url['access_token'] = TOKEN
 # reuse them.
 http = HTTPClient.from_url(url, concurrency=10)
 
-response = http.get(url.query_string)
+response = http.get(url.request_uri)
 assert response.status_code == 200
 
 # response comply to the read protocol. It passes the stream to
@@ -28,7 +28,7 @@ def print_friend_username(http, friend_id):
     friend_url = URL('/' + str(friend_id))
     friend_url['access_token'] = TOKEN
     # the greenlet will block until a connection is available
-    response = http.get(friend_url.query_string)
+    response = http.get(friend_url.request_uri)
     assert response.status_code == 200
     friend = json.load(response)
     if friend.has_key('username'):

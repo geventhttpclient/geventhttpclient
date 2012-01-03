@@ -6,7 +6,7 @@ N = 1000
 C = 10
 
 url = URL('http://127.0.0.1/index.html')
-qs = url.query_string
+qs = url.request_uri
 
 def run(client):
     response = client.get(qs)

@@ -82,7 +82,7 @@ class HTTPClient(object):
     def close(self):
         self._connection_pool.close()
 
-    def _build_request(self, method, query_string, body="", headers={}):
+    def _build_request(self, method, request_uri, body="", headers={}):
         header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
             header_fields[field] = value
@@ -94,12 +94,12 @@ class HTTPClient(object):
         if body:
             header_fields['Content-Length'] = str(len(body))
 
-        request_url = query_string
+        request_url = request_uri
         if self.use_proxy:
             base_url = self._base_url_string
-            if query_string.startswith('/'):
+            if request_uri.startswith('/'):
                 base_url = base_url[:-1]
-            request_url = base_url + query_string
+            request_url = base_url + request_url
         request = method + " " + request_url + " " + self.version + "\r\n"
 
         for field, value in header_fields.iteritems():
@@ -130,24 +130,24 @@ class HTTPClient(object):
                     continue
                 raise e
 
-    def request(self, method, query_string, body=b"", headers={}):
+    def request(self, method, request_uri, body=b"", headers={}):
         request = self._build_request(
-            method.upper(), query_string, body=body, headers=headers)
+            method.upper(), request_uri, body=body, headers=headers)
         sock = self._send_request(request)
         response = HTTPSocketPoolResponse(sock, self._connection_pool,
             block_size=self.block_size, method=method.upper())
         return response
 
-    def get(self, query_string, headers={}):
-        return self.request('GET', query_string, headers=headers)
+    def get(self, request_uri, headers={}):
+        return self.request('GET', request_uri, headers=headers)
 
-    def post(self, query_string, body=u'', headers={}):
-        return self.request('POST', query_string, body=body, headers=headers)
+    def post(self, request_uri, body=u'', headers={}):
+        return self.request('POST', request_uri, body=body, headers=headers)
 
-    def put(self, query_string, body=u'', headers={}):
-        return self.request('PUT', query_string, body=body, headers=headers)
+    def put(self, request_uri, body=u'', headers={}):
+        return self.request('PUT', request_uri, body=body, headers=headers)
 
-    def delete(self, query_string, body=u'', headers={}):
-        return self.request('DELETE', query_string, body=body, headers=headers)
+    def delete(self, request_uri, body=u'', headers={}):
+        return self.request('DELETE', request_uri, body=body, headers=headers)
 
 
