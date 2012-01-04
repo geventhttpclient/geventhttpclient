@@ -92,9 +92,10 @@ class URL(object):
             if isinstance(value, list):
                 for item in value:
                     params.append("%s=%s" % (
-                        quote_plus(key), quote_plus(item)))
+                        quote_plus(key), quote_plus(str(item))))
             else:
-                params.append("%s=%s" % (quote_plus(key), quote_plus(value)))
+                params.append("%s=%s" % (
+                    quote_plus(key), quote_plus(str(value))))
         if params:
             return "&".join(params)
         return ''
