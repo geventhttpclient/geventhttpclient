@@ -185,13 +185,14 @@ class HTTPSocketResponse(HTTPResponse):
                     start = False
                 except gevent.socket.error as e:
                     if e.errno == errno.ECONNRESET:
-                        raise HTTPParseError('connection closed before'
-                                             ' end of the headers')
+                        if start:
+                            raise HTTPConnectionClosed(
+                                'connection closed.')
                     raise
 
             if self.message_complete:
                 self.release()
-        except:
+        except BaseException:
             self.release()
             raise
 
@@ -212,7 +213,7 @@ class HTTPSocketResponse(HTTPResponse):
             try:
                 data = self._sock.recv(self.block_size)
                 self.feed(data)
-            except:
+            except BaseException:
                 self.release()
                 raise
 
