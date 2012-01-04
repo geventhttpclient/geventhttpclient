@@ -1,6 +1,7 @@
 import errno
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
 from geventhttpclient.response import HTTPSocketPoolResponse
+from geventhttpclient.response import HTTPConnectionClosed
 from geventhttpclient.url import URL
 from geventhttpclient import __version__
 import gevent.socket
@@ -109,34 +110,32 @@ class HTTPClient(object):
             request += body
         return request
 
-    def _send_request(self, request, max_reset=None):
-        """ send request to the server and return socket used.
-        """
-        sent = 0
-        reset_count = 0
-        max_reset = max_reset or self._connection_pool.size
-
-        while True:
-            sock = self._connection_pool.get_socket()
-            try:
-                sent = sock.send(request)
-                if sent != len(request):
-                    sock.sendall(request[sent:])
-                return sock
-            except gevent.socket.error as e:
-                self._connection_pool.release_socket(sock)
-                if e.errno == errno.ECONNRESET and max_reset < reset_count:
-                    reset_count += 1
-                    continue
-                raise e
-
     def request(self, method, request_uri, body=b"", headers={}):
         request = self._build_request(
             method.upper(), request_uri, body=body, headers=headers)
-        sock = self._send_request(request)
-        response = HTTPSocketPoolResponse(sock, self._connection_pool,
-            block_size=self.block_size, method=method.upper())
-        return response
+
+        attempt_left = self._connection_pool.size + 1
+
+        while True:
+            try:
+                sent = 0
+                sock = self._connection_pool.get_socket()
+                sent = sock.send(request)
+                if sent != len(request):
+                    sock.sendall(request[sent:])
+                return HTTPSocketPoolResponse(sock, self._connection_pool,
+                    block_size=self.block_size, method=method.upper())
+            except gevent.socket.error as e:
+                self._connection_pool.release_socket(sock)
+                if e.errno == errno.ECONNRESET and attempt_left > 0:
+                    attempt_left -= 1
+                    continue
+                raise e
+            except HTTPConnectionClosed:
+                if attempt_left > 0:
+                    attempt_left -= 1
+                    continue
+                raise e
 
     def get(self, request_uri, headers={}):
         return self.request('GET', request_uri, headers=headers)
