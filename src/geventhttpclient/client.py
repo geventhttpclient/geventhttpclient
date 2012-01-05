@@ -117,9 +117,9 @@ class HTTPClient(object):
         attempt_left = self._connection_pool.size + 1
 
         while True:
+            sock = self._connection_pool.get_socket()
             try:
                 sent = 0
-                sock = self._connection_pool.get_socket()
                 sent = sock.send(request)
                 if sent != len(request):
                     sock.sendall(request[sent:])
