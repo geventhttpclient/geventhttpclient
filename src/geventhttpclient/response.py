@@ -198,16 +198,25 @@ class HTTPSocketResponse(HTTPResponse):
 
     def readline(self, sep="\r\n"):
         cursor = 0
+        multibyte = len(sep) > 1
         while True:
-            cursor = self._body_buffer.find(sep, cursor)
+            cursor = self._body_buffer.find(sep[0], cursor)
             if cursor >= 0:
-                length = cursor + len(sep)
-                line = str(self._body_buffer[:length])
-                del self._body_buffer[:length]
-                cursor = 0
-                return line
+                found = True
+                if multibyte:
+                    pos = cursor
+                    cursor = self._body_buffer.find(sep, cursor)
+                    if cursor < 0:
+                        cursor = pos
+                        found = False
+                if found:
+                    length = cursor + len(sep)
+                    line = str(self._body_buffer[:length])
+                    del self._body_buffer[:length]
+                    cursor = 0
+                    return line
             else:
-                cursor = len(self._body_buffer)
+                cursor = 0
             if self.message_complete:
                 return ''
             try:

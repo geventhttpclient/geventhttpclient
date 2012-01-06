@@ -118,20 +118,24 @@ class HTTPClient(object):
 
         while True:
             sock = self._connection_pool.get_socket()
+
             try:
                 sent = 0
                 sent = sock.send(request)
                 if sent != len(request):
                     sock.sendall(request[sent:])
-                return HTTPSocketPoolResponse(sock, self._connection_pool,
-                    block_size=self.block_size, method=method.upper())
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if e.errno == errno.ECONNRESET and attempt_left > 0:
                     attempt_left -= 1
                     continue
                 raise e
+
+            try:
+                return HTTPSocketPoolResponse(sock, self._connection_pool,
+                    block_size=self.block_size, method=method.upper())
             except HTTPConnectionClosed:
+                # connection is release by the response itself
                 if attempt_left > 0:
                     attempt_left -= 1
                     continue
