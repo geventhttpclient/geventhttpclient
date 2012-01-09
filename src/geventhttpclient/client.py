@@ -39,7 +39,7 @@ class HTTPClient(object):
         connection_port = self.port
         if proxy_host is not None:
             assert proxy_port is not None, \
-                'you have to provide proxy_port if you set a proxy_host'
+                'you have to provide proxy_port if you have set proxy_host'
             self.use_proxy = True
             connection_host = self.proxy_host
             connection_port = self.proxy_port
@@ -114,7 +114,7 @@ class HTTPClient(object):
         request = self._build_request(
             method.upper(), request_uri, body=body, headers=headers)
 
-        attempt_left = self._connection_pool.size + 1
+        attempts_left = self._connection_pool.size + 1
 
         while True:
             sock = self._connection_pool.get_socket()
@@ -127,7 +127,7 @@ class HTTPClient(object):
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if e.errno == errno.ECONNRESET and attempt_left > 0:
-                    attempt_left -= 1
+                    attempts_left -= 1
                     continue
                 raise e
 
@@ -135,9 +135,9 @@ class HTTPClient(object):
                 return HTTPSocketPoolResponse(sock, self._connection_pool,
                     block_size=self.block_size, method=method.upper())
             except HTTPConnectionClosed:
-                # connection is release by the response itself
-                if attempt_left > 0:
-                    attempt_left -= 1
+                # connection is released by the response itself
+                if attempts_left > 0:
+                    attempts_left -= 1
                     continue
                 raise e
 
