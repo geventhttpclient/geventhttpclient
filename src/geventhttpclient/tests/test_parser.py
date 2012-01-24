@@ -124,3 +124,4 @@ def test_on_message_begin():
     with pytest.raises(RuntimeError):
         response.feed(RESPONSE)
 
+

@@ -47,6 +47,7 @@ static int on_message_complete(http_parser* parser)
 
 static int on_headers_complete(http_parser* parser)
 {
+    /* 1 => skip body, 2 => error, 0 => continue */
     int skip_body = 0;
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, "_on_headers_complete")) {
@@ -54,7 +55,7 @@ static int on_headers_complete(http_parser* parser)
         PyObject* result = PyObject_CallObject(callable, NULL);
         PyObject* exception = PyErr_Occurred();
         if (exception != NULL) {
-            skip_body = 1;
+            skip_body = 2;
         } else {
             if (PyObject_IsTrue(result))
                 skip_body = 1;
@@ -206,6 +207,15 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
 }
 
 static PyObject*
+PyHTTPResponseParser_parser_failed(PyHTTPResponseParser* self)
+{
+    if (self->parser->http_errno != HPE_OK) {
+        Py_RETURN_TRUE;
+    }
+    Py_RETURN_FALSE;
+}
+
+static PyObject*
 PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
 {
     return PyString_FromFormat("HTTP/%u.%u", self->parser->http_major,
@@ -257,6 +267,9 @@ static PyMethodDef PyHTTPResponseParser_methods[] = {
     {"should_keep_alive", (PyCFunction)PyHTTPResponseParser_should_keep_alive,
         METH_NOARGS,
         "Tell wether the connection should stay connected (HTTP 1.1)"},
+    {"parser_failed", (PyCFunction)PyHTTPResponseParser_parser_failed,
+        METH_NOARGS,
+        "Tell if parser have failed."},
     {NULL}  /* Sentinel */
 };
 

@@ -159,3 +159,27 @@ def test_readline_multibyte_splitsep():
             last_index = data['a']
         len(lines) == 3
 
+def internal_server_error(sock, addr):
+    sock.recv(1024)
+    head = 'HTTP/1.1 500 Internal Server Error\r\n' \
+           'Connection: close\r\n' \
+           'Content-Type: text/html\r\n' \
+           'Content-Length: 135\r\n\r\n'
+
+    body = '<html>\n  <head>\n    <title>Internal Server Error</title>\n  ' \
+           '</head>\n  <body>\n    <h1>Internal Server Error</h1>\n    \n  ' \
+           '</body>\n</html>\n\n'
+
+    sock.sendall(head + body)
+    sock.close()
+
+def test_internal_server_error():
+    with server(internal_server_error):
+        client = HTTPClient(*listener)
+        response = client.get('/')
+        assert not response.should_keep_alive()
+        assert response.should_close()
+        body = response.read()
+        assert len(body) == response.content_length
+
+

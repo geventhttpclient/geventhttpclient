@@ -26,8 +26,6 @@ class HTTPResponse(HTTPResponseParser):
         self._current_header_field = None
         self._current_header_value = None
         self._header_position = 1
-        self._dirty = False
-        self.has_body = False
         self._body_buffer = bytearray()
 
     def __getitem__(self, key):
@@ -53,12 +51,11 @@ class HTTPResponse(HTTPResponseParser):
         """ return if we should close the connection.
 
         It is not the opposite of should_keep_alive method. It also checks
-        that the body as been consumed completely and that the socket is not
-        in a "dirty" state.
+        that the body as been consumed completely.
         """
-        return self._dirty or \
-            not self.message_complete or \
-            not super(HTTPResponse, self).should_keep_alive()
+        return not self.message_complete or \
+               self.parser_failed() or \
+               not super(HTTPResponse, self).should_keep_alive()
 
     headers = property(items)
 
@@ -93,25 +90,8 @@ class HTTPResponse(HTTPResponseParser):
         self._header_state = HEADER_STATE_DONE
         self.headers_complete = True
 
-        # http://www.w3.org/Protocols/rfc2616/rfc2616-sec4.html#sec4.4
-        # return True if the response doesn't or shouldn't have a body
-        # this instruct the parser to skip it and to consider the message
-        # complete.
-        if self.get_remaining_content_length() < 0 and \
-                self.get('Transfer-Encoding', 'identity') is 'identity':
-            if self.should_keep_alive():
-                return True
-            else:
-                self.has_body = True
-                return False
-        elif self.method in ('HEAD',) or \
-                self.status_code / 100 == 1 or \
-                self.status_code in (204, 304):
-            # a body is present but the rfc forbids it
-            # the connection will be closed after the request
-            self._dirty = True
-            return True
-        self.has_body = True
+        if self.method in ('HEAD',):
+            return True # SKIP BODY
         return False
 
     def _on_header_field(self, string):

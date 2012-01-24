@@ -126,7 +126,7 @@ class HTTPClient(object):
                     sock.sendall(request[sent:])
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
-                if e.errno == errno.ECONNRESET and attempt_left > 0:
+                if e.errno == errno.ECONNRESET and attempts_left > 0:
                     attempts_left -= 1
                     continue
                 raise e
@@ -134,7 +134,7 @@ class HTTPClient(object):
             try:
                 return HTTPSocketPoolResponse(sock, self._connection_pool,
                     block_size=self.block_size, method=method.upper())
-            except HTTPConnectionClosed:
+            except HTTPConnectionClosed as e:
                 # connection is released by the response itself
                 if attempts_left > 0:
                     attempts_left -= 1
