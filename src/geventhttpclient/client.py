@@ -29,8 +29,10 @@ class HTTPClient(object):
         return HTTPClient(url.host, port=url.port, ssl=enable_ssl, **kw)
 
     def __init__(self, host, port=None, headers={},
-            block_size=BLOCK_SIZE, connection_timeout=None,
-            network_timeout=None, disable_ipv6=False,
+            block_size=BLOCK_SIZE,
+            connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
+            network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
+            disable_ipv6=False,
             concurrency=1, ssl_options=None, ssl=False,
             proxy_host=None, proxy_port=None, version=HTTP_11):
         self.host = host
