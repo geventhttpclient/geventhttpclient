@@ -123,7 +123,8 @@ You can use the same instance among several greenlets.
 Response objects have a read(N) and readline() method that read the stream
 incrementally.
 See *src/examples/twitter_streaming.py* for pulling twitter stream API.
-Here is a examples on how do download a big file chunk by chunk to save memory:
+
+Here is an example on how to download a big file chunk by chunk to save memory:
 
     #!/usr/bin/env python
 
