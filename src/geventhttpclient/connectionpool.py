@@ -126,9 +126,9 @@ class SSLConnectionPool(ConnectionPool):
         del kw['ssl_options']
         super(SSLConnectionPool, self).__init__(host, port, **kw)
 
-    def _create_socket(self):
-        sock = super(SSLConnectionPool, self)._create_socket()
-        ssl_sock = gevent.ssl.wrap_socket(sock, **self.ssl_options)
-        return ssl_sock
+    def _create_tcp_socket(self, family, socktype, protocol):
+        sock = super(SSLConnectionPool, self)._create_tcp_socket(
+            family, socktype, protocol)
+        return gevent.ssl.wrap_socket(sock, **self.ssl_options)
 
 
