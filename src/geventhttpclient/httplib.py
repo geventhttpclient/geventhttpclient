@@ -59,7 +59,7 @@ class HTTPResponse(response.HTTPSocketResponse):
         return self.message_complete and not self.should_keep_alive()
 
     def _check_close(self):
-        return not self._dirty and not self.should_keep_alive()
+        return not self.should_keep_alive()
 
 
 HTTPLibConnection = httplib.HTTPConnection
