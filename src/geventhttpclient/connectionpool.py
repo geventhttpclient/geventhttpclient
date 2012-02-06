@@ -87,8 +87,11 @@ class ConnectionPool(object):
         try:
             return self._socket_queue.get(block=False)
         except gevent.queue.Empty:
-            sock = self._create_socket()
-            return sock
+            try:
+                return self._create_socket()
+            except:
+                self._semaphore.release()
+                raise
 
     def return_socket(self, sock):
         """ return a socket to the pool.
