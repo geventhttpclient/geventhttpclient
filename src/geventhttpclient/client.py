@@ -43,8 +43,8 @@ class HTTPClient(object):
             assert proxy_port is not None, \
                 'you have to provide proxy_port if you have set proxy_host'
             self.use_proxy = True
-            connection_host = self.proxy_host
-            connection_port = self.proxy_port
+            connection_host = proxy_host
+            connection_port = proxy_port
         else:
             self.use_proxy = False
         if ssl and ssl_options is None:
