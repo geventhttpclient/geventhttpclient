@@ -3,7 +3,7 @@ httplib.patch()
 
 from httplib2 import Http
 
-if __name__ = "__main__":
+if __name__ == "__main__":
     http = Http()
     response, content = http.request('http://google.fr/')
     assert response.status == 200
