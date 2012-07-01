@@ -29,7 +29,7 @@ An simple example:
     http = HTTPClient(url.host)
 
     # issue a get request
-    http.get(url.path)
+    response = http.get(url.path)
 
     # read status_code
     response.status_code
