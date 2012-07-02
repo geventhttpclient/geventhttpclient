@@ -120,12 +120,8 @@ class HTTPClient(object):
 
         while True:
             sock = self._connection_pool.get_socket()
-
             try:
-                sent = 0
-                sent = sock.send(request)
-                if sent != len(request):
-                    sock.sendall(request[sent:])
+                sock.sendall(request)
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if e.errno == errno.ECONNRESET and attempts_left > 0:
