@@ -8,6 +8,28 @@ import gevent.socket
 import gevent.pool
 
 
+class Header(object):
+
+    def __init__(self, key):
+        self._key = key
+        self._lower_key = key.lower()
+
+    def __hash__(self):
+        return hash(self._lower_key)
+
+    def __str__(self):
+        return str(self._key)
+
+    def __eq__(self, other):
+        return str(other).lower() == self._lower_key
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return "Header(%s)" % self._key
+
+
 class HTTPClient(object):
 
     HTTP_11 = 'HTTP/1.1'
@@ -18,7 +40,7 @@ class HTTPClient(object):
     NETWORK_TIMEOUT = 10
 
     DEFAULT_HEADERS = {
-        'User-Agent': 'python/gevent-http-client-' + __version__
+        Header('User-Agent'): 'python/gevent-http-client-' + __version__
     }
 
     @staticmethod
@@ -70,7 +92,7 @@ class HTTPClient(object):
         self.version = version
         self.default_headers = self.DEFAULT_HEADERS.copy()
         for field, value in headers.iteritems():
-            self.default_headers[field] = value
+            self.default_headers[Header(field)] = value
 
         self.block_size = block_size
         self._base_url_string = str(self.get_base_url())
@@ -88,14 +110,14 @@ class HTTPClient(object):
     def _build_request(self, method, request_uri, body="", headers={}):
         header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
-            header_fields[field] = value
-        if self.version == self.HTTP_11 and 'Host' not in header_fields:
+            header_fields[Header(field)] = value
+        if self.version == self.HTTP_11 and 'host' not in header_fields:
             host_port = self.host
             if self.port not in (80, 443):
                 host_port += ":" + str(self.port)
-            header_fields['Host'] = host_port
+            header_fields[Header('Host')] = host_port
         if body:
-            header_fields['Content-Length'] = str(len(body))
+            header_fields[Header('Content-Length')] = str(len(body))
 
         request_url = request_uri
         if self.use_proxy:
