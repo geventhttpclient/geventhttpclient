@@ -80,12 +80,23 @@ def test_timeout_on_connect():
         gevent.spawn(run, http)
         gevent.sleep(0)
 
-        with pytest.raises(gevent.socket.timeout):
+        e = None
+        try:
             http2 = HTTPClient(*listener,
                 ssl=True,
                 connection_timeout=0.1,
                 ssl_options={'ca_certs': CERT})
             http2.get('/')
+        except gevent.ssl.SSLError as error:
+            e = error
+        except gevent.socket.timeout as error:
+            e = error
+        except:
+            raise
+
+        assert e is not None, 'should have raised'
+        if isinstance(e, gevent.ssl.SSLError):
+            assert str(e).endswith("handshake operation timed out")
 
 def network_timeout(sock, addr):
     sock.recv(1024)
