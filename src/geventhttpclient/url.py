@@ -24,7 +24,7 @@ class URL(object):
     URL(http://getgauss.com/urls?auth_token=asdfaisdfuasdf&param=asdfa)
 
     You can change attributes.
-    >>> url.netloc = 'infrae.com'
+    >>> url.host = 'infrae.com'
     >>> url
     URL(http://infrae.com/urls?auth_token=asdfaisdfuasdf&param=asdfa)
     """
