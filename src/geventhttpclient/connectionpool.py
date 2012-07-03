@@ -1,9 +1,12 @@
 import os
 import gevent.queue
-import gevent.coros
 import gevent.ssl
 import gevent.socket
 
+if gevent.__version__ >= '1.0b2':
+    import gevent.lock as lock
+else:
+    import gevent.coros as lock
 
 CA_CERTS = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "cacert.pem")
@@ -28,7 +31,7 @@ class ConnectionPool(object):
         self._closed = False
         self._host = host
         self._port = port
-        self._semaphore = gevent.coros.BoundedSemaphore(size)
+        self._semaphore = lock.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
 
         self.connection_timeout = connection_timeout
