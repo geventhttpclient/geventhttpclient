@@ -2,6 +2,11 @@ import os
 import gevent.queue
 import gevent.ssl
 import gevent.socket
+import warnings
+
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=DeprecationWarning)
+    import gevent.coros
 
 try:
     from gevent import lock
