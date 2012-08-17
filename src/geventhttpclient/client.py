@@ -36,8 +36,6 @@ class HTTPClient(object):
     HTTP_10 = 'HTTP/1.0'
 
     BLOCK_SIZE = 1024 * 4 # 4KB
-    CONNECTION_TIMEOUT = 10
-    NETWORK_TIMEOUT = 10
 
     DEFAULT_HEADERS = {
         Header('User-Agent'): 'python/gevent-http-client-' + __version__
@@ -63,7 +61,7 @@ class HTTPClient(object):
         connection_port = self.port
         if proxy_host is not None:
             assert proxy_port is not None, \
-                'you have to provide proxy_port if you have set proxy_host'
+                'you have to provide proxy_port if you set proxy_host'
             self.use_proxy = True
             connection_host = proxy_host
             connection_port = proxy_port
