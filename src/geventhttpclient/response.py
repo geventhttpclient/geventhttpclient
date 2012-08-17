@@ -126,6 +126,12 @@ class HTTPResponse(HTTPResponseParser):
     def _on_body(self, buf):
         self._body_buffer += buf
 
+    def __repr__(self):
+        return "<{klass} status={status} headers={headers}>".format(
+            klass=self.__class__.__name__,
+            status=self.status_code,
+            headers=dict(self.headers))
+
 
 class HTTPSocketResponse(HTTPResponse):
 
@@ -253,6 +259,12 @@ class HTTPSocketResponse(HTTPResponse):
         super(HTTPSocketResponse, self)._on_message_complete()
         self.release()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.release()
+
 
 class HTTPSocketPoolResponse(HTTPSocketResponse):
 
@@ -274,5 +286,4 @@ class HTTPSocketPoolResponse(HTTPSocketResponse):
     def __del__(self):
         if self._sock is not None:
             self._pool.release_socket(self._sock)
-
 

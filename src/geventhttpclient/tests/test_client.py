@@ -31,6 +31,14 @@ def test_client_simple():
     body = response.read()
     assert len(body)
 
+def test_response_context_manager():
+    client = HTTPClient.from_url('http://www.google.fr/')
+    r = None
+    with client.get('/') as response:
+        assert response.status_code == 200
+        r = response
+    assert r._sock is None # released
+
 def test_client_ssl():
     client = HTTPClient('www.google.fr', ssl=True)
     assert client.port == 443
