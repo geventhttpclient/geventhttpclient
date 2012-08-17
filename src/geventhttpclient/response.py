@@ -13,6 +13,10 @@ class HTTPConnectionClosed(HTTPParseError):
     pass
 
 
+class HTTPProtocolViolationError(HTTPParseError):
+    pass
+
+
 class HTTPResponse(HTTPResponseParser):
 
     def __init__(self, method='GET'):
@@ -78,8 +82,7 @@ class HTTPResponse(HTTPResponseParser):
 
     def _on_message_begin(self):
         if self.message_begun:
-            # stop the parser we have a new response
-            return True
+            raise HTTPProtocolViolationError("A new response began before end of %r." % self)
         self.message_begun = True
 
     def _on_message_complete(self):
