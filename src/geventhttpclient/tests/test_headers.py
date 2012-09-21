@@ -6,8 +6,6 @@ from geventhttpclient.response import HTTPResponse
 from geventhttpclient._parser import HTTPParseError
 from geventhttpclient.header import Headers
 
-from test_parser import RESPONSE
-
 
 MULTI_COOKIE_RESPONSE = """
 HTTP/1.1 200 OK
@@ -82,8 +80,6 @@ def test_cookielib_compatibility():
     # Set time in order to be still valid in some years, when cookie strings expire
     cj._now = time.mktime((2012, 1, 1, 0, 0, 0, 0, 0, 0))
     cj.extract_cookies(parser, Request(''))
-    cl = list(cj)
     # Three valid, not expired cookies placed
-    assert len(cl) == 3
-
+    assert len(list(cj)) == 3
 

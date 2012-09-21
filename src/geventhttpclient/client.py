@@ -93,7 +93,7 @@ class HTTPClient(object):
             if self.port not in (80, 443):
                 host_port += ":" + str(self.port)
             header_fields['Host'] = host_port
-        if body:
+        if body and 'Content-Length' not in header_fields:
             header_fields['Content-Length'] = str(len(body))
 
         request_url = request_uri
