@@ -3,6 +3,7 @@ from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
 from geventhttpclient.response import HTTPSocketPoolResponse
 from geventhttpclient.response import HTTPConnectionClosed
 from geventhttpclient.url import URL
+from geventhttpclient.header import Headers
 from geventhttpclient import __version__
 import gevent.socket
 import gevent.pool
@@ -17,9 +18,9 @@ class HTTPClient(object):
     CONNECTION_TIMEOUT = 10
     NETWORK_TIMEOUT = 10
 
-    DEFAULT_HEADERS = {
+    DEFAULT_HEADERS = Headers({
         'User-Agent': 'python/gevent-http-client-' + __version__
-    }
+    })
 
     @staticmethod
     def from_url(url, **kw):
