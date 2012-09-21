@@ -6,6 +6,8 @@ import gevent.timeout
 import gevent.socket
 from contextlib import contextmanager
 
+CRLF = "\r\n"
+
 listener = ('127.0.0.1', 5432)
 
 @contextmanager
@@ -90,4 +92,56 @@ def test_content_too_small():
         with pytest.raises(gevent.socket.timeout):
             response = client.get('/')
             response.read()
+
+def close_during_chuncked_readline(sock, addr):
+    sock.recv(4096)
+    sock.sendall('HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n')
+
+    chunks = ['This is the data in the first chunk\r\n',
+        'and this is the second one\r\n',
+        'con\r\n']
+
+    for chunk in chunks:
+        gevent.sleep(0.1)
+        sock.sendall(hex(len(chunk))[2:] + CRLF + chunk + CRLF)
+    sock.close()
+
+def test_close_during_chuncked_readline():
+    with server(close_during_chuncked_readline):
+        client = HTTPClient(*listener)
+        response = client.get('/')
+        assert response['transfer-encoding'] == 'chunked'
+        chunks = []
+        with pytest.raises(HTTPException):
+            data = 'enter_loop'
+            while data:
+                data = response.readline()
+                chunks.append(data)
+        assert len(chunks) == 3
+
+def timeout_during_chuncked_readline(sock, addr):
+    sock.recv(4096)
+    sock.sendall('HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n')
+
+    chunks = ['This is the data in the first chunk\r\n',
+        'and this is the second one\r\n',
+        'con\r\n']
+
+    for chunk in chunks:
+        sock.sendall(hex(len(chunk))[2:] + CRLF + chunk + CRLF)
+    gevent.sleep(2)
+    sock.close()
+
+def test_timeout_during_chuncked_readline():
+    with server(timeout_during_chuncked_readline):
+        client = HTTPClient(*listener, network_timeout=0.1)
+        response = client.get('/')
+        assert response['transfer-encoding'] == 'chunked'
+        chunks = []
+        with pytest.raises(gevent.socket.timeout):
+            data = 'enter_loop'
+            while data:
+                data = response.readline()
+                chunks.append(data)
+        assert len(chunks) == 3
 

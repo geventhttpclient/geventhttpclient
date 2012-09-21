@@ -7,44 +7,47 @@ from geventhttpclient import HTTPClient
 from geventhttpclient.url import URL
 
 
-# go to http://developers.facebook.com/tools/explorer and copy the access token
-TOKEN = '<go to http://developers.facebook.com/tools/explorer and copy the access token>'
+if __name__ == "__main__":
 
-url = URL('https://graph.facebook.com/me/friends')
-url['access_token'] = TOKEN
+    # go to http://developers.facebook.com/tools/explorer and copy the access token
+    TOKEN = '<go to http://developers.facebook.com/tools/explorer and copy the access token>'
 
-# setting the concurrency to 10 allow to create 10 connections and
-# reuse them.
-http = HTTPClient.from_url(url, concurrency=10)
 
-response = http.get(url.request_uri)
-assert response.status_code == 200
+    url = URL('https://graph.facebook.com/me/friends')
+    url['access_token'] = TOKEN
 
-# response comply to the read protocol. It passes the stream to
-# the json parser as it's being read.
-data = json.load(response)['data']
+    # setting the concurrency to 10 allow to create 10 connections and
+    # reuse them.
+    http = HTTPClient.from_url(url, concurrency=10)
 
-def print_friend_username(http, friend_id):
-    friend_url = URL('/' + str(friend_id))
-    friend_url['access_token'] = TOKEN
-    # the greenlet will block until a connection is available
-    response = http.get(friend_url.request_uri)
+    response = http.get(url.request_uri)
     assert response.status_code == 200
-    friend = json.load(response)
-    if friend.has_key('username'):
-        print '%s: %s' % (friend['username'], friend['name'])
-    else:
-        print '%s has no username.' % friend['name']
 
-# allow to run 20 greenlet at a time, this is more than concurrency
-# of the http client but isn't a problem since the client has its own
-# connection pool.
-pool = gevent.pool.Pool(20)
-for item in data:
-    friend_id = item['id']
-    pool.spawn(print_friend_username, http, friend_id)
+    # response comply to the read protocol. It passes the stream to
+    # the json parser as it's being read.
+    data = json.load(response)['data']
 
-pool.join()
-http.close()
+    def print_friend_username(http, friend_id):
+        friend_url = URL('/' + str(friend_id))
+        friend_url['access_token'] = TOKEN
+        # the greenlet will block until a connection is available
+        response = http.get(friend_url.request_uri)
+        assert response.status_code == 200
+        friend = json.load(response)
+        if friend.has_key('username'):
+            print '%s: %s' % (friend['username'], friend['name'])
+        else:
+            print '%s has no username.' % friend['name']
+
+    # allow to run 20 greenlet at a time, this is more than concurrency
+    # of the http client but isn't a problem since the client has its own
+    # connection pool.
+    pool = gevent.pool.Pool(20)
+    for item in data:
+        friend_id = item['id']
+        pool.spawn(print_friend_username, http, friend_id)
+
+    pool.join()
+    http.close()
 
 

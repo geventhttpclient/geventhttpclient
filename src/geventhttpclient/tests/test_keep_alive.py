@@ -5,7 +5,7 @@ import pytest
 
 def test_simple():
     response = HTTPResponse()
-    response.feed("""HTTP/1.1 200 Ok\r\n\r\n""")
+    response.feed("""HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n""")
     assert response.headers_complete
     assert response.message_complete
     assert response.should_keep_alive()
@@ -32,7 +32,7 @@ def test_keep_alive_bodyless_response_with_body():
     with pytest.raises(HTTPParseError):
         response.feed(
             """HTTP/1.1 200 Ok\r\nContent-Length: 10\r\n\r\n0123456789""")
-    assert response.should_keep_alive()
+    assert not response.should_keep_alive()
     assert response.should_close()
 
 def test_keep_alive_bodyless_10x_request_with_body():

@@ -49,7 +49,9 @@ Set-Cookie: bb_fbaccesstoken=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; pat
 Set-Cookie: bb_fbprofilepicurl=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
 Content-Encoding: gzip
 Content-Length: 26186
+
 """.lstrip().replace('\n', '\r\n')
+# Do not remove the final empty line!
 
 
 def test_create_from_dict():
@@ -64,6 +66,11 @@ def test_create_from_list():
     assert len(header['ef']) == 3
     assert header['ef'][0] == 3
     assert header['ef'][-1] == 5
+
+def test_case_insensitivity():
+    d = Headers({'Content-Type': 'text/plain'})
+    assert 'content-type' in d
+    assert d.get('content-type') == d.get('CONTENT-TYPE') == d.get('Content-Type') == ['text/plain']
 
 def test_read_multiple_header():
     parser = HTTPResponse()
@@ -83,3 +90,10 @@ def test_cookielib_compatibility():
     # Three valid, not expired cookies placed
     assert len(list(cj)) == 3
 
+def test_compatibility_with_previous_API():
+    parser = HTTPResponse()
+    parser.feed(MULTI_COOKIE_RESPONSE)
+    for single_item in ('content-encoding', 'content-type', 'content-length', 'cache-control', 'connection'):
+        assert isinstance(parser[single_item], basestring)
+        assert isinstance(parser.get(single_item), basestring)
+    

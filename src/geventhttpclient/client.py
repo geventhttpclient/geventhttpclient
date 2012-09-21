@@ -15,8 +15,6 @@ class HTTPClient(object):
     HTTP_10 = 'HTTP/1.0'
 
     BLOCK_SIZE = 1024 * 4 # 4KB
-    CONNECTION_TIMEOUT = 10
-    NETWORK_TIMEOUT = 10
 
     DEFAULT_HEADERS = Headers({
         'User-Agent': 'python/gevent-http-client-' + __version__
@@ -30,8 +28,10 @@ class HTTPClient(object):
         return HTTPClient(url.host, port=url.port, ssl=enable_ssl, **kw)
 
     def __init__(self, host, port=None, headers={},
-            block_size=BLOCK_SIZE, connection_timeout=None,
-            network_timeout=None, disable_ipv6=False,
+            block_size=BLOCK_SIZE,
+            connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
+            network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
+            disable_ipv6=False,
             concurrency=1, ssl_options=None, ssl=False,
             proxy_host=None, proxy_port=None, version=HTTP_11):
         self.host = host
@@ -40,10 +40,10 @@ class HTTPClient(object):
         connection_port = self.port
         if proxy_host is not None:
             assert proxy_port is not None, \
-                'you have to provide proxy_port if you have set proxy_host'
+                'you have to provide proxy_port if you set proxy_host'
             self.use_proxy = True
-            connection_host = self.proxy_host
-            connection_port = self.proxy_port
+            connection_host = proxy_host
+            connection_port = proxy_port
         else:
             self.use_proxy = False
         if ssl and ssl_options is None:
@@ -69,7 +69,7 @@ class HTTPClient(object):
         self.version = version
         self.default_headers = self.DEFAULT_HEADERS.copy()
         for field, value in headers.iteritems():
-            self.default_headers[field] = value
+            self.default_headers[Header(field)] = value
 
         self.block_size = block_size
         self._base_url_string = str(self.get_base_url())
@@ -87,8 +87,8 @@ class HTTPClient(object):
     def _build_request(self, method, request_uri, body="", headers={}):
         header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
-            header_fields[field] = value
-        if self.version == self.HTTP_11 and 'Host' not in header_fields:
+            header_fields[Header(field)] = value
+        if self.version == self.HTTP_11 and 'host' not in header_fields:
             host_port = self.host
             if self.port not in (80, 443):
                 host_port += ":" + str(self.port)
@@ -119,12 +119,8 @@ class HTTPClient(object):
 
         while True:
             sock = self._connection_pool.get_socket()
-
             try:
-                sent = 0
-                sent = sock.send(request)
-                if sent != len(request):
-                    sock.sendall(request[sent:])
+                sock.sendall(request)
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if e.errno == errno.ECONNRESET and attempts_left > 0:
@@ -153,5 +149,4 @@ class HTTPClient(object):
 
     def delete(self, request_uri, body=u'', headers={}):
         return self.request('DELETE', request_uri, body=body, headers=headers)
-
 

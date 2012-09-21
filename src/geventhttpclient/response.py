@@ -14,6 +14,10 @@ class HTTPConnectionClosed(HTTPParseError):
     pass
 
 
+class HTTPProtocolViolationError(HTTPParseError):
+    pass
+
+
 class HTTPResponse(HTTPResponseParser):
 
     def __init__(self, method='GET', headers_type=Headers):
@@ -30,16 +34,20 @@ class HTTPResponse(HTTPResponseParser):
         self._body_buffer = bytearray()
 
     def __getitem__(self, key):
-        return self._headers_index[key]
-
-    def get(self, key, default=None):
-        ret = self._headers_index.get(key, None)
+        """ Continuation of previous API, which didn't return lists """
+        ret = self._headers_index[key]
         if ret is None:
             return default
         elif len(ret) == 1:
             return ret[0]
         else:
             return ret
+
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
 
     def iteritems(self):
         return self._headers_index.iteritems()
@@ -88,8 +96,7 @@ class HTTPResponse(HTTPResponseParser):
 
     def _on_message_begin(self):
         if self.message_begun:
-            # stop the parser we have a new response
-            return True
+            raise HTTPProtocolViolationError("A new response began before end of %r." % self)
         self.message_begun = True
 
     def _on_message_complete(self):
@@ -132,6 +139,12 @@ class HTTPResponse(HTTPResponseParser):
 
     def _on_body(self, buf):
         self._body_buffer += buf
+
+    def __repr__(self):
+        return "<{klass} status={status} headers={headers}>".format(
+            klass=self.__class__.__name__,
+            status=self.status_code,
+            headers=dict(self.headers))
 
 
 class HTTPSocketResponse(HTTPResponse):
@@ -260,6 +273,12 @@ class HTTPSocketResponse(HTTPResponse):
         super(HTTPSocketResponse, self)._on_message_complete()
         self.release()
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.release()
+
 
 class HTTPSocketPoolResponse(HTTPSocketResponse):
 
@@ -281,5 +300,4 @@ class HTTPSocketPoolResponse(HTTPSocketResponse):
     def __del__(self):
         if self._sock is not None:
             self._pool.release_socket(self._sock)
-
 

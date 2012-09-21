@@ -15,31 +15,32 @@ Safe SSL support is provided by default. A certificate authority bundle from
 Mozilla is provided and ssl connection server certificate is validated by
 default. See *src/geventhttpclient/cacert.pem* for License.
 
-Python 2.6 and 2.7 are supported as well as gevent 0.13 and gevent 1.0a3.
+Python 2.6 and 2.7 are supported as well as gevent 0.13 and gevent 1.0 beta.
 
-An simple example:
+A simple example:
 
-    #!/usr/bin/env python
+```python
+#!/usr/bin/python
 
-    from geventhttpclient import HTTPClient
-    from geventhttpclient.url import URL
+from geventhttpclient import HTTPClient
+from geventhttpclient.url import URL
 
-    url = URL('http://gevent.org/')
+url = URL('http://gevent.org/')
 
-    http = HTTPClient(url.host)
+http = HTTPClient(url.host)
 
-    # issue a get request
-    http.get(url.path)
+# issue a get request
+response = http.get(url.path)
 
-    # read status_code
-    response.status_code
+# read status_code
+response.status_code
 
-    # read response body
-    body = response.read()
+# read response body
+body = response.read()
 
-    # close connections
-    http.close()
-
+# close connections
+http.close()
+```
 
 ## httplib compatibility and monkey patch
 
@@ -48,74 +49,78 @@ replacement of httplib connection and response objects.
 If you use httplib directly you can replace the **httplib** imports
 by **geventhttpclient.httplib**.
 
-    # from httplib import HTTPConnection
-    from geventhttpclient.httplib import HTTPConnection
+```python
+# from httplib import HTTPConnection
+from geventhttpclient.httplib import HTTPConnection
+```
 
 If you use **httplib2**, **urllib** or **urllib2**; you can patch **httplib** to
 use the wrappers from **geventhttpclient**.
 For **httplib2**, make sure you patch before you import or the *super*
 calls will fail.
 
-    import geventhttpclient.httplib
-    geventhttpclient.httplib.patch()
+```python
+import geventhttpclient.httplib
+geventhttpclient.httplib.patch()
 
-    import httplib2
-
+import httplib2
+```
 
 ## High Concurrency
 
 HTTPClient has connection pool built in and is greenlet safe by design.
 You can use the same instance among several greenlets.
 
+```python
+#!/usr/bin/env python
 
-    #!/usr/bin/env python
+import gevent.pool
+import json
 
-    import gevent.pool
-    import json
-
-    from geventhttpclient import HTTPClient
-    from geventhttpclient.url import URL
+from geventhttpclient import HTTPClient
+from geventhttpclient.url import URL
 
 
-    # go to http://developers.facebook.com/tools/explorer and copy the access token
-    TOKEN = '<go to http://developers.facebook.com/tools/explorer and copy the access token>'
+# go to http://developers.facebook.com/tools/explorer and copy the access token
+TOKEN = '<go to http://developers.facebook.com/tools/explorer and copy the access token>'
 
-    url = URL('https://graph.facebook.com/me/friends')
-    url['access_token'] = TOKEN
+url = URL('https://graph.facebook.com/me/friends')
+url['access_token'] = TOKEN
 
-    # setting the concurrency to 10 allow to create 10 connections and
-    # reuse them.
-    http = HTTPClient.from_url(url, concurrency=10)
+# setting the concurrency to 10 allow to create 10 connections and
+# reuse them.
+http = HTTPClient.from_url(url, concurrency=10)
 
-    response = http.get(url.query_string)
+response = http.get(url.query_string)
+assert response.status_code == 200
+
+# response comply to the read protocol. It passes the stream to
+# the json parser as it's being read.
+data = json.load(response)['data']
+
+def print_friend_username(http, friend_id):
+    friend_url = URL('/' + str(friend_id))
+    friend_url['access_token'] = TOKEN
+    # the greenlet will block until a connection is available
+    response = http.get(friend_url.query_string)
     assert response.status_code == 200
+    friend = json.load(response)
+    if friend.has_key('username'):
+        print '%s: %s' % (friend['username'], friend['name'])
+    else:
+        print '%s has no username.' % friend['name']
 
-    # response comply to the read protocol. It passes the stream to
-    # the json parser as it's being read.
-    data = json.load(response)['data']
+# allow to run 20 greenlet at a time, this is more than concurrency
+# of the http client but isn't a problem since the client has its own
+# connection pool.
+pool = gevent.pool.Pool(20)
+for item in data:
+    friend_id = item['id']
+    pool.spawn(print_friend_username, http, friend_id)
 
-    def print_friend_username(http, friend_id):
-        friend_url = URL('/' + str(friend_id))
-        friend_url['access_token'] = TOKEN
-        # the greenlet will block until a connection is available
-        response = http.get(friend_url.query_string)
-        assert response.status_code == 200
-        friend = json.load(response)
-        if friend.has_key('username'):
-            print '%s: %s' % (friend['username'], friend['name'])
-        else:
-            print '%s has no username.' % friend['name']
-
-    # allow to run 20 greenlet at a time, this is more than concurrency
-    # of the http client but isn't a problem since the client has its own
-    # connection pool.
-    pool = gevent.pool.Pool(20)
-    for item in data:
-        friend_id = item['id']
-        pool.spawn(print_friend_username, http, friend_id)
-
-    pool.join()
-    http.close()
+pool.join()
+http.close()
+```
 
 ## Streaming
 
@@ -123,24 +128,26 @@ You can use the same instance among several greenlets.
 Response objects have a read(N) and readline() method that read the stream
 incrementally.
 See *src/examples/twitter_streaming.py* for pulling twitter stream API.
-Here is a examples on how do download a big file chunk by chunk to save memory:
 
-    #!/usr/bin/env python
+Here is an example on how to download a big file chunk by chunk to save memory:
 
-    from geventhttpclient import HTTPClient, URL
+```python
+#!/usr/bin/env python
 
-    url = URL('http://127.0.0.1:80/100.dat')
-    http = HTTPClient.from_url(url)
-    response = http.get(url.query_string)
-    assert response.status_code == 200
+from geventhttpclient import HTTPClient, URL
 
-    CHUNK_SIZE = 1024 * 16 # 16KB
-    with open('/tmp/100.dat', 'w') as f:
+url = URL('http://127.0.0.1:80/100.dat')
+http = HTTPClient.from_url(url)
+response = http.get(url.query_string)
+assert response.status_code == 200
+
+CHUNK_SIZE = 1024 * 16 # 16KB
+with open('/tmp/100.dat', 'w') as f:
+    data = response.read(CHUNK_SIZE)
+    while data:
+        f.write(data)
         data = response.read(CHUNK_SIZE)
-        while data:
-            f.write(data)
-            data = response.read(CHUNK_SIZE)
-
+```
 
 ## Benchmarks
 

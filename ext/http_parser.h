@@ -29,6 +29,7 @@ extern "C" {
 
 #include <sys/types.h>
 #if defined(_WIN32) && !defined(__MINGW32__) && (!defined(_MSC_VER) || _MSC_VER<1600)
+#include <BaseTsd.h>
 typedef __int8 int8_t;
 typedef unsigned __int8 uint8_t;
 typedef __int16 int16_t;
@@ -37,9 +38,8 @@ typedef __int32 int32_t;
 typedef unsigned __int32 uint32_t;
 typedef __int64 int64_t;
 typedef unsigned __int64 uint64_t;
-
-typedef unsigned int size_t;
-typedef int ssize_t;
+typedef SIZE_T size_t;
+typedef SSIZE_T ssize_t;
 #else
 #include <stdint.h>
 #endif
@@ -65,7 +65,6 @@ typedef int ssize_t;
 
 typedef struct http_parser http_parser;
 typedef struct http_parser_settings http_parser_settings;
-typedef struct http_parser_result http_parser_result;
 
 
 /* Callbacks should return non-zero to indicate an error. The parser will
@@ -86,36 +85,44 @@ typedef int (*http_cb) (http_parser*);
 
 
 /* Request Methods */
+#define HTTP_METHOD_MAP(XX)         \
+  XX(0,  DELETE,      DELETE)       \
+  XX(1,  GET,         GET)          \
+  XX(2,  HEAD,        HEAD)         \
+  XX(3,  POST,        POST)         \
+  XX(4,  PUT,         PUT)          \
+  /* pathological */                \
+  XX(5,  CONNECT,     CONNECT)      \
+  XX(6,  OPTIONS,     OPTIONS)      \
+  XX(7,  TRACE,       TRACE)        \
+  /* webdav */                      \
+  XX(8,  COPY,        COPY)         \
+  XX(9,  LOCK,        LOCK)         \
+  XX(10, MKCOL,       MKCOL)        \
+  XX(11, MOVE,        MOVE)         \
+  XX(12, PROPFIND,    PROPFIND)     \
+  XX(13, PROPPATCH,   PROPPATCH)    \
+  XX(14, SEARCH,      SEARCH)       \
+  XX(15, UNLOCK,      UNLOCK)       \
+  /* subversion */                  \
+  XX(16, REPORT,      REPORT)       \
+  XX(17, MKACTIVITY,  MKACTIVITY)   \
+  XX(18, CHECKOUT,    CHECKOUT)     \
+  XX(19, MERGE,       MERGE)        \
+  /* upnp */                        \
+  XX(20, MSEARCH,     M-SEARCH)     \
+  XX(21, NOTIFY,      NOTIFY)       \
+  XX(22, SUBSCRIBE,   SUBSCRIBE)    \
+  XX(23, UNSUBSCRIBE, UNSUBSCRIBE)  \
+  /* RFC-5789 */                    \
+  XX(24, PATCH,       PATCH)        \
+  XX(25, PURGE,       PURGE)        \
+
 enum http_method
-  { HTTP_DELETE    = 0
-  , HTTP_GET
-  , HTTP_HEAD
-  , HTTP_POST
-  , HTTP_PUT
-  /* pathological */
-  , HTTP_CONNECT
-  , HTTP_OPTIONS
-  , HTTP_TRACE
-  /* webdav */
-  , HTTP_COPY
-  , HTTP_LOCK
-  , HTTP_MKCOL
-  , HTTP_MOVE
-  , HTTP_PROPFIND
-  , HTTP_PROPPATCH
-  , HTTP_UNLOCK
-  /* subversion */
-  , HTTP_REPORT
-  , HTTP_MKACTIVITY
-  , HTTP_CHECKOUT
-  , HTTP_MERGE
-  /* upnp */
-  , HTTP_MSEARCH
-  , HTTP_NOTIFY
-  , HTTP_SUBSCRIBE
-  , HTTP_UNSUBSCRIBE
-  /* RFC-5789 */
-  , HTTP_PATCH
+  {
+#define XX(num, name, string) HTTP_##name = num,
+  HTTP_METHOD_MAP(XX)
+#undef XX
   };
 
 
@@ -143,10 +150,7 @@ enum flags
                                                                      \
   /* Callback-related errors */                                      \
   XX(CB_message_begin, "the on_message_begin callback failed")       \
-  XX(CB_path, "the on_path callback failed")                         \
-  XX(CB_query_string, "the on_query_string callback failed")         \
   XX(CB_url, "the on_url callback failed")                           \
-  XX(CB_fragment, "the on_fragment callback failed")                 \
   XX(CB_header_field, "the on_header_field callback failed")         \
   XX(CB_header_value, "the on_header_value callback failed")         \
   XX(CB_headers_complete, "the on_headers_complete callback failed") \
@@ -209,7 +213,7 @@ struct http_parser {
   unsigned char index;        /* index into current matcher */
 
   uint32_t nread;          /* # bytes read in various scenarios */
-  int64_t content_length;  /* # bytes in body (0 if no Content-Length header) */
+  uint64_t content_length; /* # bytes in body (0 if no Content-Length header) */
 
   /** READ-ONLY **/
   unsigned short http_major;
@@ -252,7 +256,8 @@ enum http_parser_url_fields
   , UF_PATH             = 3
   , UF_QUERY            = 4
   , UF_FRAGMENT         = 5
-  , UF_MAX              = 6
+  , UF_USERINFO         = 6
+  , UF_MAX              = 7
   };
 
 
@@ -284,7 +289,7 @@ size_t http_parser_execute(http_parser *parser,
 
 
 /* If http_should_keep_alive() in the on_headers_complete or
- * on_message_complete callback returns true, then this will be should be
+ * on_message_complete callback returns 0, then this should be
  * the last message on the connection.
  * If you are the server, respond with the "Connection: close" header.
  * If you are the client, close the connection.

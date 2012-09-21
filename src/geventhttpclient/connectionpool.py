@@ -1,8 +1,13 @@
 import os
 import gevent.queue
-import gevent.coros
 import gevent.ssl
 import gevent.socket
+
+try:
+    from gevent import lock
+except ImportError:
+    # gevent < 1.0b2
+    from gevent import coros as lock
 
 
 CA_CERTS = os.path.join(
@@ -28,7 +33,7 @@ class ConnectionPool(object):
         self._closed = False
         self._host = host
         self._port = port
-        self._semaphore = gevent.coros.BoundedSemaphore(size)
+        self._semaphore = lock.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
 
         self.connection_timeout = connection_timeout
@@ -87,8 +92,11 @@ class ConnectionPool(object):
         try:
             return self._socket_queue.get(block=False)
         except gevent.queue.Empty:
-            sock = self._create_socket()
-            return sock
+            try:
+                return self._create_socket()
+            except:
+                self._semaphore.release()
+                raise
 
     def return_socket(self, sock):
         """ return a socket to the pool.
@@ -126,9 +134,9 @@ class SSLConnectionPool(ConnectionPool):
         del kw['ssl_options']
         super(SSLConnectionPool, self).__init__(host, port, **kw)
 
-    def _create_socket(self):
-        sock = super(SSLConnectionPool, self)._create_socket()
-        ssl_sock = gevent.ssl.wrap_socket(sock, **self.ssl_options)
-        return ssl_sock
+    def _create_tcp_socket(self, family, socktype, protocol):
+        sock = super(SSLConnectionPool, self)._create_tcp_socket(
+            family, socktype, protocol)
+        return gevent.ssl.wrap_socket(sock, **self.ssl_options)
 
 

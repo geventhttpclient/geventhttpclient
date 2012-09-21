@@ -1,40 +1,38 @@
-from gevent import monkey
-monkey.patch_all()
+if __name__ == "__main__":
 
-import gevent.pool
-import time
+    from gevent import monkey
+    monkey.patch_all()
 
-from restkit import request
-from restkit.globals import set_manager
-from restkit.manager.mgevent import GeventManager
+    import gevent.pool
+    import time
 
+    from restkit import *
+    from socketpool import ConnectionPool
 
-url = 'http://127.0.0.1/index.html'
+    url = 'http://127.0.0.1/index.html'
 
-N = 1000
-C = 10
+    N = 1000
+    C = 10
 
-manager = GeventManager(timeout=300, max_conn=C, reap_connections=True)
-set_manager(manager)
-
-
-def run():
-    response = request(url)
-    response.body_string()
-    assert response.status_int == 200
+    Pool = ConnectionPool(factory=Connection,backend="gevent",max_size=C,timeout=300)
 
 
-group = gevent.pool.Pool(size=C)
+    def run():
+        response = request(url,follow_redirect=True,pool=Pool)
+        response.body_string()
+        assert response.status_int == 200
 
-now = time.time()
-for _ in xrange(N):
-    group.spawn(run)
-group.join()
 
-delta = time.time() - now
-req_per_sec = N / delta
+    group = gevent.pool.Pool(size=C)
 
-print "request count:%d, concurrenry:%d, %f req/s" % (
-    N, C, req_per_sec)
+    now = time.time()
+    for _ in xrange(N):
+        group.spawn(run)
+    group.join()
 
+    delta = time.time() - now
+    req_per_sec = N / delta
+
+    print "request count:%d, concurrenry:%d, %f req/s" % (
+        N, C, req_per_sec)
 
