@@ -49,7 +49,7 @@ class HTTPResponse(response.HTTPSocketResponse):
         return super(HTTPResponse, self).read(amt)
 
     def getheader(self, name, default=None):
-        return self.get(name.lower(), default)
+        return self.get(name, default)
 
     def getheaders(self):
         return self._headers_index.items()
