@@ -87,7 +87,7 @@ class HTTPClient(object):
     def _build_request(self, method, request_uri, body="", headers={}):
         header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
-            header_fields[Header(field)] = value
+            header_fields[field] = value
         if self.version == self.HTTP_11 and 'host' not in header_fields:
             host_port = self.host
             if self.port not in (80, 443):
