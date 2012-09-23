@@ -69,7 +69,7 @@ class HTTPClient(object):
         self.version = version
         self.default_headers = self.DEFAULT_HEADERS.copy()
         for field, value in headers.iteritems():
-            self.default_headers[Header(field)] = value
+            self.default_headers[field] = value
 
         self.block_size = block_size
         self._base_url_string = str(self.get_base_url())
