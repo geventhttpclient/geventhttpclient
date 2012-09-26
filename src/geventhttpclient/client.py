@@ -88,13 +88,13 @@ class HTTPClient(object):
         header_fields = self.default_headers.copy()
         for field, value in headers.iteritems():
             header_fields[field] = value
-        if self.version == self.HTTP_11 and 'host' not in header_fields:
+        if self.version == self.HTTP_11 and 'Host' not in header_fields:
             host_port = self.host
             if self.port not in (80, 443):
                 host_port += ":" + str(self.port)
             header_fields['Host'] = host_port
         if body and 'Content-Length' not in header_fields:
-            header_fields['Content-Length'] = str(len(body))
+            header_fields['Content-Length'] = len(body)
 
         request_url = request_uri
         if self.use_proxy:
@@ -105,7 +105,7 @@ class HTTPClient(object):
         request = method + " " + request_url + " " + self.version + "\r\n"
 
         for field, value in header_fields.iteritems():
-            request += str(field) + ': ' + value + "\r\n"
+            request += field + ': ' + value + "\r\n"
         request += "\r\n"
         if body:
             request += body
