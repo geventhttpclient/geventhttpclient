@@ -31,6 +31,14 @@ def test_client_simple():
     body = response.read()
     assert len(body)
 
+test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
+def test_client_with_default_headers():
+    client = HTTPClient.from_url('www.google.fr/', headers=test_headers)
+
+def test_request_with_headers():
+    client = HTTPClient('www.google.fr')
+    response = client.get('/', headers=test_headers)
+
 def test_response_context_manager():
     client = HTTPClient.from_url('http://www.google.fr/')
     r = None
@@ -38,7 +46,7 @@ def test_response_context_manager():
         assert response.status_code == 200
         r = response
     assert r._sock is None # released
-
+    
 def test_client_ssl():
     client = HTTPClient('www.google.fr', ssl=True)
     assert client.port == 443
