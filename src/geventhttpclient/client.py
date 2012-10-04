@@ -41,12 +41,12 @@ class HTTPClient(object):
         Header('User-Agent'): 'python/gevent-http-client-' + __version__
     }
 
-    @staticmethod
-    def from_url(url, **kw):
+    @classmethod
+    def from_url(cls, url, **kw):
         if not isinstance(url, URL):
             url = URL(url)
         enable_ssl = url.scheme == 'https'
-        return HTTPClient(url.host, port=url.port, ssl=enable_ssl, **kw)
+        return cls(url.host, port=url.port, ssl=enable_ssl, **kw)
 
     def __init__(self, host, port=None, headers={},
             block_size=BLOCK_SIZE,
