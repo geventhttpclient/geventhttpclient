@@ -34,9 +34,9 @@ class URL(object):
         'https': 443
     }
 
-    __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment')
+    __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment', 'quoter')
 
-    def __init__(self, url=None):
+    def __init__(self, url=None, quoter=quote_plus):
         if url is not None:
             self.scheme, netloc, self.path, \
                 query, self.fragment = urlparse.urlsplit(url)
@@ -61,6 +61,8 @@ class URL(object):
                 self.query[key] = value
             else:
                 self.query[key] = value[0]
+
+        self.quoter = quoter
 
     @property
     def netloc(self):
@@ -92,10 +94,10 @@ class URL(object):
             if isinstance(value, list):
                 for item in value:
                     params.append("%s=%s" % (
-                        quote_plus(key), quote_plus(str(item))))
+                        self.quoter(key), self.quoter(str(item))))
             else:
                 params.append("%s=%s" % (
-                    quote_plus(key), quote_plus(str(value))))
+                    self.quoter(key), self.quoter(str(value))))
         if params:
             return "&".join(params)
         return ''
