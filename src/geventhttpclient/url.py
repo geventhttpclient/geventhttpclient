@@ -34,6 +34,8 @@ class URL(object):
         'https': 443
     }
 
+    SAFE = ''
+
     __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment')
 
     def __init__(self, url=None):
@@ -61,6 +63,13 @@ class URL(object):
                 self.query[key] = value
             else:
                 self.query[key] = value[0]
+
+    @classmethod
+    def set_safe(cls, safe=''):
+        '''
+        Set the safe characters to not be quoted when using the quote_plus method
+        '''
+        URL.SAFE = safe
 
     @property
     def netloc(self):
@@ -92,10 +101,10 @@ class URL(object):
             if isinstance(value, list):
                 for item in value:
                     params.append("%s=%s" % (
-                        quote_plus(key), quote_plus(str(item))))
+                        quote_plus(key, safe=self.SAFE), quote_plus(str(item), safe=self.SAFE)))
             else:
                 params.append("%s=%s" % (
-                    quote_plus(key), quote_plus(str(value))))
+                    quote_plus(key, safe=self.SAFE), quote_plus(str(value), safe=self.SAFE)))
         if params:
             return "&".join(params)
         return ''
