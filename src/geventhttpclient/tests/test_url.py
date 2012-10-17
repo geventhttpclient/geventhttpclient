@@ -32,3 +32,9 @@ def test_empty():
     assert url.netloc == ''
     str(url) == 'http:///'
 
+def test_no_quote():
+    surl = '/path/to/something?param=value&other=tr*ue'
+    url1 = URL(surl, quoter=str)
+    url2 = URL(surl)
+    assert url1.query_string == "other=tr*ue&param=value"
+    assert url2.query_string == "other=tr%2Aue&param=value"

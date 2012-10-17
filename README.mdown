@@ -1,6 +1,6 @@
 # geventhttpclient
 
-A high performance, concurrent HTTP client library for python using 
+A high performance, concurrent HTTP client library for python using
 [gevent](http://gevent.org).
 
 **geventhttpclient** use a fast [http parser](http://github.com/joyent/http-parser),
@@ -158,3 +158,9 @@ a concurrency of 10. See *benchmarks* folder.
 - httplib2 with geventhttpclient monkey patch (*benchmarks/httplib2_patched.py*): **~2500 req/s**
 - geventhttpclient.HTTPClient (*benchmarks/httpclient.py*): **~4000 req/s**
 
+## Testing
+
+Tests can be run via the following command
+```bash
+python setup.py nosetests
+```
