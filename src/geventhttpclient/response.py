@@ -1,6 +1,5 @@
 import errno
 from geventhttpclient._parser import HTTPResponseParser, HTTPParseError
-from geventhttpclient.header import Headers
 import gevent.socket
 
 
@@ -20,13 +19,13 @@ class HTTPProtocolViolationError(HTTPParseError):
 
 class HTTPResponse(HTTPResponseParser):
 
-    def __init__(self, method='GET', headers_type=Headers):
+    def __init__(self, method='GET'):
         super(HTTPResponse, self).__init__()
         self.method = method.upper()
         self.headers_complete = False
         self.message_begun = False
         self.message_complete = False
-        self._headers_index = headers_type()
+        self._headers_index = {}
         self._header_state = HEADER_STATE_INIT
         self._current_header_field = None
         self._current_header_value = None
@@ -34,30 +33,17 @@ class HTTPResponse(HTTPResponseParser):
         self._body_buffer = bytearray()
 
     def __getitem__(self, key):
-        """ Continuation of previous API, which didn't return lists """
-        ret = self._headers_index[key]
-        if ret is None:
-            return default
-        elif len(ret) == 1:
-            return ret[0]
-        else:
-            return ret
+        return self._headers_index[key.lower()]
 
     def get(self, key, default=None):
-        try:
-            return self.__getitem__(key)
-        except KeyError:
-            return default
+        return self._headers_index.get(key.lower(), default)
 
     def iteritems(self):
-        return self._headers_index.iteritems()
+        for field in self._headers_index.keys():
+            yield (field, self._headers_index[field])
 
     def items(self):
-        return self._headers_index.items()
-    
-    def info(self):
-        """ cookielib compatibility """
-        return self._headers_index
+        return list(self.iteritems())
 
     def should_keep_alive(self):
         """ return if the headers instruct to keep the connection
@@ -131,7 +117,8 @@ class HTTPResponse(HTTPResponseParser):
 
     def _flush_header(self):
         if self._current_header_field is not None:
-            self._headers_index.add(self._current_header_field, self._current_header_value)
+            self._headers_index[self._current_header_field.lower()] = \
+                self._current_header_value
             self._header_position += 1
             self._current_header_field = None
             self._current_header_value = None
