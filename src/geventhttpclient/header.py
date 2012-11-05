@@ -7,11 +7,14 @@ _dict_getitem = dict.__getitem__
 _dict_delitem = dict.__delitem__
 _dict_contains = dict.__contains__
 
+MULTIPLE_HEADERS_ALLOWED = set(['cookie', 'set-cookie', 'set-cookie2'])
+
 def lower(txt):
     try:
         return txt.lower()
     except AttributeError:
         raise TypeError("Header names must be of type basestring, not %s" % type(txt).__name__)
+
 
 class Headers(dict):
     """
@@ -75,7 +78,12 @@ class Headers(dict):
             if isinstance(item, list):
                 item.append(val)
             else:
-                _dict_setitem(self, key, [item, val])
+                if key in MULTIPLE_HEADERS_ALLOWED:
+                    # Only create duplicate headers for meaningful field names,
+                    # else overwrite the field
+                    _dict_setitem(self, key, [item, val])
+                else:
+                    _dict_setitem(self, key, val)
                 
     def update(self, *args, **kwds):
         """ Adapted from MutableMapping to use self.add instead of self.__setitem__ """

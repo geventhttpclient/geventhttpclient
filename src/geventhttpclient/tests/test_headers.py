@@ -66,8 +66,8 @@ def test_create_from_kwargs():
     assert 'ab' in h
 
 def test_create_from_iterator():
-    h = Headers((x, x*5) for x in string.ascii_letters)
-    assert len(h) == len(string.ascii_letters)
+    h = Headers((x, x*5) for x in string.ascii_lowercase)
+    assert len(h) == len(string.ascii_lowercase)
     
 def test_create_from_dict():
     h = Headers(dict(ab=1, cd=2, ef=3, gh=4))
@@ -75,12 +75,12 @@ def test_create_from_dict():
     assert 'ab' in h
 
 def test_create_from_list():
-    h = Headers([('ab', 'A'), ('cd', 'B'), ('ef', 'C'), ('ef', 'D'), ('ef', 'E')])
+    h = Headers([('ab', 'A'), ('cd', 'B'), ('cookie', 'C'), ('cookie', 'D'), ('cookie', 'E')])
     assert len(h) == 5
     assert 'ab' in h
-    assert len(h['ef']) == 3
-    assert h['ef'][0] == 'C'
-    assert h['ef'][-1] == 'E'
+    assert len(h['cookie']) == 3
+    assert h['cookie'][0] == 'C'
+    assert h['cookie'][-1] == 'E'
 
 def test_case_insensitivity():
     h = Headers({'Content-Type': 'text/plain'})

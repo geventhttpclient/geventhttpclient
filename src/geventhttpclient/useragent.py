@@ -111,6 +111,9 @@ class CompatResponse(object):
         """ Read n bytes from the response body """
         return self._response.read(n)
     
+    def readline(self):
+        return self._response.readline()
+    
     def unzipped(self, gzip=True):
         bodystr = self._response.read()
         if gzip: 
