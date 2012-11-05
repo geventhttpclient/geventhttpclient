@@ -33,7 +33,7 @@ class HTTPClient(object):
             network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
             disable_ipv6=False,
             concurrency=1, ssl_options=None, ssl=False,
-            proxy_host=None, proxy_port=None, version=HTTP_11):
+            proxy_host=None, proxy_port=None, version=HTTP_11, headers_type=Headers):
         self.host = host
         self.port = port
         connection_host = self.host
@@ -67,6 +67,7 @@ class HTTPClient(object):
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6)
         self.version = version
+        self.headers_type = headers_type
         self.default_headers = self.DEFAULT_HEADERS.copy()
         for field, value in headers.iteritems():
             self.default_headers[field] = value
@@ -95,7 +96,7 @@ class HTTPClient(object):
             header_fields['Host'] = host_port
         if body and 'Content-Length' not in header_fields:
             header_fields['Content-Length'] = len(body)
-
+            
         request_url = request_uri
         if self.use_proxy:
             base_url = self._base_url_string
@@ -121,7 +122,7 @@ class HTTPClient(object):
             sock = self._connection_pool.get_socket()
             try:
                 sock.sendall(request)
-            except gevent.socket.error as e:
+            except gevent.socket.error as e: #@UndefinedVariable
                 self._connection_pool.release_socket(sock)
                 if e.errno == errno.ECONNRESET and attempts_left > 0:
                     attempts_left -= 1
@@ -130,7 +131,7 @@ class HTTPClient(object):
 
             try:
                 return HTTPSocketPoolResponse(sock, self._connection_pool,
-                    block_size=self.block_size, method=method.upper())
+                    block_size=self.block_size, method=method.upper(), headers_type=self.headers_type)
             except HTTPConnectionClosed as e:
                 # connection is released by the response itself
                 if attempts_left > 0:
@@ -149,4 +150,23 @@ class HTTPClient(object):
 
     def delete(self, request_uri, body=u'', headers={}):
         return self.request('DELETE', request_uri, body=body, headers=headers)
+    
+    
+class HTTPClientPool(object):
+    """ Factory for maintaining a bunch of clients, one per host:port """
+    # TODO: Add some housekeeping and cleanup logic
+    
+    def __init__(self, **kwargs):
+        self.clients = dict()
+        self.client_args = kwargs
 
+    def get_client(self, url):
+        if not isinstance(url, URL):
+            url = URL(url)
+        client_key = url.host, url.port
+        try: 
+            return self.clients[client_key]
+        except KeyError:
+            client = HTTPClient.from_url(url, **self.client_args)
+            self.clients[client_key] = client
+            return client

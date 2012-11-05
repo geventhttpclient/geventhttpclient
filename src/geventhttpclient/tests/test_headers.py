@@ -1,9 +1,16 @@
+import gevent
+import gevent.monkey
+gevent.monkey.patch_all()
+
+import pytest
+
 from cookielib import CookieJar
 from urllib2 import Request
+import string
+import random
 import time
 
 from geventhttpclient.response import HTTPResponse
-from geventhttpclient._parser import HTTPParseError
 from geventhttpclient.header import Headers
 
 
@@ -53,7 +60,15 @@ Content-Length: 26186
 """.lstrip().replace('\n', '\r\n')
 # Do not remove the final empty line!
 
+def test_create_from_kwargs():
+    h = Headers(ab=1, cd=2, ef=3, gh=4)
+    assert len(h) == 4
+    assert 'ab' in h
 
+def test_create_from_iterator():
+    h = Headers((x, x*5) for x in string.ascii_letters)
+    assert len(h) == len(string.ascii_letters)
+    
 def test_create_from_dict():
     h = Headers(dict(ab=1, cd=2, ef=3, gh=4))
     assert len(h) == 4
@@ -69,14 +84,15 @@ def test_create_from_list():
 
 def test_case_insensitivity():
     h = Headers({'Content-Type': 'text/plain'})
-    assert 'content-type' in h
-    assert h.get('content-type') == h.get('CONTENT-TYPE') == h.get('Content-Type') == ['text/plain']
+    h.add('Content-Encoding', 'utf8')
+    for val in ('content-type', 'content-encoding'):
+        assert val.upper() in h
+        assert val.lower() in h
+        assert val.capitalize() in h
+        assert h.get(val.lower()) == h.get(val.upper()) == h.get(val.capitalize())
+        del h[val.upper()]
+        assert val.lower() not in h
 
-def test_automatic_string_conversion():
-    h = Headers()
-    h['asdf'] = [5, 6, 7]
-    assert h['asdf'] == ['5', '6', '7']
-    
 def test_read_multiple_header():
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
@@ -86,12 +102,18 @@ def test_read_multiple_header():
     assert headers['set-cookie'][-1].startswith('bb_fbprofilepicurl')
 
 def test_cookielib_compatibility():
-    parser = HTTPResponse()
-    parser.feed(MULTI_COOKIE_RESPONSE)
     cj = CookieJar()
     # Set time in order to be still valid in some years, when cookie strings expire
-    cj._now = time.mktime((2012, 1, 1, 0, 0, 0, 0, 0, 0))
-    cj.extract_cookies(parser, Request(''))
+    cj._now = cj._policy._now = time.mktime((2012, 1, 1, 0, 0, 0, 0, 0, 0))
+
+    request = Request('')
+    parser = HTTPResponse()
+    parser.feed(MULTI_COOKIE_RESPONSE)
+    cookies = cj.make_cookies(parser, request)
+    # Don't use extract_cookies directly, as time can not be set there manually for testing
+    for cookie in cookies:
+        if cj._policy.set_ok(cookie, request):
+            cj.set_cookie(cookie)
     # Three valid, not expired cookies placed
     assert len(list(cj)) == 3
 
@@ -106,6 +128,35 @@ def test_compatibility_with_previous_API_write():
     h = Headers()
     h['asdf'] = 'jklm'
     h['asdf'] = 'dfdf'
-    # Only one header should be stored internally
-    assert h['asdf'] == ['dfdf']
+    # Lists only if necessary
+    assert h['asdf'] == 'dfdf'
     
+def test_copy():
+    rnd_txt = lambda length: ''.join(random.choice(string.ascii_letters) for _ in xrange(length))
+    h = Headers((rnd_txt(10), rnd_txt(50)) for _ in xrange(100))
+    c = h.copy()
+    assert h is not c
+    assert len(h) == len(c)
+    assert set(h.keys()) == set(c.keys())
+    assert h == c
+    assert type(h) is type(c)
+    for _ in xrange(100):
+        rnd_key = rnd_txt(9)
+        c[rnd_key] = rnd_txt(10)
+        assert rnd_key in c
+        assert rnd_key not in h
+    
+def test_fieldname_string_enforcement():
+    with pytest.raises(TypeError): #@UndefinedVariable
+        Headers({3: 3})
+    h = Headers()
+    with pytest.raises(TypeError): #@UndefinedVariable
+        h[3] = 5
+    with pytest.raises(TypeError): #@UndefinedVariable
+        h.add(3, 4)
+    with pytest.raises(TypeError): #@UndefinedVariable
+        del h[3]
+    
+if __name__ == '__main__':
+    test_copy()
+    test_cookielib_compatibility()

@@ -1,5 +1,5 @@
 import errno
-from geventhttpclient._parser import HTTPResponseParser, HTTPParseError
+from geventhttpclient._parser import HTTPResponseParser, HTTPParseError #@UnresolvedImport
 from geventhttpclient.header import Headers
 import gevent.socket
 
@@ -34,14 +34,7 @@ class HTTPResponse(HTTPResponseParser):
         self._body_buffer = bytearray()
 
     def __getitem__(self, key):
-        """ Continuation of previous API, which didn't return lists """
-        ret = self._headers_index[key]
-        if ret is None:
-            return default
-        elif len(ret) == 1:
-            return ret[0]
-        else:
-            return ret
+        return self._headers_index[key.lower()]
 
     def get(self, key, default=None):
         try:
@@ -56,7 +49,7 @@ class HTTPResponse(HTTPResponseParser):
         return self._headers_index.items()
     
     def info(self):
-        """ cookielib compatibility """
+        """ Basic cookielib compatibility """
         return self._headers_index
 
     def should_keep_alive(self):
@@ -151,8 +144,8 @@ class HTTPSocketResponse(HTTPResponse):
     DEFAULT_BLOCK_SIZE = 1024 * 4 # 4KB
 
     def __init__(self, sock, block_size=DEFAULT_BLOCK_SIZE,
-            method='GET'):
-        super(HTTPSocketResponse, self).__init__(method=method)
+            method='GET', **kw):
+        super(HTTPSocketResponse, self).__init__(method=method, **kw)
         self._sock = sock
         self.block_size = block_size
         self._read_headers()
@@ -185,7 +178,7 @@ class HTTPSocketResponse(HTTPResponse):
                         raise HTTPParseError('connection closed before'
                                             ' end of the headers')
                     start = False
-                except gevent.socket.error as e:
+                except gevent.socket.error as e: #@UndefinedVariable
                     if e.errno == errno.ECONNRESET:
                         if start:
                             raise HTTPConnectionClosed(

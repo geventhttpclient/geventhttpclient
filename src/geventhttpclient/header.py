@@ -1,14 +1,19 @@
+import copy
 import pprint
-from copy import deepcopy
-from collections import Mapping, MutableMapping
+from collections import Mapping
 
+_dict_setitem = dict.__setitem__
+_dict_getitem = dict.__getitem__
+_dict_delitem = dict.__delitem__
+_dict_contains = dict.__contains__
 
-def pretty_print_field(name):
-    """ user-agent -> User-Agent """
-    return '-'.join(name_pt.capitalize() for name_pt in name.split('-'))
+def lower(txt):
+    try:
+        return txt.lower()
+    except AttributeError:
+        raise TypeError("Header names must be of type basestring, not %s" % type(txt).__name__)
 
-
-class Headers(MutableMapping):
+class Headers(dict):
     """
     Storing headers in an easily accessible way and providing cookielib compatibility
     
@@ -16,111 +21,125 @@ class Headers(MutableMapping):
     in a message if and only if the entire field-value for that header field is defined 
     as a comma-separated list.
     """
-    __slots__ = 'data',
-    
     def __init__(self, *args, **kwargs):
-        self.data = dict()
-        self.update(*args, **kwargs)        
-
-    def __getitem__(self, name):
-        name = name.lower()
-        return self.data[name]
-            
-    def verify_item(self, name, val):
-        """ Hook for checking or applying modifications to stored values """
-        return str(val)
-    
-    def __setitem__(self, name, val):
-        name = name.lower()
-        if isinstance(val, list):
-            self.data[name] = [self.verify_item(name, v) for v in val]
-        else:
-            self.data[name] = [self.verify_item(name, val)]
-
-    def __delitem__(self, name):
-        name = name.lower()
-        del self.data[name]
+        dict.__init__(self)
+        self.update(*args, **kwargs)
         
-    def __contains__(self, name):
-        # Overwrite for speed instead of relying on MutableMapping
-        return name.lower() in self.data
-    
-    def __iter__(self):
-        return self.data.__iter__()
-    
-    def __len__(self):
-        return sum(len(vals) for vals in self.data.values())
-    
-    def __str__(self):
-        return pprint.pformat(self.items())
+    def __setitem__(self, key, val):
+        """ Ensures only lowercase header names """
+        return _dict_setitem(self, lower(key), val)
 
-    def itervalues(self):
-        """ Iterates all headers also extracting multiple entries """
-        for vals in self.data.values():
-            for val in vals:
-                yield val
-                
+    def __getitem__(self, key):
+        return _dict_getitem(self, lower(key))
+
+    def __delitem__(self, key):
+        return _dict_delitem(self, lower(key))
+
+    def __contains__(self, key):
+        return _dict_contains(self, lower(key))
+        
     def iteritems(self):
         """ Iterates all headers also extracting multiple entries """
-        for name, vals in self.data.items():
-            for val in vals:
-                yield name, val
-                
+        for key, vals in dict.iteritems(self):
+            if not isinstance(vals, list):
+                yield key, vals
+            else:
+                for val in vals:
+                    yield key, val
+               
     def items(self):
         return list(self.iteritems())
 
-    def pretty_items(self):
-        for name, val in self.iteritems():
-            yield pretty_print_field(name), val
+    def __len__(self):
+        return sum(len(vals) if isinstance(vals, list) else 1 for vals in self.itervalues())
     
-    def copy(self):
-        return deepcopy(self)
-    
+    def get(self, key, default=None):
+        """ Overwrite of inbuilt get, to use case-insensitive __getitem__ """
+        try:
+            return self[key]
+        except KeyError:
+            return default
+
+    def add(self, key, val):
+        """
+        Insert new header lines to the container. This method creates lists only for multiple, 
+        not for single lines. This minimizes the overhead for the common case and optimizes the 
+        total parsing speed of the headers.
+        """
+        key = lower(key)
+        # Use lower only once and then stick with inbuilt functions for speed
+        if not _dict_contains(self, key):
+            _dict_setitem(self, key, val)
+        else:
+            item = _dict_getitem(self, key)
+            if isinstance(item, list):
+                item.append(val)
+            else:
+                _dict_setitem(self, key, [item, val])
+                
+    def update(self, *args, **kwds):
+        """ Adapted from MutableMapping to use self.add instead of self.__setitem__ """
+        if len(args) > 1:
+            raise TypeError("update() takes at most one positional "
+                            "arguments ({} given)".format(len(args)))
+        try:
+            other = args[0]
+        except IndexError:
+            pass
+        else:
+            if isinstance(other, Mapping):
+                for key in other:
+                    self.add(key, other[key])
+            elif hasattr(other, "keys"):
+                for key in other.keys():
+                    self.add(key, other[key])
+            else:
+                for key, value in other:
+                    self.add(key, value)
+
+        for key, value in kwds.items():
+            self.add(key, value)
+
     def getheaders(self, name):
-        """ Compatibility with urllib/cookielib """
-        return self.get(name, [])
+        """ Compatibility with urllib/cookielib: Always return lists """
+        try:
+            ret = self[name]
+        except KeyError:
+            return []
+        else:
+            if isinstance(ret, list):
+                return ret
+            else:
+                return [ret]
     
     getallmatchingheaders = getheaders
     iget = getheaders
     
-    def discard(self, name):
+    def discard(self, key):
         try:
-            del self[name]
+            self.__delitem__(key)
         except KeyError:
             pass
 
-    def add(self, name, val):
-        """ Highlevel replacement for former __setitem__ """
-        name = name.lower()
-        if name in self:
-            if isinstance(val, list):
-                self.data[name] += [self.verify_item(name, v) for v in val]
+    @staticmethod
+    def _format_field(field):
+        return '-'.join(field_pt.capitalize() for field_pt in field.split('-'))
+     
+    def pretty_items(self):
+        for key, vals in dict.iteritems(self):
+            key = self._format_field(key)
+            if not isinstance(vals, list):
+                yield key, vals
             else:
-                self.data[name].append(self.verify_item(name, val))
-        else:
-            self[name] = val
-
-    def update(*args, **kwds):
-        """ Borrowed from MutableMapping to use add instead of __setitem__ """
-        if len(args) > 2:
-            raise TypeError("update() takes at most 2 positional "
-                            "arguments ({} given)".format(len(args)))
-        elif not args:
-            raise TypeError("update() takes at least 1 argument (0 given)")
-        self = args[0]
-        other = args[1] if len(args) >= 2 else ()
-
-        if isinstance(other, Mapping):
-            for key in other:
-                self[key] = other[key]
-        elif hasattr(other, "keys"):
-            for key in other.keys():
-                self[key] = other[key]
-        else:
-            for key, value in other:
-                self.add(key, value)
-        for key, value in kwds.items():
-            self.add(key, value)
+                for val in vals:
+                    yield key, val
+        
+    def __str__(self):
+        return pprint.pformat(sorted(self.pretty_items()))
+    
+    def copy(self):
+        """ Overwrite inbuilt copy method, as inbuilt does not preserve type """
+        return copy.copy(self)
 
     def compatible_dict(self):
         """ 
@@ -129,14 +148,14 @@ class Headers(MutableMapping):
         strings instead of lists for multiple headers.
         """
         ret = dict()
-        for name in self:
-            val = self[name]
-            name = pretty_print_field(name)
+        for key in self:
+            val = self[key]
+            key = self._format_field(key)
             if len(val) == 1:
                 val = val[0]
             else:
+                # TODO: Add escaping of quotes in vals and quoting
                 val = ', '.join(val)
-            ret[name] = val
+            ret[key] = val
         return ret
-    
     

@@ -1,6 +1,7 @@
 import time
 import gevent.pool
 from geventhttpclient import HTTPClient, URL
+from geventhttpclient.header import HeadersFast, Headers
 
 
 if __name__ == "__main__":
@@ -17,7 +18,7 @@ if __name__ == "__main__":
         assert response.status_code == 200
 
 
-    client = HTTPClient.from_url(url, concurrency=C)
+    client = HTTPClient.from_url(url, concurrency=C, headers_type=HeadersFast)
     group = gevent.pool.Pool(size=C)
 
     now = time.time()
