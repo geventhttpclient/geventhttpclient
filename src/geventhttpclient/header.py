@@ -17,19 +17,19 @@ def lower(txt):
 
 
 class Headers(dict):
-    """
-    Storing headers in an easily accessible way and providing cookielib compatibility
+    """ Storing headers in an easily accessible way and providing cookielib compatibility
     
-    RFC 2616/4.2: Multiple message-header fields with the same field-name MAY be present 
-    in a message if and only if the entire field-value for that header field is defined 
-    as a comma-separated list.
+        RFC 2616/4.2: Multiple message-header fields with the same field-name MAY be present 
+        in a message if and only if the entire field-value for that header field is defined 
+        as a comma-separated list.
     """
     def __init__(self, *args, **kwargs):
         dict.__init__(self)
         self.update(*args, **kwargs)
         
     def __setitem__(self, key, val):
-        """ Ensures only lowercase header names """
+        """ Ensures only lowercase header names 
+        """
         return _dict_setitem(self, lower(key), val)
 
     def __getitem__(self, key):
@@ -42,7 +42,8 @@ class Headers(dict):
         return _dict_contains(self, lower(key))
         
     def iteritems(self):
-        """ Iterates all headers also extracting multiple entries """
+        """ Iterates all headers also extracting multiple entries 
+        """
         for key, vals in dict.iteritems(self):
             if not isinstance(vals, list):
                 yield key, vals
@@ -57,17 +58,17 @@ class Headers(dict):
         return sum(len(vals) if isinstance(vals, list) else 1 for vals in self.itervalues())
     
     def get(self, key, default=None):
-        """ Overwrite of inbuilt get, to use case-insensitive __getitem__ """
+        """ Overwrite of inbuilt get, to use case-insensitive __getitem__ 
+        """
         try:
             return self[key]
         except KeyError:
             return default
 
     def add(self, key, val):
-        """
-        Insert new header lines to the container. This method creates lists only for multiple, 
-        not for single lines. This minimizes the overhead for the common case and optimizes the 
-        total parsing speed of the headers.
+        """ Insert new header lines to the container. This method creates lists only for multiple, 
+            not for single lines. This minimizes the overhead for the common case and optimizes the 
+            total parsing speed of the headers.
         """
         key = lower(key)
         # Use lower only once and then stick with inbuilt functions for speed
@@ -86,7 +87,8 @@ class Headers(dict):
                     _dict_setitem(self, key, val)
                 
     def update(self, *args, **kwds):
-        """ Adapted from MutableMapping to use self.add instead of self.__setitem__ """
+        """ Adapted from MutableMapping to use self.add instead of self.__setitem__ 
+        """
         if len(args) > 1:
             raise TypeError("update() takes at most one positional "
                             "arguments ({} given)".format(len(args)))
@@ -109,7 +111,8 @@ class Headers(dict):
             self.add(key, value)
 
     def getheaders(self, name):
-        """ Compatibility with urllib/cookielib: Always return lists """
+        """ Compatibility with urllib/cookielib: Always return lists 
+        """
         try:
             ret = self[name]
         except KeyError:
@@ -146,14 +149,14 @@ class Headers(dict):
         return pprint.pformat(sorted(self.pretty_items()))
     
     def copy(self):
-        """ Overwrite inbuilt copy method, as inbuilt does not preserve type """
+        """ Overwrite inbuilt copy method, as inbuilt does not preserve type 
+        """
         return copy.copy(self)
 
     def compatible_dict(self):
-        """ 
-        If the client performing the request is not adjusted for this class, this function
-        can create a backwards and standards compatible version containing comma joined
-        strings instead of lists for multiple headers.
+        """ If the client performing the request is not adjusted for this class, this function
+            can create a backwards and standards compatible version containing comma joined
+            strings instead of lists for multiple headers.
         """
         ret = dict()
         for key in self:
