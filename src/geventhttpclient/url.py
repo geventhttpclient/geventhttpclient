@@ -130,4 +130,15 @@ class URL(object):
         self.path += value
         return self.path
 
-
+    def redirect(self, other):
+        other = type(self)(other)
+        if not other.host:
+            other.scheme = self.scheme
+            other.host = self.host
+            other.port = self.port
+        if not other.path.startswith('/'):
+            if self.path.endswith('/'):
+                other.path = self.path + other.path
+            else:
+                other.path = self.path.split('/', 1)[0] + '/' + other.path
+        return other
