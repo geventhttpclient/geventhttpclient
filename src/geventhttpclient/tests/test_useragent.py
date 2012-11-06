@@ -13,6 +13,14 @@ from geventhttpclient.useragent import UserAgent, CompatResponse, CompatRequest,
         RetriesExceeded, BadStatusCode, ConnectionError
 
 
+USER_AGENT = 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'
+DEFAULT_HEADERS = {
+    'User-Agent': USER_AGENT,
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 
+    'Accept-Encoding': 'gzip,deflate',
+    'Connection': 'keep-alive'}
+
+
 def test_open_multiple_domains():
     ua = UserAgent(max_retries=1)
     for domain in ('google.com', 'facebook.com'):
@@ -24,7 +32,7 @@ def test_open_multiple_domains():
             print r.headers
 
 def test_open_multiple_domains_parallel():
-    ua = UserAgent(max_retries=1)
+    ua = UserAgent(max_retries=1, headers=DEFAULT_HEADERS)
     domains = 'google.com', 'facebook.com', 'microsoft.com', 'spiegel.de', 'heise.de'
     get_domain_headers = lambda d: (d, ua.urlopen('http://' + d).headers)
     gp = gevent.pool.Group()
@@ -51,7 +59,16 @@ def test_download():
         len_str = 'OK' if cl == fl else 'CL: %s / FL: %s' % (cl, fl)
         print "Download finished:", len_str
     os.remove(fpath)
-        
+
+def test_gzip():
+    ua = UserAgent(max_retries=1, headers=DEFAULT_HEADERS)
+    resp = ua.urlopen('http://google.com')
+    assert resp.headers.get('content-encoding') == 'gzip'
+    cl = int(resp.headers.get('content-length'))
+    assert cl > 5000
+    assert len(resp.content) >  2 * cl
+
+    
 if __name__ == '__main__':
-    test_download()
+    test_gzip()
 #    test_open_multiple_domains_parallel()

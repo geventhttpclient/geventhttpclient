@@ -85,7 +85,7 @@ class CompatRequest(object):
 class CompatResponse(object):
     """ Adapter for urllib responses with some extensions """
 
-    __slots__ = 'headers', '_response', '_request', '_content_cached'
+    __slots__ = 'headers', '_response', '_request', '_cached_content'
     
     def __init__(self, ghc_response, request=None):
         self._response = ghc_response
@@ -125,7 +125,8 @@ class CompatResponse(object):
                 return zlib.decompress(bodystr, -zlib.MAX_WBITS)
             except zlib.error:
                 return zlib.decompress(bodystr)
-            
+    
+    @property
     def content(self):
         """ Unzips if necessary and buffers the received body. Careful with large files! """
         try:
@@ -236,7 +237,11 @@ class UserAgent(object):
             raise BadStatusCode(url, status_code)
 
     def _handle_error(self, e, url=None):
-        """ Hook for subclassing """
+        """ 
+        Hook for subclassing. Raise the error to interrupt further retrying,
+        return it to continue retries and save the error, when retries
+        exceed the limit.
+        """
         if isinstance(e, gevent.Timeout):
             return e
         raise e
@@ -294,10 +299,10 @@ class UserAgent(object):
                     # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.extract_cookies(resp, req)
 
-                redirect = resp.headers.getheaders('location')
+                redirect = resp.headers.get('location')
                 if resp.status_code in set([301, 302, 303, 307]) and redirect:
                     resp.read()
-                    new_url = URL(redirect[0])
+                    new_url = URL(redirect)
                     if not new_url.netloc:
                         new_url.scheme = req.url_split.scheme
                         new_url.host = req.url_split.host
@@ -326,7 +331,6 @@ class UserAgent(object):
             return self._handle_retries_exceeded(url, last_error=e)
 
     def download(self, url, fpath, chunk_size=16*1024, **kwargs):
-        # logger.info("Storing %s to %s", url, fpath)
         kwargs.pop('to_string', None)
         resp = self.urlopen(url, **kwargs)
         with open(fpath, 'w') as f:
