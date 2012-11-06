@@ -4,6 +4,10 @@ Created on 04.11.2012
 @author: nimrod
 '''
 import gevent
+import gevent.monkey
+gevent.monkey.patch_all()
+
+import socket
 import zlib
 from urllib import urlencode
 
@@ -36,8 +40,9 @@ class BadStatusCode(ConnectionError):
 
 
 class CompatRequest(object):
-    """ urllib / cookielib compatible request class. See also: http://docs.python.org/library/cookielib.html """
-    
+    """ urllib / cookielib compatible request class. 
+        See also: http://docs.python.org/library/cookielib.html 
+    """
     def __init__(self, url, method='GET', headers=None, payload=None):
         self.set_url(url)
         self.original_host = self.url_split.netloc
@@ -66,7 +71,8 @@ class CompatRequest(object):
         self.original_host
     
     def is_unverifiable(self): 
-        """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented! """
+        """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented! 
+        """
         return False
     
     def get_header(self, header_name, default=None):
@@ -83,8 +89,8 @@ class CompatRequest(object):
     
 
 class CompatResponse(object):
-    """ Adapter for urllib responses with some extensions """
-
+    """ Adapter for urllib responses with some extensions 
+    """
     __slots__ = 'headers', '_response', '_request', '_cached_content'
     
     def __init__(self, ghc_response, request=None):
@@ -94,13 +100,15 @@ class CompatResponse(object):
 
     @property
     def status(self):
-        """ The returned http status """
+        """ The returned http status 
+        """
         # TODO: Should be a readable string
         return str(self.status_code)
     
     @property
     def status_code(self):
-        """ The http status code as plain integer """
+        """ The http status code as plain integer 
+        """
         return self._response.get_code()
     
     @property
@@ -108,11 +116,15 @@ class CompatResponse(object):
         return self._response
     
     def read(self, n=-1):
-        """ Read n bytes from the response body """
+        """ Read n bytes from the response body 
+        """
         return self._response.read(n)
     
     def readline(self):
         return self._response.readline()
+    
+    def release(self):
+        return self._response.release()
     
     def unzipped(self, gzip=True):
         bodystr = self._response.read()
@@ -128,7 +140,8 @@ class CompatResponse(object):
     
     @property
     def content(self):
-        """ Unzips if necessary and buffers the received body. Careful with large files! """
+        """ Unzips if necessary and buffers the received body. Careful with large files! 
+        """
         try:
             return self._cached_content
         except AttributeError:
@@ -143,41 +156,45 @@ class CompatResponse(object):
             content_type = 'identity'
             
         if  content_type == 'gzip':
-            return self.unzipped(gzip=True)
+            ret = self.unzipped(gzip=True)
         elif content_type == 'deflate':
-            return self.unzipped(gzip=False)
+            ret = self.unzipped(gzip=False)
         elif content_type == 'identity':
-            return self._response.read()
+            ret = self._response.read()
         elif content_type == 'compress':
             raise ValueError("Compression type not supported: %s", content_type)
         else:
             raise ValueError("Unknown content encoding: %s", content_type)
         
+        self.release()
+        return ret
+
     def __len__(self):
-        """ The content lengths as should be returned from the headers """
+        """ The content lengths as should be returned from the headers 
+        """
         try:
             return int(self.headers.getheaders('content-length')[0])
         except (IndexError, ValueError):
             return len(self.content)
         
     def __nonzero__(self):
-        """ If we have an empty response body, we still don't want to evaluate as false """
+        """ If we have an empty response body, we still don't want to evaluate as false 
+        """
         return True
 
     def info(self):
-        """ Adaption to cookielib: Alias for headers  """
+        """ Adaption to cookielib: Alias for headers  
+        """
         return self.headers
 
 
 class RestkitCompatResponse(CompatResponse):
-    """ Some extra lines to also serve as a drop in replacement for restkit """
-    
+    """ Some extra lines to also serve as a drop in replacement for restkit 
+    """
     def body_string(self):
-        """ Return the content body as fully extracted readable string """
         return self.content
 
     def body_stream(self):
-        """ Return the content body as readable object """
         return self._response
     
     @property
@@ -211,18 +228,18 @@ class UserAgent(object):
             if not content_type and isinstance(payload, dict):
                 req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
-                req_headers['content-length'] = len(payload)
+                req_headers['content-length'] = str(len(payload))
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
                 payload = payload if isinstance(payload, basestring) else str(payload)
-                req_headers['content-length'] = len(payload)
+                req_headers['content-length'] = str(len(payload))
             elif content_type.startswith("multipart/form-data"):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
             else:
                 payload = payload if isinstance(payload, basestring) else str(payload)
-                req_headers['content-length'] = len(payload)
+                req_headers['content-length'] = str(len(payload))
         return CompatRequest(url, method=method, headers=req_headers, payload=payload)
 
     def _urlopen(self, request):
@@ -232,33 +249,36 @@ class UserAgent(object):
         return CompatResponse(resp, request=request)
 
     def _verify_status(self, status_code, url=None):
-        """ Hook for subclassing """
+        """ Hook for subclassing 
+        """
         if status_code not in self.valid_response_codes:
             raise BadStatusCode(url, status_code)
 
     def _handle_error(self, e, url=None):
-        """ 
-        Hook for subclassing. Raise the error to interrupt further retrying,
-        return it to continue retries and save the error, when retries
-        exceed the limit.
+        """ Hook for subclassing. Raise the error to interrupt further retrying,
+            return it to continue retries and save the error, when retries
+            exceed the limit.
+            Temporary errors should be swallowed here for automatic retries.
         """
-        if isinstance(e, gevent.Timeout):
+        if isinstance(e, (gevent.Timeout, socket.timeout)):
             return e
         raise e
     
     def _handle_redirects_exceeded(self, url):
-        """ Hook for subclassing """
+        """ Hook for subclassing 
+        """
         return RetriesExceeded(url, "Redirection limit reached (%s)", self.max_redirects)
     
     def _handle_retries_exceeded(self, url, last_error=None):
-        """ Hook for subclassing """
+        """ Hook for subclassing 
+        """
         e = RetriesExceeded(url, self.max_retries, original=last_error)
         raise e
 
     def urlopen(self, url, method='GET', response_codes=valid_response_codes, 
                 headers=None, payload=None, to_string=False, **kwargs):
-        """ Open an URL, do retries and redirects and verify the status code """
-        
+        """ Open an URL, do retries and redirects and verify the status code 
+        """
         # POST or GET parameters can be passed in **kwargs
         if kwargs:
             if not payload: 
@@ -279,7 +299,9 @@ class UserAgent(object):
 
                 try:
                     resp = self._urlopen(req)
-                except Exception as e:
+                except gevent.GreenletExit:
+                    raise
+                except BaseException as e:
                     e.request = req
                     e = self._handle_error(e, url=url)
                     break # Continue with next retry
@@ -299,20 +321,14 @@ class UserAgent(object):
                     # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.extract_cookies(resp, req)
 
-                redirect = resp.headers.get('location')
-                if resp.status_code in set([301, 302, 303, 307]) and redirect:
-                    resp.read()
-                    new_url = URL(redirect)
-                    if not new_url.netloc:
-                        new_url.scheme = req.url_split.scheme
-                        new_url.host = req.url_split.host
-                        new_url.port = req.url_split.port
-                    req.set_url(new_url)
-                    if resp.status_code in set([302, 303]):
-                        req.method = 'GET'
-                    req.payload = None
+                redirection = resp.headers.get('location')
+                if resp.status_code in set([301, 302, 303, 307]) and redirection:
+                    resp._response.release()
+                    req.set_url(req.url_split.redirect(redirection))
+                    req.method = 'GET' if resp.status_code in set([302, 303]) else req.method
                     for item in ('content-length', 'content-type', 'content-encoding', 'cookie', 'cookie2'):
                         req.headers.discard(item)
+                    req.payload = None
                     continue
 
                 if not to_string:
