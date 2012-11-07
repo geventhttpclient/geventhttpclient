@@ -62,13 +62,18 @@ def test_download():
 
 def test_gzip():
     ua = UserAgent(max_retries=1, headers=DEFAULT_HEADERS)
-    resp = ua.urlopen('http://google.com')
+    resp = ua.urlopen('https://google.com')
     assert resp.headers.get('content-encoding') == 'gzip'
-    cl = int(resp.headers.get('content-length'))
-    assert cl > 5000
-    assert len(resp.content) >  2 * cl
+    cl = int(resp.headers.get('content-length', 0))
+    if cl:
+        # Looks like google dropped content-length recently
+        assert cl > 5000
+        assert len(resp.content) >  2 * cl
+    # Check, if unzip produced readable output
+    for word in ('doctype', 'html', 'function', 'script', 'google'):
+        assert word in resp.content
 
-    
+
 if __name__ == '__main__':
     test_gzip()
 #    test_open_multiple_domains_parallel()
