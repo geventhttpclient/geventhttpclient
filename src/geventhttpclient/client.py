@@ -95,7 +95,7 @@ class HTTPClient(object):
                 host_port += ":" + str(self.port)
             header_fields['Host'] = host_port
         if body and 'Content-Length' not in header_fields:
-            header_fields['Content-Length'] = str(len(body))
+            header_fields['Content-Length'] = len(body)
             
         request_url = request_uri
         if self.use_proxy:
@@ -106,7 +106,7 @@ class HTTPClient(object):
         request = method + " " + request_url + " " + self.version + "\r\n"
 
         for field, value in header_fields.iteritems():
-            request += field + ': ' + value + "\r\n"
+            request += field + ': ' + str(value) + "\r\n"
         request += "\r\n"
         if body:
             request += body

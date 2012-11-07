@@ -85,7 +85,7 @@ class CompatRequest(object):
         return self.headers.items()
     
     def add_unredirected_header(self, key, val):
-        self.headers[key] = val 
+        self.headers.add(key, val) 
     
 
 class CompatResponse(object):
@@ -228,18 +228,18 @@ class UserAgent(object):
             if not content_type and isinstance(payload, dict):
                 req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
-                req_headers['content-length'] = str(len(payload))
+                req_headers['content-length'] = len(payload)
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
                 payload = payload if isinstance(payload, basestring) else str(payload)
-                req_headers['content-length'] = str(len(payload))
+                req_headers['content-length'] = len(payload)
             elif content_type.startswith("multipart/form-data"):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
             else:
                 payload = payload if isinstance(payload, basestring) else str(payload)
-                req_headers['content-length'] = str(len(payload))
+                req_headers['content-length'] = len(payload)
         return CompatRequest(url, method=method, headers=req_headers, payload=payload)
 
     def _urlopen(self, request):
@@ -260,20 +260,19 @@ class UserAgent(object):
             exceed the limit.
             Temporary errors should be swallowed here for automatic retries.
         """
-        if isinstance(e, (gevent.Timeout, socket.timeout)):
+        if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
         raise e
     
     def _handle_redirects_exceeded(self, url):
-        """ Hook for subclassing 
+        """ Hook for subclassing, e.g. throw own errors
         """
         return RetriesExceeded(url, "Redirection limit reached (%s)", self.max_redirects)
     
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing 
         """
-        e = RetriesExceeded(url, self.max_retries, original=last_error)
-        raise e
+        raise RetriesExceeded(url, self.max_retries, original=last_error)
 
     def urlopen(self, url, method='GET', response_codes=valid_response_codes, 
                 headers=None, payload=None, to_string=False, **kwargs):
@@ -292,7 +291,6 @@ class UserAgent(object):
                 # Don't wait the first time and skip if no delay specified
                 gevent.sleep(self.retry_delay)
             for redirect_count in xrange(self.max_redirects):
-                #logger.debug("Retry/Redir %s/%s: %s", retry, redirect_count, req.url)
                 if self.cookiejar is not None:
                     # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.add_cookie_header(req)
