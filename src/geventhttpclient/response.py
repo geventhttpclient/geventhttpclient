@@ -34,7 +34,7 @@ class HTTPResponse(HTTPResponseParser):
         self._body_buffer = bytearray()
 
     def __getitem__(self, key):
-        return self._headers_index[key.lower()]
+        return self._headers_index[key]
 
     def get(self, key, default=None):
         try:
@@ -100,7 +100,7 @@ class HTTPResponse(HTTPResponseParser):
         self._header_state = HEADER_STATE_DONE
         self.headers_complete = True
 
-        if self.method in ('HEAD',):
+        if self.method == 'HEAD':
             return True # SKIP BODY
         return False
 

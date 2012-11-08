@@ -115,7 +115,7 @@ class CompatResponse(object):
     def stream(self):
         return self._response
     
-    def read(self, n=-1):
+    def read(self, n=None):
         """ Read n bytes from the response body 
         """
         return self._response.read(n)
