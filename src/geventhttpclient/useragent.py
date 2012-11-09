@@ -3,13 +3,11 @@ Created on 04.11.2012
 
 @author: nimrod
 '''
-import gevent
-import gevent.monkey
-gevent.monkey.patch_all()
-
 import socket
 import zlib
 from urllib import urlencode
+
+import gevent
 
 from url import URL
 from client import HTTPClient, HTTPClientPool
