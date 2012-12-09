@@ -4,6 +4,7 @@ Created on 04.11.2012
 @author: nimrod
 '''
 import socket
+import errno
 import zlib
 from urllib import urlencode
 
@@ -259,6 +260,9 @@ class UserAgent(object):
             Temporary errors should be swallowed here for automatic retries.
         """
         if isinstance(e, (socket.timeout, gevent.Timeout)):
+            return e
+        elif isinstance(e, socket.error) and \
+                e.errno in set([errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]):
             return e
         raise e
     
