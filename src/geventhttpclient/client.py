@@ -25,6 +25,8 @@ class HTTPClient(object):
         if not isinstance(url, URL):
             url = URL(url)
         enable_ssl = url.scheme == 'https'
+        if not enable_ssl:
+            kw.pop('ssl_options', None)
         return HTTPClient(url.host, port=url.port, ssl=enable_ssl, **kw)
 
     def __init__(self, host, port=None, headers={},
