@@ -303,18 +303,18 @@ class UserAgent(object):
                     raise
                 except BaseException as e:
                     e.request = req
-                    e = self._handle_error(e, url=url)
+                    e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
     
                 # We received a response
                 try:
-                    self._verify_status(resp.status_code, url=url)
+                    self._verify_status(resp.status_code, url=req.url)
                 except Exception as e:
                     # Basic transmission successful, but not the wished result
                     # Let's collect some debug info
                     e.response = resp
                     e.request = req
-                    e = self._handle_error(e, url=url)
+                    e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
     
                 if self.cookiejar is not None:
