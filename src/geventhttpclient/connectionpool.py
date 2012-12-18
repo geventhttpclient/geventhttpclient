@@ -48,6 +48,9 @@ class ConnectionPool(object):
         if self.disable_ipv6:
             family = gevent.socket.AF_INET
 
+        if self._host.startswith('http://'):
+            self._host = self._host[7:]
+
         info = gevent.socket.getaddrinfo(self._host, self._port,
                 family, 0, gevent.socket.SOL_TCP)
 
