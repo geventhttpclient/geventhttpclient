@@ -32,3 +32,11 @@ def test_empty():
     assert url.netloc == ''
     str(url) == 'http:///'
 
+def test_set_safe_encoding():
+    surl = '/path/to/something?param=value&other=*'
+    url = URL(surl)
+    assert url.query_string == 'other=%2A&param=value'
+    url.safe = '*'
+    assert url.query_string == 'other=*&param=value'
+    url.safe = ''
+    assert url.query_string == 'other=%2A&param=value'

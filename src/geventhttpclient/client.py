@@ -35,7 +35,7 @@ class HTTPClient(object):
     HTTP_11 = 'HTTP/1.1'
     HTTP_10 = 'HTTP/1.0'
 
-    BLOCK_SIZE = 1024 * 4 # 4KB
+    BLOCK_SIZE = 1024 * 4  # 4KB
 
     DEFAULT_HEADERS = {
         Header('User-Agent'): 'python/gevent-http-client-' + __version__
