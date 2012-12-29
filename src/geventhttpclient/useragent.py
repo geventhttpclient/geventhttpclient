@@ -6,6 +6,7 @@ Created on 04.11.2012
 import socket
 import errno
 import zlib
+import os
 from urllib import urlencode
 
 import gevent
@@ -205,7 +206,7 @@ class RestkitCompatResponse(CompatResponse):
 class UserAgent(object):
     response_type = CompatResponse
     request_type = CompatRequest
-    valid_response_codes = set([200, 301, 302, 303, 307])
+    valid_response_codes = set([200, 206, 301, 302, 303, 307])
     
     def __init__(self, max_redirects=3, max_retries=3, retry_delay=0, 
                  cookiejar=None, headers=None, **kwargs):
@@ -293,7 +294,7 @@ class UserAgent(object):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified
                 gevent.sleep(self.retry_delay)
-            for redirect_count in xrange(self.max_redirects):
+            for _ in xrange(self.max_redirects):
                 if self.cookiejar is not None:
                     # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.add_cookie_header(req)
@@ -354,14 +355,44 @@ class UserAgent(object):
         else:
             return self._handle_retries_exceeded(url, last_error=e)
 
-    def download(self, url, fpath, chunk_size=16*1024, **kwargs):
+    def download(self, url, fpath, chunk_size=16*1024, resume=False, **kwargs):
         kwargs.pop('to_string', None)
-        resp = self.urlopen(url, **kwargs)
-        with open(fpath, 'w') as f:
-            data = resp.read(chunk_size)
-            while data:
-                f.write(data)
-                data = resp.read(chunk_size)
+        headers = kwargs.pop('headers', {})
+        headers['Connection'] = 'Keep-Alive'
+        if resume and os.path.isfile(fpath):
+            offset = os.path.getsize(fpath)
+        else:
+            offset = 0 
+
+        for _ in xrange(self.max_retries):
+            if offset:
+                headers['Range'] = 'bytes=%d-' % offset
+                resp = self.urlopen(url, headers=headers, **kwargs)
+                if 'Content-Range' not in resp.headers or resp.status_code != 206:
+                    resp._response.release()
+                    offset = 0
+            if not offset:
+                headers.pop('Range', None)
+                resp = self.urlopen(url, headers=headers, **kwargs)
+            
+            with open(fpath, 'a+b' if offset else 'wb+') as f:
+                if offset:
+                    f.seek(offset, os.SEEK_SET)
+                try:
+                    data = resp.read(chunk_size)
+                    while data:
+                        f.write(data)
+                        data = resp.read(chunk_size)
+                except BaseException as e:
+                    self._handle_error(e, url=url)
+                    if resp.headers.get('accept-ranges') == 'bytes':
+                        # Only if this header is set, we can fall back to partial download
+                        offset = f.tell()
+                    continue
+            # All done, break outer loop
+            break
+        else:
+            self._handle_retries_exceeded(url, last_error=e)
         return resp
 
 

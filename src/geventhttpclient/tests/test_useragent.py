@@ -8,6 +8,8 @@ import gevent.monkey
 gevent.monkey.patch_all()
 
 import os
+import sys
+import filecmp
 
 from geventhttpclient.useragent import UserAgent, CompatResponse, CompatRequest, \
         RetriesExceeded, BadStatusCode, ConnectionError
@@ -60,6 +62,32 @@ def test_download():
         print "Download finished:", len_str
     os.remove(fpath)
 
+def test_download_parts():
+    url = 'http://de.archive.ubuntu.com/ubuntu/pool/universe/v/vlc/vlc_2.0.4-0ubuntu1_i386.deb'
+    fpath = '/tmp/_test_download'
+    fpath_part = '/tmp/_test_download_part'
+    part_size = 400000
+    ua = UserAgent(max_retries=3)
+    ua.download(url, fpath)
+    assert os.path.getsize(fpath) > part_size
+    with open(fpath_part, 'w') as chunk:
+        chunk.write(open(fpath).read(part_size))
+        chunk.flush()
+    assert part_size == os.path.getsize(fpath_part)
+    
+    try:
+        r = ua.download(url, fpath_part, resume=True)
+    except RetriesExceeded:
+        print "Redirect failed"
+    except ConnectionError as e:
+        print "Not found: %s %s" % (type(e).__name__, e)
+    else:
+        assert len(r) + part_size == os.path.getsize(fpath)
+        assert os.path.getsize(fpath) == os.path.getsize(fpath_part)
+        assert filecmp.cmp(fpath, fpath_part)
+    os.remove(fpath)
+    os.remove(fpath_part)
+
 def test_gzip():
     ua = UserAgent(max_retries=1, headers=DEFAULT_HEADERS)
     resp = ua.urlopen('https://google.com')
@@ -75,5 +103,8 @@ def test_gzip():
 
 
 if __name__ == '__main__':
-    test_gzip()
+#    test_gzip()
+#    test_download()
+    test_download_parts()
+
 #    test_open_multiple_domains_parallel()
