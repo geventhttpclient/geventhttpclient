@@ -156,7 +156,8 @@ def test_fieldname_string_enforcement():
         h.add(3, 4)
     with pytest.raises(TypeError): #@UndefinedVariable
         del h[3]
-    
+        
+
 if __name__ == '__main__':
     test_copy()
     test_cookielib_compatibility()

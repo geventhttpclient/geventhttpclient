@@ -1,11 +1,11 @@
 from geventhttpclient.url import URL
 
-url_full = 'http://getgauss.com/?param=value&other=true#frag'
+url_full = 'http://getgauss.com/subdir/file.py?param=value&other=true#frag'
 url_path_only = '/path/to/something?param=value&other=true'
 
 def test_simple_url():
     url = URL(url_full)
-    assert url.path == '/'
+    assert url.path == '/subdir/file.py'
     assert url.host == 'getgauss.com'
     assert url.port == 80
     assert url['param'] == 'value'
@@ -51,8 +51,8 @@ def test_redirection_rel_path():
         updated = url.redirect(redir)
         assert updated.host == url.host
         assert updated.port == url.port
-        assert updated.path.startswith('/')
-        assert updated.path.endswith('test.html')
+        assert updated.path.startswith('/subdir/')
+        assert updated.path.endswith(redir.split('?', 1)[0])
         assert updated.query == {'key': 'val'}
         assert updated.fragment == ''
     
@@ -64,3 +64,10 @@ def test_redirection_full_path():
     for attr in URL.__slots__:
         assert getattr(updated, attr) == getattr(url_full2, attr)
     assert str(url_full2) == url_full2_plain
+
+
+if __name__ == '__main__':
+    test_redirection_abs_path()
+    test_redirection_rel_path()
+    test_redirection_full_path()
+    

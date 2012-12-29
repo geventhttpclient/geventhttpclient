@@ -140,5 +140,5 @@ class URL(object):
             if self.path.endswith('/'):
                 other.path = self.path + other.path
             else:
-                other.path = self.path.split('/', 1)[0] + '/' + other.path
+                other.path = self.path.rsplit('/', 1)[0] + '/' + other.path
         return other

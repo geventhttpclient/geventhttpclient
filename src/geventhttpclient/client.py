@@ -120,7 +120,7 @@ class HTTPClient(object):
 
         attempts_left = self._connection_pool.size + 1
 
-        while True:
+        while 1:
             sock = self._connection_pool.get_socket()
             try:
                 sock.sendall(request)
@@ -132,7 +132,7 @@ class HTTPClient(object):
                 raise e
 
             try:
-                return HTTPSocketPoolResponse(sock, self._connection_pool,
+                ret = HTTPSocketPoolResponse(sock, self._connection_pool,
                     block_size=self.block_size, method=method.upper(), headers_type=self.headers_type)
             except HTTPConnectionClosed as e:
                 # connection is released by the response itself
@@ -140,6 +140,9 @@ class HTTPClient(object):
                     attempts_left -= 1
                     continue
                 raise e
+            else:
+                ret._sent_request = request
+                return ret
 
     def get(self, request_uri, headers={}):
         return self.request('GET', request_uri, headers=headers)

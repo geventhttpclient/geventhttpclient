@@ -90,13 +90,14 @@ class CompatRequest(object):
 class CompatResponse(object):
     """ Adapter for urllib responses with some extensions 
     """
-    __slots__ = 'headers', '_response', '_request', '_cached_content'
+    __slots__ = 'headers', '_response', '_request', '_sent_request', '_cached_content'
     
-    def __init__(self, ghc_response, request=None):
+    def __init__(self, ghc_response, request=None, sent_request=None):
         self._response = ghc_response
         self._request = request
+        self._sent_request = sent_request
         self.headers = self._response._headers_index
-
+        
     @property
     def status(self):
         """ The returned http status 
@@ -245,7 +246,7 @@ class UserAgent(object):
         client = self.clientpool.get_client(request.url_split)
         resp = client.request(request.method, request.url_split.request_uri, 
                               body=request.payload, headers=request.headers)
-        return CompatResponse(resp, request=request)
+        return CompatResponse(resp, request=request, sent_request=resp._sent_request)
 
     def _verify_status(self, status_code, url=None):
         """ Hook for subclassing 
@@ -277,7 +278,7 @@ class UserAgent(object):
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
     def urlopen(self, url, method='GET', response_codes=valid_response_codes, 
-                headers=None, payload=None, to_string=False, **kwargs):
+                headers=None, payload=None, to_string=False, debug_stream=None, **kwargs):
         """ Open an URL, do retries and redirects and verify the status code 
         """
         # POST or GET parameters can be passed in **kwargs
@@ -285,7 +286,7 @@ class UserAgent(object):
             if not payload: 
                 payload = kwargs
             elif isinstance(payload, dict):
-                payload.update(kwargs)        
+                payload.update(kwargs)
 
         req = self._make_request(url, method=method, headers=headers, payload=payload)
         for retry in xrange(self.max_retries):
@@ -307,6 +308,13 @@ class UserAgent(object):
                     break # Continue with next retry
     
                 # We received a response
+                if debug_stream is not None:
+                    debug_stream.write('REQUEST: ' + url + '\n' + resp._sent_request + '\n\n')
+                    header_str = '\n'.join('%s: %s' % item for item in resp.headers.pretty_items())
+                    debug_stream.write('RESPONSE: ' + resp._response.version + ' ' + 
+                                       str(resp.status_code) + '\n' + 
+                                       header_str + '\n\n' + resp.content + '\n\n')
+                
                 try:
                     self._verify_status(resp.status_code, url=req.url)
                 except Exception as e:
