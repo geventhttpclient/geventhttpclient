@@ -5,6 +5,7 @@ Created on 04.11.2012
 '''
 import socket
 import errno
+import sys
 import zlib
 import os
 from urllib import urlencode
@@ -266,7 +267,7 @@ class UserAgent(object):
         elif isinstance(e, socket.error) and \
                 e.errno in set([errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]):
             return e
-        raise e
+        raise e, None, getattr(e, 'trace', None)
     
     def _handle_redirects_exceeded(self, url):
         """ Hook for subclassing, e.g. throw own errors
@@ -304,6 +305,7 @@ class UserAgent(object):
                 except gevent.GreenletExit:
                     raise
                 except BaseException as e:
+                    e.trace = sys.exc_info()[2]
                     e.request = req
                     e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
@@ -368,14 +370,16 @@ class UserAgent(object):
             if offset:
                 headers['Range'] = 'bytes=%d-' % offset
                 resp = self.urlopen(url, headers=headers, **kwargs)
-                if 'Content-Range' not in resp.headers or resp.status_code != 206:
+                cr = resp.headers.get('Content-Range')
+                if resp.status_code != 206 or not cr or not cr.startswith('bytes') or \
+                            not cr.split(None, 1)[1].startswith(str(offset)):
                     resp._response.release()
                     offset = 0
             if not offset:
                 headers.pop('Range', None)
                 resp = self.urlopen(url, headers=headers, **kwargs)
             
-            with open(fpath, 'a+b' if offset else 'wb+') as f:
+            with open(fpath, 'ab' if offset else 'wb') as f:
                 if offset:
                     f.seek(offset, os.SEEK_SET)
                 try:

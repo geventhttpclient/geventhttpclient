@@ -7,6 +7,7 @@ import gevent
 import gevent.monkey
 gevent.monkey.patch_all()
 
+import pytest
 import os
 import sys
 import filecmp
@@ -85,6 +86,7 @@ def test_download_parts():
         assert len(r) + part_size == os.path.getsize(fpath)
         assert os.path.getsize(fpath) == os.path.getsize(fpath_part)
         assert filecmp.cmp(fpath, fpath_part)
+        print "Resuming download finished successful"
     os.remove(fpath)
     os.remove(fpath_part)
 
@@ -100,11 +102,21 @@ def test_gzip():
     # Check, if unzip produced readable output
     for word in ('doctype', 'html', 'function', 'script', 'google'):
         assert word in resp.content
+        
+def test_error_handling():
+    ua = UserAgent(max_retries=1)
+    try:
+        1 / 0
+    except ZeroDivisionError as err:
+        err.trace = sys.exc_info()[2]
+    with pytest.raises(ZeroDivisionError) as cm:
+        ua._handle_error(err)
+    assert str(cm.traceback[-1]).strip().endswith('1 / 0') 
 
 
 if __name__ == '__main__':
+#    test_open_multiple_domains_parallel()
 #    test_gzip()
 #    test_download()
-    test_download_parts()
-
-#    test_open_multiple_domains_parallel()
+#    test_download_parts()
+    test_error_handling()
