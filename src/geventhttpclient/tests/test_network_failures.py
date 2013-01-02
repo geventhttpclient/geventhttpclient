@@ -28,7 +28,7 @@ def wrong_response_status_line(sock, addr):
 def test_exception():
     with server(wrong_response_status_line):
         connection = HTTPClient(*listener)
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException): #@UndefinedVariable
             connection.get('/')
 
 def close(sock, addr):
@@ -37,7 +37,7 @@ def close(sock, addr):
 def test_close():
     with server(close):
         client = HTTPClient(*listener)
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException): #@UndefinedVariable
             client.get('/')
 
 def close_after_recv(sock, addr):
@@ -47,7 +47,7 @@ def close_after_recv(sock, addr):
 def test_close_after_recv():
     with server(close_after_recv):
         client = HTTPClient(*listener)
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException): #@UndefinedVariable
             client.get('/')
 
 def timeout_recv(sock, addr):
@@ -57,7 +57,7 @@ def timeout_recv(sock, addr):
 def test_timeout_recv():
     with server(timeout_recv):
         connection = HTTPClient(*listener, network_timeout=0.1)
-        with pytest.raises(gevent.socket.timeout):
+        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
             connection.request("GET", '/')
 
 def timeout_send(sock, addr):
@@ -66,7 +66,7 @@ def timeout_send(sock, addr):
 def test_timeout_send():
     with server(timeout_send):
         connection = HTTPClient(*listener, network_timeout=0.1)
-        with pytest.raises(gevent.socket.timeout):
+        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
             connection.request("GET", '/')
 
 def close_during_content(sock, addr):
@@ -78,7 +78,7 @@ def test_close_during_content():
     with server(close_during_content):
         client = HTTPClient(*listener, block_size=1)
         response = client.get('/')
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException): #@UndefinedVariable
             response.read()
 
 def content_too_small(sock, addr):
@@ -89,7 +89,7 @@ def content_too_small(sock, addr):
 def test_content_too_small():
     with server(content_too_small):
         client = HTTPClient(*listener, network_timeout=0.2)
-        with pytest.raises(gevent.socket.timeout):
+        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
             response = client.get('/')
             response.read()
 
@@ -112,7 +112,7 @@ def test_close_during_chuncked_readline():
         response = client.get('/')
         assert response['transfer-encoding'] == 'chunked'
         chunks = []
-        with pytest.raises(HTTPException):
+        with pytest.raises(HTTPException): #@UndefinedVariable
             data = 'enter_loop'
             while data:
                 data = response.readline()
@@ -138,7 +138,7 @@ def test_timeout_during_chuncked_readline():
         response = client.get('/')
         assert response['transfer-encoding'] == 'chunked'
         chunks = []
-        with pytest.raises(gevent.socket.timeout):
+        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
             data = 'enter_loop'
             while data:
                 data = response.readline()

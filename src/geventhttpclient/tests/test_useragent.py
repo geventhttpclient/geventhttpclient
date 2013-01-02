@@ -109,7 +109,7 @@ def test_error_handling():
         1 / 0
     except ZeroDivisionError as err:
         err.trace = sys.exc_info()[2]
-    with pytest.raises(ZeroDivisionError) as cm:
+    with pytest.raises(ZeroDivisionError) as cm: #@UndefinedVariable
         ua._handle_error(err)
     assert str(cm.traceback[-1]).strip().endswith('1 / 0') 
 

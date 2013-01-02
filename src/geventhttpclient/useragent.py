@@ -6,6 +6,7 @@ Created on 04.11.2012
 import socket
 import errno
 import sys
+import ssl
 import zlib
 import os
 from urllib import urlencode
@@ -24,9 +25,12 @@ class ConnectionError(Exception):
             try:
                 self.text = args[0] % args[1:]
             except TypeError as e:
-                self.text = args[0] + ': ' + str(args[1:])
+                self.text = args[0] + ': ' + str(args[1:]) if args else ''
         else: 
-            self.text = str(args[0]) if len(args) == 1 else str(args)
+            self.text = str(args[0]) if len(args) == 1 else ''
+        if kwargs:
+            self.text += ', ' if self.text else ''
+            self.text += ', '.join("%s=%s" % (key, val) for key, val in kwargs.iteritems())
         
     def __str__(self):
         return "URL %s: %s" % (self.url, getattr(self, 'text', ''))
@@ -254,7 +258,7 @@ class UserAgent(object):
         """ Hook for subclassing 
         """
         if status_code not in self.valid_response_codes:
-            raise BadStatusCode(url, status_code)
+            raise BadStatusCode(url, code=status_code)
 
     def _handle_error(self, e, url=None):
         """ Hook for subclassing. Raise the error to interrupt further retrying,
@@ -264,8 +268,10 @@ class UserAgent(object):
         """
         if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
-        elif isinstance(e, socket.error) and \
+        elif isinstance(e, (socket.error, gevent.dns.DNSError)) and \
                 e.errno in set([errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]):
+            return e
+        elif isinstance(e, ssl.SSLError) and 'read operation timed out' in str(e):
             return e
         raise e, None, getattr(e, 'trace', None)
     
@@ -312,19 +318,17 @@ class UserAgent(object):
     
                 # We received a response
                 if debug_stream is not None:
-                    debug_stream.write('REQUEST: ' + url + '\n' + resp._sent_request + '\n\n')
-                    header_str = '\n'.join('%s: %s' % item for item in resp.headers.pretty_items())
-                    debug_stream.write('RESPONSE: ' + resp._response.version + ' ' + 
-                                       str(resp.status_code) + '\n' + 
-                                       header_str + '\n\n' + resp.content + '\n\n')
+                    debug_stream.write(self._conversation_str(url, resp) + '\n\n')
                 
                 try:
                     self._verify_status(resp.status_code, url=req.url)
                 except Exception as e:
                     # Basic transmission successful, but not the wished result
                     # Let's collect some debug info
+                    e.trace = sys.exc_info()[2]
                     e.response = resp
                     e.request = req
+                    e.http_log = self._conversation_str(url, resp)
                     e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
     
@@ -356,6 +360,15 @@ class UserAgent(object):
                 e = self._handle_redirects_exceeded(url)
         else:
             return self._handle_retries_exceeded(url, last_error=e)
+        
+    @classmethod
+    def _conversation_str(cls, url, resp):
+        header_str = '\n'.join('%s: %s' % item for item in resp.headers.pretty_items())
+        ret = 'REQUEST: ' + url + '\n' + resp._sent_request + '\n\n'
+        ret += 'RESPONSE: ' + resp._response.version + ' ' + \
+                           str(resp.status_code) + '\n' + \
+                           header_str + '\n\n' + resp.content
+        return ret
 
     def download(self, url, fpath, chunk_size=16*1024, resume=False, **kwargs):
         kwargs.pop('to_string', None)
