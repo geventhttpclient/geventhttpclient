@@ -44,6 +44,10 @@ class BadStatusCode(ConnectionError):
     pass        
 
 
+class EmptyResponse(ConnectionError):
+    pass
+
+
 class CompatRequest(object):
     """ urllib / cookielib compatible request class. 
         See also: http://docs.python.org/library/cookielib.html 
@@ -273,13 +277,10 @@ class UserAgent(object):
             return e
         elif isinstance(e, ssl.SSLError) and 'read operation timed out' in str(e):
             return e
+        elif isinstance(e, EmptyResponse):
+            return e
         raise e, None, getattr(e, 'trace', None)
-    
-    def _handle_redirects_exceeded(self, url):
-        """ Hook for subclassing, e.g. throw own errors
-        """
-        return RetriesExceeded(url, "Redirection limit reached (%s)", self.max_redirects)
-    
+        
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing 
         """
@@ -350,14 +351,22 @@ class UserAgent(object):
                     return resp
                 else:
                     # to_string added as parameter, to handle empty response
-                    # bodies as error and issue retries easily
+                    # bodies as error and continue retries automatically
                     try:
-                        return resp.content
+                        ret = resp.content
                     except Exception as e:
                         e = self._handle_error(e, url=url)
                         break
+                    else:
+                        if not ret:
+                            e = EmptyResponse("Empty response body received")
+                            e = self._handle_error(e, url=url)
+                            break
+                        else:
+                            return ret
             else:
-                e = self._handle_redirects_exceeded(url)
+                e = RetriesExceeded(url, "Redirection limit reached (%s)", self.max_redirects)
+                e = self._handle_error(e, url=url)
         else:
             return self._handle_retries_exceeded(url, last_error=e)
         
