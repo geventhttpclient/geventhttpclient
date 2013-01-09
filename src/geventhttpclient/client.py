@@ -175,3 +175,7 @@ class HTTPClientPool(object):
             client = HTTPClient.from_url(url, **self.client_args)
             self.clients[client_key] = client
             return client
+        
+    def close(self):
+        for client in self.clients.values():
+            client.close()

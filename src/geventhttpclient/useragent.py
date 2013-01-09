@@ -9,6 +9,7 @@ import sys
 import ssl
 import zlib
 import os
+import cStringIO
 from urllib import urlencode
 
 import gevent
@@ -421,8 +422,19 @@ class UserAgent(object):
             self._handle_retries_exceeded(url, last_error=e)
         return resp
 
+    def close(self):
+        self.clientpool.close()
+    
 
 class RestkitCompatUserAgent(UserAgent):
     response_type = RestkitCompatResponse
     
-    
+
+class XmlrpcCompatUserAgent(UserAgent):
+    def request(self, host, handler, request, verbose=False):
+        debug_stream = None if not verbose else cStringIO.StringIO()
+        ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
+        if debug_stream is not None:
+            debug_stream.seek(0)
+            print debug_stream.read()
+        return ret
