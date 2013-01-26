@@ -172,9 +172,9 @@ class CompatResponse(object):
         elif content_type == 'identity':
             ret = self._response.read()
         elif content_type == 'compress':
-            raise ValueError("Compression type not supported: %s", content_type)
+            raise ValueError("Compression type not supported: %s" % content_type)
         else:
-            raise ValueError("Unknown content encoding: %s", content_type)
+            raise ValueError("Unknown content encoding: %s" % content_type)
         
         self.release()
         return ret
@@ -365,7 +365,7 @@ class UserAgent(object):
                         else:
                             return ret
             else:
-                e = RetriesExceeded(url, "Redirection limit reached (%s)", self.max_redirects)
+                e = RetriesExceeded(url, "Redirection limit reached (%s)" % self.max_redirects)
                 e = self._handle_error(e, url=url)
         else:
             return self._handle_retries_exceeded(url, last_error=e)
