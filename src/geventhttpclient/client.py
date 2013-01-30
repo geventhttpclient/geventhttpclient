@@ -123,6 +123,10 @@ class HTTPClient(object):
             if request_uri.startswith('/'):
                 base_url = base_url[:-1]
             request_url = base_url + request_url
+        else:
+            if not request_url.startswith('/'):
+                request_url = '/' + request_url
+
         request = method + " " + request_url + " " + self.version + "\r\n"
 
         for field, value in header_fields.iteritems():
