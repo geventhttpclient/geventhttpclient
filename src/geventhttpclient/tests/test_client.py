@@ -3,7 +3,7 @@ import pytest
 import json
 from contextlib import contextmanager
 from geventhttpclient import HTTPClient
-from gevent.ssl import SSLError
+from ssl import SSLError
 import gevent.pool
 
 import gevent.server
@@ -38,6 +38,25 @@ def test_client_with_default_headers():
 def test_request_with_headers():
     client = HTTPClient('www.google.fr')
     response = client.get('/', headers=test_headers)
+    assert response.status_code == 200
+
+client = HTTPClient('www.heise.de')
+raw_req_cmp = client._build_request('GET', '/tp/')
+def test_build_request_relative_uri():
+    raw_req = client._build_request('GET', 'tp/')
+    assert raw_req == raw_req_cmp
+
+def test_build_request_absolute_uri():
+    raw_req = client._build_request('GET', '/tp/')
+    assert raw_req == raw_req_cmp
+
+def test_build_request_full_url():
+    raw_req = client._build_request('GET', 'http://www.heise.de/tp/')
+    assert raw_req == raw_req_cmp
+
+def test_build_request_invalid_host():
+    with pytest.raises(ValueError): #@UndefinedVariable
+        client._build_request('GET', 'http://www.spiegel.de/')
 
 def test_response_context_manager():
     client = HTTPClient.from_url('http://www.google.fr/')
@@ -60,7 +79,7 @@ def test_ssl_fail_invalid_certificate():
         os.path.dirname(os.path.abspath(__file__)), "onecert.pem")
     client = HTTPClient('www.google.fr', ssl_options={'ca_certs': certs})
     assert client.port == 443
-    with pytest.raises(SSLError):
+    with pytest.raises(SSLError): #@UndefinedVariable
         client.get('/')
 
 def test_multi_queries_greenlet_safe():

@@ -6,7 +6,6 @@ from geventhttpclient.url import URL
 from geventhttpclient.header import Headers
 from geventhttpclient import __version__
 import gevent.socket
-import gevent.pool
 
 
 class HTTPClient(object):
@@ -105,6 +104,14 @@ class HTTPClient(object):
             if request_uri.startswith('/'):
                 base_url = base_url[:-1]
             request_url = base_url + request_url
+        elif not request_url.startswith(('/', 'http')):
+            request_url = '/' + request_url
+        elif request_url.startswith('http'):
+            if request_url.startswith(self._base_url_string):
+                request_url = request_url[len(self._base_url_string)-1:]
+            else:
+                raise ValueError("Invalid host in URL")
+            
         request = method + " " + request_url + " " + self.version + "\r\n"
 
         for field, value in header_fields.iteritems():
