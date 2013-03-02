@@ -3,7 +3,7 @@ import pytest
 import json
 from contextlib import contextmanager
 from geventhttpclient import HTTPClient
-from ssl import SSLError
+from gevent.ssl import SSLError #@UnresolvedImport
 import gevent.pool
 
 import gevent.server
@@ -42,6 +42,7 @@ def test_request_with_headers():
 
 client = HTTPClient('www.heise.de')
 raw_req_cmp = client._build_request('GET', '/tp/')
+
 def test_build_request_relative_uri():
     raw_req = client._build_request('GET', 'tp/')
     assert raw_req == raw_req_cmp

@@ -29,10 +29,10 @@ def server(handler, backlog=1):
 
 @contextmanager
 def timeout_connect_server():
-    sock = gevent.socket.socket(gevent.socket.AF_INET,
-        gevent.socket.SOCK_STREAM, 0)
+    sock = gevent.socket.socket(gevent.socket.AF_INET, #@UndefinedVariable
+        gevent.socket.SOCK_STREAM, 0) #@UndefinedVariable
     sock = gevent.ssl.wrap_socket(sock, keyfile=KEY, certfile=CERT)
-    sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1)
+    sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1) #@UndefinedVariable
     print 'bind'
     sock.bind(listener)
     print 'listen'
@@ -87,15 +87,15 @@ def test_timeout_on_connect():
                 connection_timeout=0.1,
                 ssl_options={'ca_certs': CERT})
             http2.get('/')
-        except gevent.ssl.SSLError as error:
+        except gevent.ssl.SSLError as error: #@UndefinedVariable
             e = error
-        except gevent.socket.timeout as error:
+        except gevent.socket.timeout as error: #@UndefinedVariable
             e = error
         except:
             raise
 
         assert e is not None, 'should have raised'
-        if isinstance(e, gevent.ssl.SSLError):
+        if isinstance(e, gevent.ssl.SSLError): #@UndefinedVariable
             assert str(e).endswith("handshake operation timed out")
 
 def network_timeout(sock, addr):
@@ -107,7 +107,7 @@ def test_network_timeout():
     with server(network_timeout):
         http = HTTPClient(*listener, ssl=True,
             network_timeout=0.1, ssl_options={'ca_certs': CERT})
-        with pytest.raises(gevent.ssl.SSLError):
+        with pytest.raises(gevent.ssl.SSLError): #@UndefinedVariable
             response = http.get('/')
             assert response.status_code == 0, 'should have timed out.'
 

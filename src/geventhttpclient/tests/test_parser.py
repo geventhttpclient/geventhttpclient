@@ -90,7 +90,7 @@ def test_parse_error():
 def test_incomplete_response():
     response = HTTPResponse()
     response.feed("""HTTP/1.1 200 Ok\r\nContent-Length:10\r\n\r\n1""")
-    with pytest.raises(HTTPParseError):
+    with pytest.raises(HTTPParseError): #@UndefinedVariable
         response.feed("")
     assert response.should_keep_alive()
     assert response.should_close()
@@ -99,7 +99,7 @@ def test_incomplete_response():
 def test_response_too_long():
     response = HTTPResponse()
     data = """HTTP/1.1 200 Ok\r\nContent-Length:1\r\n\r\ntoolong"""
-    with pytest.raises(HTTPParseError):
+    with pytest.raises(HTTPParseError): #@UndefinedVariable
         response.feed(data)
 
 @wrap_refcount
@@ -110,7 +110,7 @@ def test_on_body_raises():
         raise RuntimeError('error')
 
     response._on_body = on_body
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError): #@UndefinedVariable
         response.feed(RESPONSE)
 
 @wrap_refcount
@@ -121,7 +121,7 @@ def test_on_message_begin():
         raise RuntimeError('error')
 
     response._on_message_begin = on_message_begin
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError): #@UndefinedVariable
         response.feed(RESPONSE)
 
 
