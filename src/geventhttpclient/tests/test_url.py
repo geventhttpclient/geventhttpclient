@@ -64,6 +64,17 @@ def test_redirection_full_path():
     for attr in URL.__slots__:
         assert getattr(updated, attr) == getattr(url_full2, attr)
     assert str(url_full2) == url_full2_plain
+    
+def test_set_safe_encoding():
+    class SafeModURL(URL):
+        quoting_safe = '*'
+    surl = '/path/to/something?param=value&other=*'
+
+    assert URL(surl).query_string == 'other=%2A&param=value'
+    assert SafeModURL(surl).query_string == 'other=*&param=value'
+    URL.quoting_safe = '*'
+    assert URL(surl).query_string == 'other=*&param=value'
+    URL.quoting_safe = ''
 
 
 if __name__ == '__main__':
