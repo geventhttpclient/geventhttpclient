@@ -52,7 +52,7 @@ class ConnectionPool(object):
                 family, 0, gevent.socket.SOL_TCP) #@UndefinedVariable
 
         # family, socktype, proto, canonname, sockaddr = info[0]
-        return info[0]
+        return info
 
     def close(self):
         self._closed = True
@@ -76,12 +76,22 @@ class ConnectionPool(object):
         """ might be overriden and super for wrapping into a ssl socket
             or set tcp/socket options
         """
-        sock_info = self._resolve()
-        sock = self._create_tcp_socket(*sock_info[:3])
-        sock.settimeout(self.connection_timeout)
-        sock.connect(sock_info[-1])
-        sock.settimeout(self.network_timeout)
-        return sock
+        sock_infos = self._resolve()
+        first_error = None
+        for sock_info in sock_infos:
+            try:
+                sock = self._create_tcp_socket(*sock_info[:3])
+                sock.settimeout(self.connection_timeout)
+                sock.connect(sock_info[-1])
+                sock.settimeout(self.network_timeout)
+                return sock
+            except IOError as e:
+                if not first_error:
+                    first_error = e
+        if first_error:
+            raise first_error
+        else:
+            raise RuntimeError("Cannot resolve %s:%s" % (self._host, self._port))
 
     def get_socket(self):
         """ get a socket from the pool. This blocks until one is available.
