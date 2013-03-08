@@ -26,7 +26,7 @@ DEFAULT_HEADERS = {
 
 def test_open_multiple_domains():
     ua = UserAgent(max_retries=1)
-    for domain in ('google.com', 'facebook.com'):
+    for domain in ('google.com', 'microsoft.com'):
         try:
             r = ua.urlopen('http://' + domain + '/')
         except RetriesExceeded:
@@ -36,7 +36,7 @@ def test_open_multiple_domains():
 
 def test_open_multiple_domains_parallel():
     ua = UserAgent(max_retries=1, headers=DEFAULT_HEADERS)
-    domains = 'google.com', 'facebook.com', 'microsoft.com', 'spiegel.de', 'heise.de'
+    domains = 'google.com', 'microsoft.com', 'debian.org', 'spiegel.de', 'heise.de'
     get_domain_headers = lambda d: (d, ua.urlopen('http://' + d).headers)
     gp = gevent.pool.Group()
     for domain, hdr in gp.imap_unordered(get_domain_headers, domains):
@@ -44,12 +44,14 @@ def test_open_multiple_domains_parallel():
         print hdr 
         print
 
+dl_url = 'http://de.archive.ubuntu.com/ubuntu/pool/universe/v/vlc/vlc_2.0.4-0ubuntu1_i386.deb'
 def test_download():
-    url = 'http://de.archive.ubuntu.com/ubuntu/pool/universe/v/vlc/vlc_2.0.4-0ubuntu1_i386.deb'
     fpath = '/tmp/_test_download'
+    if os.path.exists(fpath):
+        os.remove(fpath)
     ua = UserAgent(max_retries=3)
     try:
-        r = ua.download(url, fpath)
+        r = ua.download(dl_url, fpath)
     except RetriesExceeded:
         print "Redirect failed"
     except ConnectionError as e:
@@ -61,15 +63,14 @@ def test_download():
         assert cl == fl
         len_str = 'OK' if cl == fl else 'CL: %s / FL: %s' % (cl, fl)
         print "Download finished:", len_str
-    os.remove(fpath)
 
 def test_download_parts():
-    url = 'http://de.archive.ubuntu.com/ubuntu/pool/universe/v/vlc/vlc_2.0.4-0ubuntu1_i386.deb'
     fpath = '/tmp/_test_download'
     fpath_part = '/tmp/_test_download_part'
     part_size = 400000
     ua = UserAgent(max_retries=3)
-    ua.download(url, fpath)
+    if not os.path.exists(fpath) or os.path.getsize(fpath) < part_size:
+        ua.download(dl_url, fpath)
     assert os.path.getsize(fpath) > part_size
     with open(fpath_part, 'w') as chunk:
         chunk.write(open(fpath).read(part_size))
@@ -77,7 +78,7 @@ def test_download_parts():
     assert part_size == os.path.getsize(fpath_part)
     
     try:
-        r = ua.download(url, fpath_part, resume=True)
+        r = ua.download(dl_url, fpath_part, resume=True)
     except RetriesExceeded:
         print "Redirect failed"
     except ConnectionError as e:
