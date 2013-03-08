@@ -13,7 +13,6 @@ import time
 from geventhttpclient.response import HTTPResponse
 from geventhttpclient.header import Headers
 
-
 MULTI_COOKIE_RESPONSE = """
 HTTP/1.1 200 OK
 Server: nginx
@@ -59,6 +58,7 @@ Content-Length: 26186
 
 """.lstrip().replace('\n', '\r\n')
 # Do not remove the final empty line!
+
 
 def test_create_from_kwargs():
     h = Headers(ab=1, cd=2, ef=3, gh=4)
@@ -161,3 +161,9 @@ def test_fieldname_string_enforcement():
 if __name__ == '__main__':
     test_copy()
     test_cookielib_compatibility()
+
+def test_header_replace():
+    d = {}
+    d['Content-Type'] = "text/plain"
+    d['content-type'] = "text/html"
+    assert d['content-type'] == "text/html"

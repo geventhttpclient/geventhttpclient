@@ -37,10 +37,7 @@ class HTTPResponse(HTTPResponseParser):
         return self._headers_index[key]
 
     def get(self, key, default=None):
-        try:
-            return self.__getitem__(key)
-        except KeyError:
-            return default
+        return self._headers_index.get(key, default)
 
     def iteritems(self):
         return self._headers_index.iteritems()
@@ -124,7 +121,8 @@ class HTTPResponse(HTTPResponseParser):
 
     def _flush_header(self):
         if self._current_header_field is not None:
-            self._headers_index.setdefault(self._current_header_field, self._current_header_value)
+            self._headers_index.setdefault(self._current_header_field, 
+                                           self._current_header_value)
             self._header_position += 1
             self._current_header_field = None
             self._current_header_value = None
