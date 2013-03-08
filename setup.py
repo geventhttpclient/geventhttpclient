@@ -7,7 +7,7 @@ httpparser = Extension('geventhttpclient._parser',
                     include_dirs = ['ext'])
 
 setup(name='geventhttpclient',
-       version = '1.0a',
+       version = '1.1',
        description = 'http client library for gevent',
        author="Antonin Amand",
        author_email="antonin.amand@gmail.com",

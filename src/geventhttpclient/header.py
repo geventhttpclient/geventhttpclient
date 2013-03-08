@@ -85,7 +85,10 @@ class Headers(dict):
                     _dict_setitem(self, key, [item, val])
                 else:
                     _dict_setitem(self, key, val)
-                
+    
+    # Keep some dict-compatible syntax for the Response object
+    setdefault = add
+         
     def update(self, *args, **kwds):
         """ Adapted from MutableMapping to use self.add instead of self.__setitem__ 
         """

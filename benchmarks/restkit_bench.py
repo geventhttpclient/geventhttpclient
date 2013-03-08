@@ -25,14 +25,15 @@ if __name__ == "__main__":
 
     group = gevent.pool.Pool(size=C)
 
-    now = time.time()
-    for _ in xrange(N):
-        group.spawn(run)
-    group.join()
-
-    delta = time.time() - now
-    req_per_sec = N / delta
-
-    print "request count:%d, concurrenry:%d, %f req/s" % (
-        N, C, req_per_sec)
+    for i in xrange(5):
+        now = time.time()
+        for _ in xrange(N):
+            group.spawn(run)
+        group.join()
+    
+        delta = time.time() - now
+        req_per_sec = N / delta
+    
+        print "request count:%d, concurrenry:%d, %f req/s" % (
+            N, C, req_per_sec)
 

@@ -34,7 +34,8 @@ class HTTPClient(object):
             network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
             disable_ipv6=False,
             concurrency=1, ssl_options=None, ssl=False,
-            proxy_host=None, proxy_port=None, version=HTTP_11, headers_type=Headers):
+            proxy_host=None, proxy_port=None, version=HTTP_11, 
+            headers_type=Headers):
         self.host = host
         self.port = port
         connection_host = self.host
@@ -69,10 +70,9 @@ class HTTPClient(object):
                 disable_ipv6=disable_ipv6)
         self.version = version
         self.headers_type = headers_type
-        self.default_headers = self.DEFAULT_HEADERS.copy()
-        for field, value in headers.iteritems():
-            self.default_headers[field] = value
-
+        self.default_headers = headers_type()
+        self.default_headers.update(self.DEFAULT_HEADERS)
+        self.default_headers.update(headers)
         self.block_size = block_size
         self._base_url_string = str(self.get_base_url())
 
@@ -87,9 +87,10 @@ class HTTPClient(object):
         self._connection_pool.close()
 
     def _build_request(self, method, request_uri, body="", headers={}):
-        header_fields = self.default_headers.copy()
-        for field, value in headers.iteritems():
-            header_fields[field] = value
+        # header_fields = self.default_headers.copy()
+        header_fields = self.headers_type()
+        header_fields.update(self.default_headers)
+        header_fields.update(headers)
         if self.version == self.HTTP_11 and 'Host' not in header_fields:
             host_port = self.host
             if self.port not in (80, 443):
