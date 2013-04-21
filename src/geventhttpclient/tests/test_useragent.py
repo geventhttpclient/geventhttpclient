@@ -12,14 +12,13 @@ import os
 import sys
 import filecmp
 
-from geventhttpclient.useragent import UserAgent, CompatResponse, CompatRequest, \
-        RetriesExceeded, BadStatusCode, ConnectionError
+from geventhttpclient.useragent import UserAgent, RetriesExceeded, ConnectionError
 
 
 USER_AGENT = 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'
 DEFAULT_HEADERS = {
     'User-Agent': USER_AGENT,
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Encoding': 'gzip,deflate',
     'Connection': 'keep-alive'}
 
@@ -41,7 +40,7 @@ def test_open_multiple_domains_parallel():
     gp = gevent.pool.Group()
     for domain, hdr in gp.imap_unordered(get_domain_headers, domains):
         print domain
-        print hdr 
+        print hdr
         print
 
 dl_url = 'http://de.archive.ubuntu.com/ubuntu/pool/universe/v/vlc/vlc_2.0.4-0ubuntu1_i386.deb'
@@ -76,7 +75,7 @@ def test_download_parts():
         chunk.write(open(fpath).read(part_size))
         chunk.flush()
     assert part_size == os.path.getsize(fpath_part)
-    
+
     try:
         r = ua.download(dl_url, fpath_part, resume=True)
     except RetriesExceeded:
@@ -99,11 +98,11 @@ def test_gzip():
     if cl:
         # Looks like google dropped content-length recently
         assert cl > 5000
-        assert len(resp.content) >  2 * cl
+        assert len(resp.content) > 2 * cl
     # Check, if unzip produced readable output
     for word in ('doctype', 'html', 'function', 'script', 'google'):
         assert word in resp.content
-        
+
 def test_error_handling():
     ua = UserAgent(max_retries=1)
     try:
@@ -112,7 +111,7 @@ def test_error_handling():
         err.trace = sys.exc_info()[2]
     with pytest.raises(ZeroDivisionError) as cm: #@UndefinedVariable
         ua._handle_error(err)
-    assert str(cm.traceback[-1]).strip().endswith('1 / 0') 
+    assert str(cm.traceback[-1]).strip().endswith('1 / 0')
 
 
 if __name__ == '__main__':

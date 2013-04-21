@@ -25,16 +25,21 @@ class ConnectionError(Exception):
         if args and isinstance(args[0], basestring):
             try:
                 self.text = args[0] % args[1:]
-            except TypeError as e:
+            except TypeError:
                 self.text = args[0] + ': ' + str(args[1:]) if args else ''
-        else: 
+        else:
             self.text = str(args[0]) if len(args) == 1 else ''
         if kwargs:
             self.text += ', ' if self.text else ''
             self.text += ', '.join("%s=%s" % (key, val) for key, val in kwargs.iteritems())
-        
+        else:
+            self.text = ''
+
     def __str__(self):
-        return "URL %s: %s" % (self.url, getattr(self, 'text', ''))
+        if self.text:
+            return "URL %s: %s" % (self.url, self.text)
+        else:
+            return "URL %s" % self.url
 
 
 class RetriesExceeded(ConnectionError):
@@ -42,7 +47,7 @@ class RetriesExceeded(ConnectionError):
 
 
 class BadStatusCode(ConnectionError):
-    pass        
+    pass
 
 
 class EmptyResponse(ConnectionError):
@@ -59,7 +64,7 @@ class CompatRequest(object):
         self.method = method
         self.headers = headers
         self.payload = payload
-    
+
     def set_url(self, url):
         if isinstance(url, URL):
             self.url = str(url)
@@ -67,88 +72,88 @@ class CompatRequest(object):
         else:
             self.url = url
             self.url_split = URL(self.url)
-    
-    def get_full_url(self): 
+
+    def get_full_url(self):
         return self.url
-    
-    def get_host(self): 
+
+    def get_host(self):
         self.url_split.netloc
-    
+
     def get_type(self):
         self.url_split.scheme
-    
-    def get_origin_req_host(self): 
+
+    def get_origin_req_host(self):
         self.original_host
-    
-    def is_unverifiable(self): 
+
+    def is_unverifiable(self):
         """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented! 
         """
         return False
-    
+
     def get_header(self, header_name, default=None):
         return self.headers.get(header_name, default)
-        
+
     def has_header(self, header_name):
         return header_name in self.headers
-    
+
     def header_items(self):
         return self.headers.items()
-    
+
     def add_unredirected_header(self, key, val):
-        self.headers.add(key, val) 
-    
+        self.headers.add(key, val)
+
 
 class CompatResponse(object):
     """ Adapter for urllib responses with some extensions 
     """
     __slots__ = 'headers', '_response', '_request', '_sent_request', '_cached_content'
-    
+
     def __init__(self, ghc_response, request=None, sent_request=None):
         self._response = ghc_response
         self._request = request
         self._sent_request = sent_request
         self.headers = self._response._headers_index
-        
+
     @property
     def status(self):
         """ The returned http status 
         """
         # TODO: Should be a readable string
         return str(self.status_code)
-    
+
     @property
     def status_code(self):
         """ The http status code as plain integer 
         """
         return self._response.get_code()
-    
+
     @property
     def stream(self):
         return self._response
-    
+
     def read(self, n=None):
         """ Read n bytes from the response body 
         """
         return self._response.read(n)
-    
+
     def readline(self):
         return self._response.readline()
-    
+
     def release(self):
         return self._response.release()
-    
+
     def unzipped(self, gzip=True):
         bodystr = self._response.read()
-        if gzip: 
-            return zlib.decompress(bodystr, 16+zlib.MAX_WBITS)
-        else: 
+        if gzip:
+            return zlib.decompress(bodystr, 16 + zlib.MAX_WBITS)
+        else:
             # zlib only provides the zlib compress format, not the deflate format;
             # so on top of all there's this workaround:
-            try:               
+            try:
                 return zlib.decompress(bodystr, -zlib.MAX_WBITS)
             except zlib.error:
                 return zlib.decompress(bodystr)
-    
+
     @property
     def content(self):
         """ Unzips if necessary and buffers the received body. Careful with large files! 
@@ -158,14 +163,14 @@ class CompatResponse(object):
         except AttributeError:
             self._cached_content = self._content()
             return self._cached_content
-        
+
     def _content(self):
         try:
             content_type = self.headers.getheaders('content-encoding')[0].lower()
         except IndexError:
             # No content-encoding header set
             content_type = 'identity'
-            
+
         if  content_type == 'gzip':
             ret = self.unzipped(gzip=True)
         elif content_type == 'deflate':
@@ -176,7 +181,7 @@ class CompatResponse(object):
             raise ValueError("Compression type not supported: %s" % content_type)
         else:
             raise ValueError("Unknown content encoding: %s" % content_type)
-        
+
         self.release()
         return ret
 
@@ -187,7 +192,7 @@ class CompatResponse(object):
             return int(self.headers.getheaders('content-length')[0])
         except (IndexError, ValueError):
             return len(self.content)
-        
+
     def __nonzero__(self):
         """ If we have an empty response body, we still don't want to evaluate as false 
         """
@@ -207,18 +212,18 @@ class RestkitCompatResponse(CompatResponse):
 
     def body_stream(self):
         return self._response
-    
+
     @property
     def status_int(self):
         return self.status_code
-    
-    
+
+
 class UserAgent(object):
     response_type = CompatResponse
     request_type = CompatRequest
     valid_response_codes = set([200, 206, 301, 302, 303, 307])
-    
-    def __init__(self, max_redirects=3, max_retries=3, retry_delay=0, 
+
+    def __init__(self, max_redirects=3, max_retries=3, retry_delay=0,
                  cookiejar=None, headers=None, **kwargs):
         self.max_redirects = int(max_redirects)
         self.max_retries = int(max_retries)
@@ -228,7 +233,7 @@ class UserAgent(object):
             self.default_headers.update(headers)
         self.cookiejar = cookiejar
         self.clientpool = HTTPClientPool(**kwargs)
-    
+
     def _make_request(self, url, method='GET', headers=None, payload=None):
         req_headers = self.default_headers.copy()
         if headers:
@@ -255,7 +260,7 @@ class UserAgent(object):
 
     def _urlopen(self, request):
         client = self.clientpool.get_client(request.url_split)
-        resp = client.request(request.method, request.url_split.request_uri, 
+        resp = client.request(request.method, request.url_split.request_uri,
                               body=request.payload, headers=request.headers)
         return CompatResponse(resp, request=request, sent_request=resp._sent_request)
 
@@ -280,20 +285,20 @@ class UserAgent(object):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise e, None, getattr(e, 'trace', None)
-        
+        raise e, None, sys.exc_info()[2]
+
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing 
         """
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
-    def urlopen(self, url, method='GET', response_codes=valid_response_codes, 
+    def urlopen(self, url, method='GET', response_codes=valid_response_codes,
                 headers=None, payload=None, to_string=False, debug_stream=None, **kwargs):
         """ Open an URL, do retries and redirects and verify the status code 
         """
         # POST or GET parameters can be passed in **kwargs
         if kwargs:
-            if not payload: 
+            if not payload:
                 payload = kwargs
             elif isinstance(payload, dict):
                 payload.update(kwargs)
@@ -313,27 +318,25 @@ class UserAgent(object):
                 except gevent.GreenletExit:
                     raise
                 except BaseException as e:
-                    e.trace = sys.exc_info()[2]
                     e.request = req
                     e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
-    
+
                 # We received a response
                 if debug_stream is not None:
                     debug_stream.write(self._conversation_str(url, resp) + '\n\n')
-                
+
                 try:
                     self._verify_status(resp.status_code, url=req.url)
                 except Exception as e:
                     # Basic transmission successful, but not the wished result
                     # Let's collect some debug info
-                    e.trace = sys.exc_info()[2]
                     e.response = resp
                     e.request = req
                     e.http_log = self._conversation_str(url, resp)
                     e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
-    
+
                 if self.cookiejar is not None:
                     # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.extract_cookies(resp, req)
@@ -360,7 +363,7 @@ class UserAgent(object):
                         break
                     else:
                         if not ret:
-                            e = EmptyResponse("Empty response body received")
+                            e = EmptyResponse(url, "Empty response body received")
                             e = self._handle_error(e, url=url)
                             break
                         else:
@@ -370,7 +373,7 @@ class UserAgent(object):
                 e = self._handle_error(e, url=url)
         else:
             return self._handle_retries_exceeded(url, last_error=e)
-        
+
     @classmethod
     def _conversation_str(cls, url, resp):
         header_str = '\n'.join('%s: %s' % item for item in resp.headers.pretty_items())
@@ -380,14 +383,14 @@ class UserAgent(object):
                            header_str + '\n\n' + resp.content
         return ret
 
-    def download(self, url, fpath, chunk_size=16*1024, resume=False, **kwargs):
+    def download(self, url, fpath, chunk_size=16 * 1024, resume=False, **kwargs):
         kwargs.pop('to_string', None)
         headers = kwargs.pop('headers', {})
         headers['Connection'] = 'Keep-Alive'
         if resume and os.path.isfile(fpath):
             offset = os.path.getsize(fpath)
         else:
-            offset = 0 
+            offset = 0
 
         for _ in xrange(self.max_retries):
             if offset:
@@ -401,7 +404,7 @@ class UserAgent(object):
             if not offset:
                 headers.pop('Range', None)
                 resp = self.urlopen(url, headers=headers, **kwargs)
-            
+
             with open(fpath, 'ab' if offset else 'wb') as f:
                 if offset:
                     f.seek(offset, os.SEEK_SET)
@@ -424,11 +427,11 @@ class UserAgent(object):
 
     def close(self):
         self.clientpool.close()
-    
+
 
 class RestkitCompatUserAgent(UserAgent):
     response_type = RestkitCompatResponse
-    
+
 
 class XmlrpcCompatUserAgent(UserAgent):
     def request(self, host, handler, request, verbose=False):
