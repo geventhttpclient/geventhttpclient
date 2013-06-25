@@ -1,9 +1,15 @@
+import sys
 from distutils.core import setup
 from setuptools.extension import Extension
 from setuptools import find_packages
 
+parser_sources = ['ext/http_parser.c']
+
+if '__pypy__' not in sys.builtin_module_names:
+    parser_sources.append('ext/_parser.c')
+
 httpparser = Extension('geventhttpclient._parser',
-                    sources = ['ext/_parser.c', 'ext/http_parser.c'],
+                    sources = parser_sources,
                     include_dirs = ['ext'])
 
 setup(name='geventhttpclient',

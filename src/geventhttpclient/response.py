@@ -1,5 +1,5 @@
 import errno
-from geventhttpclient._parser import HTTPResponseParser, HTTPParseError #@UnresolvedImport
+from geventhttpclient.parser import HTTPResponseParser, HTTPParseError #@UnresolvedImport
 from geventhttpclient.header import Headers
 import gevent.socket
 
