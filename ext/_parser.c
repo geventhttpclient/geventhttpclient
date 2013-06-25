@@ -219,7 +219,7 @@ static PyObject*
 PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
 {
     return PyString_FromFormat("HTTP/%u.%u", self->parser->http_major,
-        self->parser->http_major);
+        self->parser->http_minor);
 }
 
 static PyObject*
