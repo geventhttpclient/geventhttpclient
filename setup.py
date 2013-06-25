@@ -1,3 +1,4 @@
+import sys
 from distutils.core import setup
 from setuptools.extension import Extension
 from setuptools import find_packages
@@ -18,9 +19,13 @@ Safe SSL support is provided by default.
 Python 2.6 and 2.7 are supported as well as gevent 0.13 and gevent 1.0.
 """
 
+parser_sources = ['ext/http_parser.c']
+
+if '__pypy__' not in sys.builtin_module_names:
+    parser_sources.append('ext/_parser.c')
 
 httpparser = Extension('geventhttpclient._parser',
-                    sources = ['ext/_parser.c', 'ext/http_parser.c'],
+                    sources = parser_sources,
                     include_dirs = ['ext'])
 
 setup(name='geventhttpclient',

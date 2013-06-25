@@ -1,5 +1,5 @@
 from geventhttpclient.response import HTTPResponse
-from geventhttpclient._parser import HTTPParseError
+from geventhttpclient.parser import HTTPParseError
 import pytest
 
 
