@@ -5,10 +5,8 @@ import os.path
 
 if '__pypy__' not in sys.builtin_module_names:
     from geventhttpclient._parser import *
-    print 'Using native lib.'
 
 else:
-    print 'Using CFFI lib.'
     # Alternative CFFI interface for use with PyPy
     import httplib
     from cffi import FFI
@@ -56,6 +54,10 @@ typedef struct {
   http_cb      on_message_complete;
 } http_parser_settings;
 
+enum http_parser_type { HTTP_REQUEST, HTTP_RESPONSE, HTTP_BOTH };
+
+void http_parser_init(http_parser *parser, enum http_parser_type type);
+
 size_t http_parser_execute(http_parser *parser,
                            const http_parser_settings *settings,
                            const char *data,
@@ -65,16 +67,19 @@ int http_should_keep_alive(http_parser *parser);
 
 const char *http_errno_description(enum http_errno err);
 """)
-
-    file_suffix = '.so'
+    
+    
+    module_path = os.path.dirname(os.path.realpath(__file__))
     for (s, m, t) in imp.get_suffixes():
         if t == imp.C_EXTENSION:
-            file_suffix = s
-            break
+            try:
+                module_abs_path = os.path.join(module_path, '_parser{}'.format(s))
+                C = ffi.dlopen(module_abs_path)
+                break
+            except OSError:
+                pass
 
-    module_abs_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), '_parser{}'.format(file_suffix))
-    C = ffi.dlopen(module_abs_path)
-    del file_suffix, module_abs_path
+    del module_path, module_abs_path
 
     class HTTPParseError(httplib.HTTPException):
         def __init__(self, http_errno):
@@ -82,10 +87,46 @@ const char *http_errno_description(enum http_errno err);
             super(HTTPParseError, self).__init__(self, args)
 
     class HTTPResponseParser(object):
+        def _make_callback(self, name, has_args):
+            base_name = '_on_' + name
+            def real_cb(http_parser, buf=None, size=None):
+                base_callback = getattr(self, base_name, None)
+                if not base_callback:
+                    return 0
+                try:
+                    if has_args:
+                        ret = base_callback(ffi.buffer(buf, size)[:])
+                    else:
+                        ret = base_callback()
+                    ret = 1 if ret else 0
+                except:
+                    self._exception = sys.exc_info()[1]
+                    ret = 1
+                return ret
+
+            func_type = "http_data_cb" if has_args else "http_cb"
+            return ffi.callback(func_type, real_cb)
+        
         def __init__(self):
             self.http_parser = ffi.new("http_parser *")
+            C.http_parser_init(self.http_parser, C.HTTP_RESPONSE)
+
             self.http_parser_settings = ffi.new("http_parser_settings *")
-            self._callbacks = {}
+            callbacks = []
+
+            for cb_params in (('message_begin', False),
+                              #('url', True),
+                              ('header_field', True),
+                              ('header_value', True),
+                              ('headers_complete', False),
+                              ('body', True),
+                              ('message_complete', False)):
+                wrapped = self._make_callback(*cb_params)
+                callbacks.append(wrapped)
+                setattr(self.http_parser_settings, 'on_' + cb_params[0], wrapped)
+
+            # Keep this list so wrapped callbacks are not GC'ed.
+            self._callbacks = callbacks
 
         def feed(self, data):
             buf = ffi.new("char[]", data)
@@ -114,43 +155,3 @@ const char *http_errno_description(enum http_errno err);
 
         def should_keep_alive(self):
             return C.http_should_keep_alive(self.http_parser)
-
-    # Callback property, used to define behavior on setting/deleting 
-    class CB(object):
-        def __init__(self, name, has_args):
-            self.name = 'on_' + name
-            self.has_args = has_args
-
-        def __get__(self, instance, owner):
-            cb_data = instance._callbacks.get(self.name)
-            if cb_data:
-                return cb_data[0] # Base function
-            return None
-
-        def __set__(self, instance, base_callback):
-            if base_callback is None:
-                wrapped = ffi.NULL
-            elif self.has_args:
-                def real_cb(http_parser, buf, size):
-                    return base_callback(ffi.buffer(buf, size)[:])
-                wrapped = ffi.callback("http_data_cb", real_cb)
-            else:
-                def real_cb(http_parser):
-                    return base_callback()
-                wrapped = ffi.callback("http_cb", real_cb)
-
-            instance._base_cbs[self.name] = (value, wrapped)
-            setattr(instance.http_parser_settings, self.name, wrapped)
-
-        def __delete__(self, instance):
-            setattr(instance.http_parser_settings, self.name, ffi.NULL)
-            del instance._base_cbs[self.name]
-
-    for (callback, has_args) in (('message_begin', False),
-                                 #('url', True),
-                                 ('header_field', True),
-                                 ('header_value', True),
-                                 ('headers_complete', False),
-                                 ('body', True),
-                                 ('message_complete', False)):
-        setattr(HTTPResponseParser, '_on_' + callback, CB(callback, has_args))
