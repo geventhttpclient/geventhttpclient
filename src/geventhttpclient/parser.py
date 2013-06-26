@@ -70,6 +70,7 @@ const char *http_errno_description(enum http_errno err);
     
     
     module_path = os.path.dirname(os.path.realpath(__file__))
+    C = None
     for (s, m, t) in imp.get_suffixes():
         if t == imp.C_EXTENSION:
             try:
@@ -80,6 +81,9 @@ const char *http_errno_description(enum http_errno err);
                 pass
 
     del module_path, module_abs_path
+
+    if not C:
+        raise ImportError("Native '_parser' component library could not be found. Check your installation.")
 
     class HTTPParseError(httplib.HTTPException):
         def __init__(self, http_errno):
