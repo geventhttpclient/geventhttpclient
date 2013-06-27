@@ -67,23 +67,16 @@ int http_should_keep_alive(http_parser *parser);
 
 const char *http_errno_description(enum http_errno err);
 """)
-    
-    
-    module_path = os.path.dirname(os.path.realpath(__file__))
-    C = None
-    for (s, m, t) in imp.get_suffixes():
-        if t == imp.C_EXTENSION:
-            try:
-                module_abs_path = os.path.join(module_path, '_parser{}'.format(s))
-                C = ffi.dlopen(module_abs_path)
-                break
-            except OSError:
-                pass
 
-    del module_path, module_abs_path
+    from geventhttpclient import __path__ as mod_path
+    mod_name = '_cffi__parser_helper'
+    (mod_fd, mod_file_name, mod_desc) = imp.find_module(mod_name, mod_path)
+    if mod_desc[2] == imp.C_EXTENSION:
+        C = ffi.dlopen(mod_file_name)
+    else:
+        raise ImportError("Native '{}' component library could not be found. Check your installation.".format(mod_name))
 
-    if not C:
-        raise ImportError("Native '_parser' component library could not be found. Check your installation.")
+    del mod_path, mod_name, mod_fd, mod_file_name, mod_desc
 
     class HTTPParseError(httplib.HTTPException):
         def __init__(self, http_errno):
