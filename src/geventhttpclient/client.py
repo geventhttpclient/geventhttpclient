@@ -52,7 +52,10 @@ class HTTPClient(object):
             ssl_options = {}
         if ssl_options is not None:
             self.ssl = True
-            self.port = connection_port = self.port or 443
+            if not self.port:
+                self.port = 443
+            if not connection_port:
+                connection_port = self.port
             self._connection_pool = SSLConnectionPool(
                 connection_host, connection_port, size=concurrency,
                 ssl_options=ssl_options,
@@ -61,7 +64,10 @@ class HTTPClient(object):
                 disable_ipv6=disable_ipv6)
         else:
             self.ssl = False
-            self.port = connection_port = self.port or 80
+            if not self.port:
+                self.port = 80
+            if not connection_port:
+                connection_port = self.port
             self._connection_pool = ConnectionPool(
                 connection_host, connection_port,
                 size=concurrency,
