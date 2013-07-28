@@ -47,13 +47,15 @@ class URL(object):
         self.port = None
         self.host = None
         if netloc is not None:
-            info = netloc.split(':', 1)
+            info = netloc.rsplit(':', 1)
             if len(info) == 2:
                 self.host, port = info
                 self.port = int(port)
             else:
                 self.host = info[0]
                 self.port = self.DEFAULT_PORTS.get(self.scheme)
+            # for IPv6 hosts
+            self.host = self.host.strip('[]')
         if not self.path:
             self.path = "/"
         self.query = {}
