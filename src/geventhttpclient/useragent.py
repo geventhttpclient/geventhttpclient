@@ -203,6 +203,12 @@ class CompatResponse(object):
         """
         return self.headers
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.release()
+
 
 class RestkitCompatResponse(CompatResponse):
     """ Some extra lines to also serve as a drop in replacement for restkit 
@@ -334,6 +340,7 @@ class UserAgent(object):
                     e.response = resp
                     e.request = req
                     e.http_log = self._conversation_str(url, resp)
+                    resp.release()
                     e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
 
@@ -343,7 +350,7 @@ class UserAgent(object):
 
                 redirection = resp.headers.get('location')
                 if resp.status_code in set([301, 302, 303, 307]) and redirection:
-                    resp._response.release()
+                    resp.release()
                     req.set_url(req.url_split.redirect(redirection))
                     req.method = 'GET' if resp.status_code in set([302, 303]) else req.method
                     for item in ('content-length', 'content-type', 'content-encoding', 'cookie', 'cookie2'):
@@ -399,7 +406,7 @@ class UserAgent(object):
                 cr = resp.headers.get('Content-Range')
                 if resp.status_code != 206 or not cr or not cr.startswith('bytes') or \
                             not cr.split(None, 1)[1].startswith(str(offset)):
-                    resp._response.release()
+                    resp.release()
                     offset = 0
             if not offset:
                 headers.pop('Range', None)
@@ -410,9 +417,10 @@ class UserAgent(object):
                     f.seek(offset, os.SEEK_SET)
                 try:
                     data = resp.read(chunk_size)
-                    while data:
-                        f.write(data)
-                        data = resp.read(chunk_size)
+                    with resp:
+                        while data:
+                            f.write(data)
+                            data = resp.read(chunk_size)
                 except BaseException as e:
                     self._handle_error(e, url=url)
                     if resp.headers.get('accept-ranges') == 'bytes':

@@ -81,13 +81,24 @@ class ConnectionPool(object):
         for sock_info in sock_infos:
             try:
                 sock = self._create_tcp_socket(*sock_info[:3])
+            except Exception as e:
+                if not first_error:
+                    first_error = e
+                continue
+
+            try:
                 sock.settimeout(self.connection_timeout)
                 sock.connect(sock_info[-1])
                 sock.settimeout(self.network_timeout)
                 return sock
             except IOError as e:
+                sock.close()
                 if not first_error:
                     first_error = e
+            except:
+                sock.close()
+                raise
+
         if first_error:
             raise first_error
         else:
@@ -140,13 +151,10 @@ class SSLConnectionPool(ConnectionPool):
 
     def __init__(self, host, port, **kw):
         self.ssl_options = self.default_options.copy()
-        self.ssl_options.update(kw['ssl_options'])
-        del kw['ssl_options']
+        self.ssl_options.update(kw.pop('ssl_options', dict()))
         super(SSLConnectionPool, self).__init__(host, port, **kw)
 
     def _create_tcp_socket(self, family, socktype, protocol):
         sock = super(SSLConnectionPool, self)._create_tcp_socket(
             family, socktype, protocol)
         return gevent.ssl.wrap_socket(sock, **self.ssl_options)
-
-

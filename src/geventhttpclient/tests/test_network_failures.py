@@ -1,8 +1,7 @@
 import pytest
-from httplib import HTTPException
+from httplib import HTTPException #@UnresolvedImport
 from geventhttpclient import HTTPClient
 import gevent.server
-import gevent.timeout
 import gevent.socket
 from contextlib import contextmanager
 
@@ -28,7 +27,7 @@ def wrong_response_status_line(sock, addr):
 def test_exception():
     with server(wrong_response_status_line):
         connection = HTTPClient(*listener)
-        with pytest.raises(HTTPException): #@UndefinedVariable
+        with pytest.raises(HTTPException):
             connection.get('/')
 
 def close(sock, addr):
@@ -37,7 +36,7 @@ def close(sock, addr):
 def test_close():
     with server(close):
         client = HTTPClient(*listener)
-        with pytest.raises(HTTPException): #@UndefinedVariable
+        with pytest.raises(HTTPException):
             client.get('/')
 
 def close_after_recv(sock, addr):
@@ -47,7 +46,7 @@ def close_after_recv(sock, addr):
 def test_close_after_recv():
     with server(close_after_recv):
         client = HTTPClient(*listener)
-        with pytest.raises(HTTPException): #@UndefinedVariable
+        with pytest.raises(HTTPException):
             client.get('/')
 
 def timeout_recv(sock, addr):
