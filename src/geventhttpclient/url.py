@@ -88,6 +88,9 @@ class URL(object):
     def __str__(self):
         return urlparse.urlunsplit(tuple(self))
 
+    def __eq__(self, other):
+        return str(self) == str(other)
+
     @property
     def query_string(self):
         params = []
