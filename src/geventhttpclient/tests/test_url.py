@@ -76,6 +76,9 @@ def test_set_safe_encoding():
     assert URL(surl).query_string == 'other=*&param=value'
     URL.quoting_safe = ''
 
+def test_equality():
+    assert URL('https://example.com/') != URL('http://example.com/')
+    assert URL('http://example.com/') == URL('http://example.com/')
 
 if __name__ == '__main__':
     test_redirection_abs_path()
