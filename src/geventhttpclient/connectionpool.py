@@ -2,6 +2,8 @@ import os
 import gevent.queue
 import gevent.ssl
 import gevent.socket
+import certifi
+from backports.ssl_match_hostname import match_hostname
 
 try:
     from gevent import lock
@@ -10,8 +12,7 @@ except ImportError:
     from gevent import coros as lock
 
 
-CA_CERTS = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "cacert.pem")
+CA_CERTS = certifi.where()
 
 
 DEFAULT_CONNECTION_TIMEOUT = 5.0
@@ -89,6 +90,7 @@ class ConnectionPool(object):
             try:
                 sock.settimeout(self.connection_timeout)
                 sock.connect(sock_info[-1])
+                self.after_connect(sock)
                 sock.settimeout(self.network_timeout)
                 return sock
             except IOError as e:
@@ -103,6 +105,10 @@ class ConnectionPool(object):
             raise first_error
         else:
             raise RuntimeError("Cannot resolve %s:%s" % (self._host, self._port))
+
+
+    def after_connect(self, sock):
+        pass
 
     def get_socket(self):
         """ get a socket from the pool. This blocks until one is available.
@@ -145,16 +151,24 @@ class ConnectionPool(object):
 class SSLConnectionPool(ConnectionPool):
 
     default_options = {
+        'ssl_version': gevent.ssl.PROTOCOL_SSLv3,
         'ca_certs': CA_CERTS,
         'cert_reqs': gevent.ssl.CERT_REQUIRED #@UndefinedVariable
     }
 
     def __init__(self, host, port, **kw):
         self.ssl_options = self.default_options.copy()
+        self.insecure = kw.pop('insecure', False)
         self.ssl_options.update(kw.pop('ssl_options', dict()))
         super(SSLConnectionPool, self).__init__(host, port, **kw)
+
+    def after_connect(self, sock):
+        super(SSLConnectionPool, self).after_connect(sock)
+        if not self.insecure:
+            match_hostname(sock.getpeercert(), self._host)
 
     def _create_tcp_socket(self, family, socktype, protocol):
         sock = super(SSLConnectionPool, self)._create_tcp_socket(
             family, socktype, protocol)
+
         return gevent.ssl.wrap_socket(sock, **self.ssl_options)

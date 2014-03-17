@@ -33,8 +33,8 @@ class HTTPClient(object):
             connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
             network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
             disable_ipv6=False,
-            concurrency=1, ssl_options=None, ssl=False,
-            proxy_host=None, proxy_port=None, version=HTTP_11, 
+            concurrency=1, ssl_options=None, ssl=False, insecure=False,
+            proxy_host=None, proxy_port=None, version=HTTP_11,
             headers_type=Headers):
         self.host = host
         self.port = port
@@ -59,6 +59,7 @@ class HTTPClient(object):
             self._connection_pool = SSLConnectionPool(
                 connection_host, connection_port, size=concurrency,
                 ssl_options=ssl_options,
+                insecure=insecure,
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6)

@@ -16,6 +16,7 @@ setup(name='geventhttpclient',
        ext_modules = [httpparser],
        include_package_data=True,
        install_requires=[
-        'gevent >= 0.13'
+        'gevent >= 0.13',
+        'backports.ssl_match_hostname',
+        'certifi'
        ])
-
