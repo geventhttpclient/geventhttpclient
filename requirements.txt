@@ -1,0 +1,8 @@
+backports.ssl-match-hostname==3.4.0.2
+certifi==1.0.1
+gevent==1.0
+geventhttpclient==1.1
+greenlet==0.4.2
+py==1.4.20
+pytest==2.5.2
+wsgiref==0.1.2
