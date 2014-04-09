@@ -2,3 +2,9 @@
 *.so
 *.pyc
 *.egg-info
+
+.Python
+build/
+lib/
+include/
+bin/
