@@ -47,11 +47,9 @@ class ConnectionPool(object):
         """
         family = 0
         if self.disable_ipv6:
-            family = gevent.socket.AF_INET #@UndefinedVariable
-
+            family = gevent.socket.AF_INET
         info = gevent.socket.getaddrinfo(self._host, self._port,
-                family, 0, gevent.socket.SOL_TCP) #@UndefinedVariable
-
+                family, 0, gevent.socket.SOL_TCP)
         # family, socktype, proto, canonname, sockaddr = info[0]
         return info
 
@@ -153,7 +151,7 @@ class SSLConnectionPool(ConnectionPool):
     default_options = {
         'ssl_version': gevent.ssl.PROTOCOL_SSLv3,
         'ca_certs': CA_CERTS,
-        'cert_reqs': gevent.ssl.CERT_REQUIRED #@UndefinedVariable
+        'cert_reqs': gevent.ssl.CERT_REQUIRED
     }
 
     def __init__(self, host, port, **kw):

@@ -138,7 +138,7 @@ class HTTPClient(object):
             sock = self._connection_pool.get_socket()
             try:
                 sock.sendall(request)
-            except gevent.socket.error as e: #@UndefinedVariable
+            except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if e.errno == errno.ECONNRESET and attempts_left > 0:
                     attempts_left -= 1

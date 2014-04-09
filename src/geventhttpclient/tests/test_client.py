@@ -56,7 +56,7 @@ def test_build_request_full_url():
     assert raw_req == raw_req_cmp
 
 def test_build_request_invalid_host():
-    with pytest.raises(ValueError): #@UndefinedVariable
+    with pytest.raises(ValueError):
         client._build_request('GET', 'http://www.spiegel.de/')
 
 def test_response_context_manager():
@@ -80,7 +80,7 @@ def test_ssl_fail_invalid_certificate():
         os.path.dirname(os.path.abspath(__file__)), "onecert.pem")
     client = HTTPClient('www.google.fr', ssl_options={'ca_certs': certs})
     assert client.port == 443
-    with pytest.raises(SSLError): #@UndefinedVariable
+    with pytest.raises(SSLError):
         client.get('/')
 
 def test_multi_queries_greenlet_safe():

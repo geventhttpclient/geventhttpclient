@@ -30,10 +30,10 @@ def server(handler, backlog=1):
 
 @contextmanager
 def timeout_connect_server():
-    sock = gevent.socket.socket(gevent.socket.AF_INET, #@UndefinedVariable
-        gevent.socket.SOCK_STREAM, 0) #@UndefinedVariable
+    sock = gevent.socket.socket(gevent.socket.AF_INET,
+        gevent.socket.SOCK_STREAM, 0)
     sock = gevent.ssl.wrap_socket(sock, keyfile=KEY, certfile=CERT)
-    sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1) #@UndefinedVariable
+    sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1)
     sock.bind(listener)
     sock.listen(1)
 
@@ -88,15 +88,15 @@ def test_timeout_on_connect():
                 connection_timeout=0.1,
                 ssl_options={'ca_certs': CERT})
             http2.get('/')
-        except gevent.ssl.SSLError as error: #@UndefinedVariable
+        except gevent.ssl.SSLError as error:
             e = error
-        except gevent.socket.timeout as error: #@UndefinedVariable
+        except gevent.socket.timeout as error:
             e = error
         except:
             raise
 
         assert e is not None, 'should have raised'
-        if isinstance(e, gevent.ssl.SSLError): #@UndefinedVariable
+        if isinstance(e, gevent.ssl.SSLError):
             assert str(e).endswith("handshake operation timed out")
 
 def network_timeout(sock, addr):
@@ -108,12 +108,12 @@ def test_network_timeout():
     with server(network_timeout):
         http = HTTPClient(*listener, ssl=True, insecure=True,
             network_timeout=0.1, ssl_options={'ca_certs': CERT})
-        with pytest.raises(gevent.ssl.SSLError): #@UndefinedVariable
+        with pytest.raises(gevent.ssl.SSLError):
             response = http.get('/')
             assert response.status_code == 0, 'should have timed out.'
 
 def test_verify_hostname():
     with server(simple_ssl_response):
         http = HTTPClient(*listener, ssl=True, ssl_options={'ca_certs': CERT})
-        with pytest.raises(CertificateError): #@UndefinedVariable
+        with pytest.raises(CertificateError):
             http.get('/')

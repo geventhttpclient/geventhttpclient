@@ -147,14 +147,14 @@ def test_copy():
         assert rnd_key not in h
     
 def test_fieldname_string_enforcement():
-    with pytest.raises(TypeError): #@UndefinedVariable
+    with pytest.raises(TypeError):
         Headers({3: 3})
     h = Headers()
-    with pytest.raises(TypeError): #@UndefinedVariable
+    with pytest.raises(TypeError):
         h[3] = 5
-    with pytest.raises(TypeError): #@UndefinedVariable
+    with pytest.raises(TypeError):
         h.add(3, 4)
-    with pytest.raises(TypeError): #@UndefinedVariable
+    with pytest.raises(TypeError):
         del h[3]
         
 

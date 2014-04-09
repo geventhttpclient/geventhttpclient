@@ -176,7 +176,7 @@ class HTTPSocketResponse(HTTPResponse):
                         raise HTTPParseError('connection closed before'
                                             ' end of the headers')
                     start = False
-                except gevent.socket.error as e: #@UndefinedVariable
+                except gevent.socket.error as e:
                     if e.errno == errno.ECONNRESET:
                         if start:
                             raise HTTPConnectionClosed(

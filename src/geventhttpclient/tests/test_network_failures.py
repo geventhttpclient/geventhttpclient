@@ -56,7 +56,7 @@ def timeout_recv(sock, addr):
 def test_timeout_recv():
     with server(timeout_recv):
         connection = HTTPClient(*listener, network_timeout=0.1)
-        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
+        with pytest.raises(gevent.socket.timeout):
             connection.request("GET", '/')
 
 def timeout_send(sock, addr):
@@ -65,7 +65,7 @@ def timeout_send(sock, addr):
 def test_timeout_send():
     with server(timeout_send):
         connection = HTTPClient(*listener, network_timeout=0.1)
-        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
+        with pytest.raises(gevent.socket.timeout):
             connection.request("GET", '/')
 
 def close_during_content(sock, addr):
@@ -77,7 +77,7 @@ def test_close_during_content():
     with server(close_during_content):
         client = HTTPClient(*listener, block_size=1)
         response = client.get('/')
-        with pytest.raises(HTTPException): #@UndefinedVariable
+        with pytest.raises(HTTPException):
             response.read()
 
 def content_too_small(sock, addr):
@@ -88,7 +88,7 @@ def content_too_small(sock, addr):
 def test_content_too_small():
     with server(content_too_small):
         client = HTTPClient(*listener, network_timeout=0.2)
-        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
+        with pytest.raises(gevent.socket.timeout):
             response = client.get('/')
             response.read()
 
@@ -111,7 +111,7 @@ def test_close_during_chuncked_readline():
         response = client.get('/')
         assert response['transfer-encoding'] == 'chunked'
         chunks = []
-        with pytest.raises(HTTPException): #@UndefinedVariable
+        with pytest.raises(HTTPException):
             data = 'enter_loop'
             while data:
                 data = response.readline()
@@ -137,7 +137,7 @@ def test_timeout_during_chuncked_readline():
         response = client.get('/')
         assert response['transfer-encoding'] == 'chunked'
         chunks = []
-        with pytest.raises(gevent.socket.timeout): #@UndefinedVariable
+        with pytest.raises(gevent.socket.timeout):
             data = 'enter_loop'
             while data:
                 data = response.readline()

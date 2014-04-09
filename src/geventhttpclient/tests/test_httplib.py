@@ -25,7 +25,7 @@ def test_httplib_exception():
     with server(wrong_response_status_line):
         connection = HTTPConnection(*listener)
         connection.request("GET", '/')
-        with pytest.raises(HTTPException): #@UndefinedVariable
+        with pytest.raises(HTTPException):
             connection.getresponse()
 
 def success_response(sock, addr):
