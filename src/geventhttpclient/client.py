@@ -17,6 +17,12 @@ PROTO_HTTPS = "https"
 HEADER_HOST = "Host"
 HEADER_CONTENT_LENGTH = "Content-Length"
 
+METHOD_GET      = "GET"
+METHOD_HEAD     = "HEAD"
+METHOD_POST     = "POST"
+METHOD_PUT      = "PUT"
+METHOD_DELETE   = "DELETE"
+
 
 class HTTPClient(object):
 
@@ -169,16 +175,19 @@ class HTTPClient(object):
                 return response
 
     def get(self, request_uri, headers={}):
-        return self.request('GET', request_uri, headers=headers)
+        return self.request(METHOD_GET, request_uri, headers=headers)
+
+    def head(self, request_uri, headers={}):
+        return self.request(METHOD_HEAD, request_uri, headers=headers)
 
     def post(self, request_uri, body=u'', headers={}):
-        return self.request('POST', request_uri, body=body, headers=headers)
+        return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
     def put(self, request_uri, body=u'', headers={}):
-        return self.request('PUT', request_uri, body=body, headers=headers)
+        return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
     def delete(self, request_uri, body=u'', headers={}):
-        return self.request('DELETE', request_uri, body=body, headers=headers)
+        return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
 
 
 class HTTPClientPool(object):
