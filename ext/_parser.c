@@ -3,6 +3,11 @@
 #include <http_parser.h>
 #include <stdio.h>
 
+#ifndef Py_TYPE
+    #define Py_TYPE(ob) (((PyObject*)(ob))->ob_type)
+#endif
+
+
 static PyObject * PyExc_HTTPParseError;
 
 static int on_message_begin(http_parser* parser)
@@ -250,7 +255,7 @@ PyHTTPResponseParser_dealloc(PyHTTPResponseParser* self)
 {
     self->parser->data = NULL;
     PyMem_Free(self->parser);
-    self->ob_type->tp_free((PyObject*)self);
+    Py_TYPE(self)->tp_free((PyObject*)self);
 }
 
 static PyMethodDef PyHTTPResponseParser_methods[] = {
