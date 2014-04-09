@@ -7,6 +7,16 @@ from geventhttpclient.header import Headers
 from geventhttpclient import __version__
 import gevent.socket
 
+CRLF = "\r\n"
+WHITESPACE = " "
+FIELD_VALUE_SEP = ": "
+HOST_PORT_SEP = ":"
+SLASH = "/"
+PROTO_HTTP = "http"
+PROTO_HTTPS = "https"
+HEADER_HOST = "Host"
+HEADER_CONTENT_LENGTH = "Content-Length"
+
 
 class HTTPClient(object):
 
@@ -23,7 +33,7 @@ class HTTPClient(object):
     def from_url(cls, url, **kw):
         if not isinstance(url, URL):
             url = URL(url)
-        enable_ssl = url.scheme == 'https'
+        enable_ssl = url.scheme == PROTO_HTTPS
         if not enable_ssl:
             kw.pop('ssl_options', None)
         return cls(url.host, port=url.port, ssl=enable_ssl, **kw)
@@ -87,7 +97,7 @@ class HTTPClient(object):
         url = URL()
         url.host = self.host
         url.port = self.port
-        url.scheme = self.ssl and 'https' or 'http'
+        url.scheme = self.ssl and PROTO_HTTPS or PROTO_HTTP
         return url
 
     def close(self):
@@ -97,33 +107,33 @@ class HTTPClient(object):
         header_fields = self.headers_type()
         header_fields.update(self.default_headers)
         header_fields.update(headers)
-        if self.version == self.HTTP_11 and 'Host' not in header_fields:
+        if self.version == self.HTTP_11 and HEADER_HOST not in header_fields:
             host_port = self.host
             if self.port not in (80, 443):
-                host_port += ":" + str(self.port)
-            header_fields['Host'] = host_port
-        if body and 'Content-Length' not in header_fields:
-            header_fields['Content-Length'] = len(body)
+                host_port += HOST_PORT_SEP + str(self.port)
+            header_fields[HEADER_HOST] = host_port
+        if body and HEADER_CONTENT_LENGTH not in header_fields:
+            header_fields[HEADER_CONTENT_LENGTH] = len(body)
 
         request_url = request_uri
         if self.use_proxy:
             base_url = self._base_url_string
-            if request_uri.startswith('/'):
+            if request_uri.startswith(SLASH):
                 base_url = base_url[:-1]
             request_url = base_url + request_url
-        elif not request_url.startswith(('/', 'http')):
-            request_url = '/' + request_url
-        elif request_url.startswith('http'):
+        elif not request_url.startswith((SLASH, PROTO_HTTP)):
+            request_url = SLASH + request_url
+        elif request_url.startswith(PROTO_HTTP):
             if request_url.startswith(self._base_url_string):
                 request_url = request_url[len(self._base_url_string)-1:]
             else:
                 raise ValueError("Invalid host in URL")
-            
-        request = method + " " + request_url + " " + self.version + "\r\n"
+
+        request = method + WHITESPACE + request_url + WHITESPACE + self.version + CRLF
 
         for field, value in header_fields.iteritems():
-            request += field + ': ' + str(value) + "\r\n"
-        request += "\r\n"
+            request += field + FIELD_VALUE_SEP + str(value) + CRLF
+        request += CRLF
         if body:
             request += body
         return request
@@ -146,7 +156,7 @@ class HTTPClient(object):
                 raise e
 
             try:
-                ret = HTTPSocketPoolResponse(sock, self._connection_pool,
+                response = HTTPSocketPoolResponse(sock, self._connection_pool,
                     block_size=self.block_size, method=method.upper(), headers_type=self.headers_type)
             except HTTPConnectionClosed as e:
                 # connection is released by the response itself
@@ -155,8 +165,8 @@ class HTTPClient(object):
                     continue
                 raise e
             else:
-                ret._sent_request = request
-                return ret
+                response._sent_request = request
+                return response
 
     def get(self, request_uri, headers={}):
         return self.request('GET', request_uri, headers=headers)
@@ -169,12 +179,12 @@ class HTTPClient(object):
 
     def delete(self, request_uri, body=u'', headers={}):
         return self.request('DELETE', request_uri, body=body, headers=headers)
-    
-    
+
+
 class HTTPClientPool(object):
     """ Factory for maintaining a bunch of clients, one per host:port """
     # TODO: Add some housekeeping and cleanup logic
-    
+
     def __init__(self, **kwargs):
         self.clients = dict()
         self.client_args = kwargs
@@ -183,13 +193,13 @@ class HTTPClientPool(object):
         if not isinstance(url, URL):
             url = URL(url)
         client_key = url.host, url.port
-        try: 
+        try:
             return self.clients[client_key]
         except KeyError:
             client = HTTPClient.from_url(url, **self.client_args)
             self.clients[client_key] = client
             return client
-        
+
     def close(self):
         for client in self.clients.values():
             client.close()
