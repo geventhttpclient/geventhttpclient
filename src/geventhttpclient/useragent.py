@@ -13,6 +13,10 @@ import cStringIO
 from urllib import urlencode
 
 import gevent
+try:
+    from gevent.dns import DNSError
+except ImportError:
+    class DNSError(StandardError): pass
 
 from url import URL
 from client import HTTPClient, HTTPClientPool
@@ -284,7 +288,7 @@ class UserAgent(object):
         """
         if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
-        elif isinstance(e, (socket.error, gevent.dns.DNSError)) and \
+        elif isinstance(e, (socket.error, DNSError)) and \
                 e.errno in set([errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]):
             return e
         elif isinstance(e, ssl.SSLError) and 'read operation timed out' in str(e):
