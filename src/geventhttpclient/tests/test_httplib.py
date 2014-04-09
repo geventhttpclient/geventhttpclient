@@ -4,7 +4,7 @@ from geventhttpclient.httplib import HTTPConnection
 import gevent.server
 from contextlib import contextmanager
 
-listener = ('127.0.0.1', 5432)
+listener = ('127.0.0.1', 54322)
 
 @contextmanager
 def server(handler):

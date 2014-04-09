@@ -9,7 +9,7 @@ import gevent.pool
 import gevent.server
 
 
-listener = ('127.0.0.1', 5432)
+listener = ('127.0.0.1', 54323)
 
 @contextmanager
 def server(handler):

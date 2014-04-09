@@ -7,7 +7,7 @@ from contextlib import contextmanager
 
 CRLF = "\r\n"
 
-listener = ('127.0.0.1', 5432)
+listener = ('127.0.0.1', 54323)
 
 @contextmanager
 def server(handler):
