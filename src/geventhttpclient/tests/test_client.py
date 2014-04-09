@@ -31,6 +31,13 @@ def test_client_simple():
     body = response.read()
     assert len(body)
 
+def test_client_without_leading_slash():
+    client = HTTPClient('www.google.fr')
+    with client.get("") as response:
+        assert response.status_code == 200
+    with client.get("maps") as response:
+        assert(response.status_code in (200, 301, 302))
+
 test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
 def test_client_with_default_headers():
     client = HTTPClient.from_url('www.google.fr/', headers=test_headers)
