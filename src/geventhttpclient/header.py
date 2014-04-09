@@ -18,17 +18,17 @@ def lower(txt):
 
 class Headers(dict):
     """ Storing headers in an easily accessible way and providing cookielib compatibility
-    
-        RFC 2616/4.2: Multiple message-header fields with the same field-name MAY be present 
-        in a message if and only if the entire field-value for that header field is defined 
+
+        RFC 2616/4.2: Multiple message-header fields with the same field-name MAY be present
+        in a message if and only if the entire field-value for that header field is defined
         as a comma-separated list.
     """
     def __init__(self, *args, **kwargs):
         dict.__init__(self)
         self.update(*args, **kwargs)
-        
+
     def __setitem__(self, key, val):
-        """ Ensures only lowercase header names 
+        """ Ensures only lowercase header names
         """
         return _dict_setitem(self, lower(key), val)
 
@@ -40,9 +40,9 @@ class Headers(dict):
 
     def __contains__(self, key):
         return _dict_contains(self, lower(key))
-        
+
     def iteritems(self):
-        """ Iterates all headers also extracting multiple entries 
+        """ Iterates all headers also extracting multiple entries
         """
         for key, vals in dict.iteritems(self):
             if not isinstance(vals, list):
@@ -50,15 +50,15 @@ class Headers(dict):
             else:
                 for val in vals:
                     yield key, val
-               
+
     def items(self):
         return list(self.iteritems())
 
     def __len__(self):
         return sum(len(vals) if isinstance(vals, list) else 1 for vals in self.itervalues())
-    
+
     def get(self, key, default=None):
-        """ Overwrite of inbuilt get, to use case-insensitive __getitem__ 
+        """ Overwrite of inbuilt get, to use case-insensitive __getitem__
         """
         try:
             return self[key]
@@ -66,8 +66,8 @@ class Headers(dict):
             return default
 
     def add(self, key, val):
-        """ Insert new header lines to the container. This method creates lists only for multiple, 
-            not for single lines. This minimizes the overhead for the common case and optimizes the 
+        """ Insert new header lines to the container. This method creates lists only for multiple,
+            not for single lines. This minimizes the overhead for the common case and optimizes the
             total parsing speed of the headers.
         """
         key = lower(key)
@@ -85,12 +85,12 @@ class Headers(dict):
                     _dict_setitem(self, key, [item, val])
                 else:
                     _dict_setitem(self, key, val)
-    
+
     # Keep some dict-compatible syntax for the Response object
     setdefault = add
-         
+
     def update(self, *args, **kwds):
-        """ Adapted from MutableMapping to use self.add instead of self.__setitem__ 
+        """ Adapted from MutableMapping to use self.add instead of self.__setitem__
         """
         if len(args) > 1:
             raise TypeError("update() takes at most one positional "
@@ -114,7 +114,7 @@ class Headers(dict):
             self.add(key, value)
 
     def getheaders(self, name):
-        """ Compatibility with urllib/cookielib: Always return lists 
+        """ Compatibility with urllib/cookielib: Always return lists
         """
         try:
             ret = self[name]
@@ -125,10 +125,10 @@ class Headers(dict):
                 return ret
             else:
                 return [ret]
-    
+
     getallmatchingheaders = getheaders
     iget = getheaders
-    
+
     def discard(self, key):
         try:
             self.__delitem__(key)
@@ -138,7 +138,7 @@ class Headers(dict):
     @staticmethod
     def _format_field(field):
         return '-'.join(field_pt.capitalize() for field_pt in field.split('-'))
-     
+
     def pretty_items(self):
         for key, vals in dict.iteritems(self):
             key = self._format_field(key)
@@ -147,12 +147,12 @@ class Headers(dict):
             else:
                 for val in vals:
                     yield key, val
-        
+
     def __str__(self):
         return pprint.pformat(sorted(self.pretty_items()))
-    
+
     def copy(self):
-        """ Overwrite inbuilt copy method, as inbuilt does not preserve type 
+        """ Overwrite inbuilt copy method, as inbuilt does not preserve type
         """
         return copy.copy(self)
 
@@ -172,4 +172,4 @@ class Headers(dict):
                 val = ', '.join(val)
             ret[key] = val
         return ret
-    
+
