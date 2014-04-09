@@ -140,8 +140,6 @@ class HTTPClient(object):
         for field, value in header_fields.iteritems():
             request += field + FIELD_VALUE_SEP + str(value) + CRLF
         request += CRLF
-        if body:
-            request += body
         return request
 
     def request(self, method, request_uri, body=b"", headers={}):
@@ -160,6 +158,9 @@ class HTTPClient(object):
                     attempts_left -= 1
                     continue
                 raise e
+
+            if body:
+                sock.sendall(body)
 
             try:
                 response = HTTPSocketPoolResponse(sock, self._connection_pool,
