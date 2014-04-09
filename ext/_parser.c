@@ -1,12 +1,8 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
+#include <Python_compat.h>
 #include <http_parser.h>
 #include <stdio.h>
-
-#ifndef Py_TYPE
-    #define Py_TYPE(ob) (((PyObject*)(ob))->ob_type)
-#endif
-
 
 static PyObject * PyExc_HTTPParseError;
 
