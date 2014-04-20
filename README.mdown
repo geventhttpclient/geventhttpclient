@@ -13,9 +13,9 @@ streaming and support HTTP 1.1 persistent connections. More generally it is
 designed for efficiently pulling from REST APIs and streaming API's
 like Twitter's.
 
-Safe SSL support is provided by default. A certificate authority bundle from
-Mozilla is provided and ssl connection server certificate is validated by
-default. See *src/geventhttpclient/cacert.pem* for License.
+Safe SSL support is provided by default. **geventhttpclient** depends on
+the certifi CA Bundle. This is the same CA Bundle which ships with the
+Requests codebase, and is derived from Mozilla Firefox's canonical set.
 
 Python 2.6 and 2.7 are supported as well as gevent 0.13 and gevent 1.0.
 
