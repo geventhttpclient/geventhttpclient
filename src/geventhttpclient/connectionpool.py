@@ -1,9 +1,8 @@
 import os
 import gevent.queue
-import gevent.ssl
 import gevent.socket
 import certifi
-from backports.ssl_match_hostname import match_hostname
+
 
 try:
     from gevent import lock
@@ -145,28 +144,33 @@ class ConnectionPool(object):
         if not self._closed:
             self._semaphore.release()
 
+try:
+    import gevent.ssl
+    from backports.ssl_match_hostname import match_hostname
+except ImportError:
+    pass
+else:
+    class SSLConnectionPool(ConnectionPool):
 
-class SSLConnectionPool(ConnectionPool):
+        default_options = {
+            'ssl_version': gevent.ssl.PROTOCOL_SSLv3,
+            'ca_certs': CA_CERTS,
+            'cert_reqs': gevent.ssl.CERT_REQUIRED
+        }
 
-    default_options = {
-        'ssl_version': gevent.ssl.PROTOCOL_SSLv3,
-        'ca_certs': CA_CERTS,
-        'cert_reqs': gevent.ssl.CERT_REQUIRED
-    }
+        def __init__(self, host, port, **kw):
+            self.ssl_options = self.default_options.copy()
+            self.insecure = kw.pop('insecure', False)
+            self.ssl_options.update(kw.pop('ssl_options', dict()))
+            super(SSLConnectionPool, self).__init__(host, port, **kw)
 
-    def __init__(self, host, port, **kw):
-        self.ssl_options = self.default_options.copy()
-        self.insecure = kw.pop('insecure', False)
-        self.ssl_options.update(kw.pop('ssl_options', dict()))
-        super(SSLConnectionPool, self).__init__(host, port, **kw)
+        def after_connect(self, sock):
+            super(SSLConnectionPool, self).after_connect(sock)
+            if not self.insecure:
+                match_hostname(sock.getpeercert(), self._host)
 
-    def after_connect(self, sock):
-        super(SSLConnectionPool, self).after_connect(sock)
-        if not self.insecure:
-            match_hostname(sock.getpeercert(), self._host)
+        def _create_tcp_socket(self, family, socktype, protocol):
+            sock = super(SSLConnectionPool, self)._create_tcp_socket(
+                family, socktype, protocol)
 
-    def _create_tcp_socket(self, family, socktype, protocol):
-        sock = super(SSLConnectionPool, self)._create_tcp_socket(
-            family, socktype, protocol)
-
-        return gevent.ssl.wrap_socket(sock, **self.ssl_options)
+            return gevent.ssl.wrap_socket(sock, **self.ssl_options)
