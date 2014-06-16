@@ -79,6 +79,10 @@ class HTTPResponse(HTTPResponseParser):
         length = self.get('content-length', None)
         if length is not None:
             return long(length)
+    
+    @property
+    def length(self):
+      return self.content_length
 
     @property
     def version(self):
