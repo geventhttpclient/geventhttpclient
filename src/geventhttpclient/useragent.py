@@ -117,7 +117,17 @@ class CompatResponse(object):
         self._request = request
         self._sent_request = sent_request
         self.headers = self._response._headers_index
-
+    
+    @property
+    def final_url(self):
+        """ The final url (after redirects) 
+        """
+        
+        if self._request:
+            return self._request.get_full_url()
+        else:
+            return None
+        
     @property
     def status(self):
         """ The returned http status 
