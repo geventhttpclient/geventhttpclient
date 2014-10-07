@@ -182,6 +182,8 @@ static PyObject*
 PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
 {
     char* buf = NULL;
+    PyObject * exception = NULL;
+    size_t nread;
     Py_ssize_t buf_len;
     int succeed = PyArg_ParseTuple(args, "t#", &buf, &buf_len);
     /* cast Py_ssize_t signed integer to unsigned */
@@ -191,11 +193,11 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
         if (self->parser->http_errno != HPE_OK)
             return set_parser_exception(self->parser);
 
-        size_t nread = http_parser_execute(self->parser,
+        nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
 
         /* Exception in callbacks */
-        PyObject * exception = PyErr_Occurred();
+        exception = PyErr_Occurred();
         if (exception != NULL)
             return NULL;
 
@@ -327,6 +329,8 @@ PyMODINIT_FUNC
 init_parser(void)
 {
     PyObject* module;
+    PyObject* httplib;
+    PyObject* HTTPException;
 
     if (PyType_Ready(&HTTPParserType) < 0)
         return;
@@ -337,8 +341,8 @@ init_parser(void)
     Py_INCREF(&HTTPParserType);
     PyModule_AddObject(module, "HTTPResponseParser", (PyObject *)&HTTPParserType);
 
-    PyObject* httplib = PyImport_ImportModule("httplib");
-    PyObject* HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
+    httplib = PyImport_ImportModule("httplib");
+    HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
 
     PyExc_HTTPParseError = PyErr_NewException(
             "_parser.HTTPParseError", HTTPException, NULL);
