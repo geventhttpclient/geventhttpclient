@@ -21,6 +21,7 @@ Python 2.6 and 2.7 are supported as well as gevent 0.13 and gevent 1.0.
 
 httpparser = Extension('geventhttpclient._parser',
                     sources = ['ext/_parser.c', 'ext/http_parser.c'],
+                    libraries = ['boost_python'],
                     include_dirs = ['ext'])
 
 setup(name='geventhttpclient',
