@@ -154,7 +154,7 @@ class HTTPClient(object):
                 sock.sendall(request)
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
-                if e.errno == errno.ECONNRESET and attempts_left > 0:
+                if (e.errno == errno.ECONNRESET or e.errno == errno.EPIPE) and attempts_left > 0:
                     attempts_left -= 1
                     continue
                 raise e
