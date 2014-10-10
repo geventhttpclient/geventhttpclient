@@ -1,5 +1,6 @@
 import os
 import gevent.queue
+import ssl
 import gevent.ssl
 import gevent.socket
 import certifi
@@ -149,9 +150,9 @@ class ConnectionPool(object):
 class SSLConnectionPool(ConnectionPool):
 
     default_options = {
-        'ssl_version': gevent.ssl.PROTOCOL_SSLv3,
+        'ssl_version': ssl.PROTOCOL_SSLv3,
         'ca_certs': CA_CERTS,
-        'cert_reqs': gevent.ssl.CERT_REQUIRED
+        'cert_reqs': ssl.CERT_REQUIRED
     }
 
     def __init__(self, host, port, **kw):
