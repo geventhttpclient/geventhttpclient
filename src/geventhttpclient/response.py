@@ -1,3 +1,10 @@
+import sys
+#import dl
+from mpi4py.dl import dlopen, RTLD_NOW, RTLD_GLOBAL
+from mpi4py.dl import dlerror
+sys.setdlopenflags(RTLD_NOW | RTLD_GLOBAL)
+
+
 import errno
 from geventhttpclient._parser import HTTPResponseParser, HTTPParseError #@UnresolvedImport
 from geventhttpclient.header import Headers

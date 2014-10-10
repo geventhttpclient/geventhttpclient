@@ -3,6 +3,7 @@ Created on 04.11.2012
 
 @author: nimrod
 '''
+
 import socket
 import errno
 import sys
@@ -295,7 +296,7 @@ class UserAgent(object):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise e, None, sys.exc_info()[2]
+        raise (e, None, sys.exc_info()[2])
 
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing 
@@ -451,5 +452,5 @@ class XmlrpcCompatUserAgent(UserAgent):
         ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
         if debug_stream is not None:
             debug_stream.seek(0)
-            print debug_stream.read()
+            print (debug_stream.read())
         return ret

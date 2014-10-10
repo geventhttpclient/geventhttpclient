@@ -181,13 +181,13 @@ class HTTPClient(object):
     def head(self, request_uri, headers={}):
         return self.request(METHOD_HEAD, request_uri, headers=headers)
 
-    def post(self, request_uri, body=u'', headers={}):
+    def post(self, request_uri, body='', headers={}):
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
-    def put(self, request_uri, body=u'', headers={}):
+    def put(self, request_uri, body='', headers={}):
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
-    def delete(self, request_uri, body=u'', headers={}):
+    def delete(self, request_uri, body='', headers={}):
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
 
 
