@@ -67,12 +67,12 @@ static int on_headers_complete(http_parser* parser)
     return skip_body;
 }
 
-static int on_header_field(http_parser* parser, const char *at, size_t length)
+static int on_http_data_cb(http_parser* parser, const char *at, size_t length, const char * python_cb)
 {
     int fail = 0;
     PyObject* self = (PyObject*)parser->data;
-    if (PyObject_HasAttrString(self, "_on_header_field")) {
-        PyObject* callable = PyObject_GetAttrString(self, "_on_header_field");
+    if (PyObject_HasAttrString(self, python_cb)) {
+        PyObject* callable = PyObject_GetAttrString(self, python_cb);
         PyObject* args = Py_BuildValue("(s#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
         PyObject* exception = PyErr_Occurred();
@@ -86,29 +86,22 @@ static int on_header_field(http_parser* parser, const char *at, size_t length)
         Py_DECREF(callable);
         Py_DECREF(args);
     }
-    return fail;
+    return fail;    
+}
+
+static int on_status(http_parser* parser, const char *at, size_t length)
+{
+    return on_http_data_cb(parser, at, length, "_on_status");
+}
+
+static int on_header_field(http_parser* parser, const char *at, size_t length)
+{
+    return on_http_data_cb(parser, at, length, "_on_header_field");
 }
 
 static int on_header_value(http_parser* parser, const char *at, size_t length)
 {
-    int fail = 0;
-    PyObject* self = (PyObject*)parser->data;
-    if (PyObject_HasAttrString(self, "_on_header_value")) {
-        PyObject* callable = PyObject_GetAttrString(self, "_on_header_value");
-        PyObject* args = Py_BuildValue("(s#)", at, length);
-        PyObject* result = PyObject_CallObject(callable, args);
-        PyObject* exception = PyErr_Occurred();
-        if (exception != NULL) {
-            fail = 1;
-        } else {
-            if (PyObject_IsTrue(result))
-                fail = 1;
-        }
-        Py_XDECREF(result);
-        Py_DECREF(callable);
-        Py_DECREF(args);
-    }
-    return fail;
+    return on_http_data_cb(parser, at, length, "_on_header_value");
 }
 
 static int on_body(http_parser* parser, const char *at, size_t length)
@@ -137,6 +130,7 @@ static int on_body(http_parser* parser, const char *at, size_t length)
 static http_parser_settings _parser_settings = {
     on_message_begin,
     NULL, // on_url
+    on_status,
     on_header_field,
     on_header_value,
     on_headers_complete,
