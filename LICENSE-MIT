@@ -4,8 +4,6 @@ Igor Sysoev.
 Additional changes to http_parser.c are licensed under the same terms as NGINX and
 copyright Joyent, Inc. and other Node contributors. All rights reserved.
 
-Use of certificates authority are subject to MPL. see cacert.pem
-
 Python extension by Antonin Amand <antonin.amand@gmail.com> licensed under
 the same terms.
 

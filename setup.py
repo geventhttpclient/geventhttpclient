@@ -1,3 +1,4 @@
+import sys
 from distutils.core import setup
 from setuptools.extension import Extension
 from setuptools import find_packages
@@ -23,20 +24,27 @@ httpparser = Extension('geventhttpclient._parser',
                     sources = ['ext/_parser.c', 'ext/http_parser.c'],
                     include_dirs = ['ext'])
 
+requirements = [
+    'gevent >= 0.13',
+]
+
+if sys.hexversion < 0x02070900:
+    requirements += [
+        "backports.ssl_match_hostname",
+        "certifi"
+    ]
+
+
 setup(name='geventhttpclient',
-       version = '1.1.0',
-       description = 'http client library for gevent',
-       long_description = DESC,
-       url="http://github.com/gwik/geventhttpclient",
-       author="Antonin Amand",
-       author_email="antonin.amand@gmail.com",
-       packages=find_packages('src'),
-       license='LICENSE-MIT',
-       package_dir={'': 'src'},
-       ext_modules = [httpparser],
-       include_package_data=True,
-       install_requires=[
-        'gevent >= 0.13',
-        'backports.ssl_match_hostname',
-        'certifi'
-       ])
+      version = '1.2.0-dev',
+      description = 'http client library for gevent',
+      long_description = DESC,
+      url="http://github.com/gwik/geventhttpclient",
+      author="Antonin Amand",
+      author_email="antonin.amand@gmail.com",
+      packages=find_packages('src'),
+      license='LICENSE-MIT',
+      package_dir={'': 'src'},
+      ext_modules = [httpparser],
+      include_package_data=True,
+      install_requires=requirements)

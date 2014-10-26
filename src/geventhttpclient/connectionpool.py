@@ -1,18 +1,38 @@
 import os
+import ssl
 import gevent.queue
 import gevent.ssl
 import gevent.socket
-import certifi
-from backports.ssl_match_hostname import match_hostname
+
+try:
+    from ssl import match_hostname
+except ImportError:
+    from backports.ssl_match_hostname import match_hostname
+
+_CA_CERTS = None
+try:
+    from ssl import get_default_verify_paths
+    _certs = ssl.get_default_verify_paths()
+    if _certs is not None:
+        _CA_CERTS = certs.openssl_cafile_env or certs.cafile or certs.openssl_cafile
+except ImportError:
+    import certifi
+    _CA_CERTS = certifi.where()
+
+try:
+    from ssl import _DEFAULT_CIPHERS
+except ImportError:
+    # ssl._DEFAULT_CIPHERS in python2.7 branch.
+    _DEFAULT_CIPHERS = (
+        'ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:'
+        'DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:ECDH+RC4:'
+        'DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5')
 
 try:
     from gevent import lock
 except ImportError:
     # gevent < 1.0b2
     from gevent import coros as lock
-
-
-CA_CERTS = certifi.where()
 
 
 DEFAULT_CONNECTION_TIMEOUT = 5.0
@@ -147,17 +167,27 @@ class ConnectionPool(object):
 
 
 class SSLConnectionPool(ConnectionPool):
+    """ SSLConnectionPool creates connections wrapped with SSL/TLS.
+
+    :param host: hostname
+    :param port: port
+    :param ssl_options: accepts any options supported by `ssl.wrap_socket`
+    :param ssl_context_factory: use `ssl.create_default_context` by default
+        if provided. It must be a callbable that returns a SSLContext.
+    """
 
     default_options = {
-        'ssl_version': gevent.ssl.PROTOCOL_SSLv3,
-        'ca_certs': CA_CERTS,
+        'ciphers': _DEFAULT_CIPHERS,
+        'ca_certs': _CA_CERTS,
         'cert_reqs': gevent.ssl.CERT_REQUIRED
     }
 
+    ssl_context_factory = getattr(gevent.ssl, "create_default_context", None)
+
     def __init__(self, host, port, **kw):
-        self.ssl_options = self.default_options.copy()
+        self.ssl_options = kw.pop("ssl_options", {})
+        self.ssl_context_factory = kw.pop('ssl_context_factory', None)
         self.insecure = kw.pop('insecure', False)
-        self.ssl_options.update(kw.pop('ssl_options', dict()))
         super(SSLConnectionPool, self).__init__(host, port, **kw)
 
     def after_connect(self, sock):
@@ -169,4 +199,9 @@ class SSLConnectionPool(ConnectionPool):
         sock = super(SSLConnectionPool, self)._create_tcp_socket(
             family, socktype, protocol)
 
-        return gevent.ssl.wrap_socket(sock, **self.ssl_options)
+        if self.ssl_context_factory is None:
+            ssl_options = self.default_options.copy()
+            ssl_options.update(self.ssl_options)
+            return gevent.ssl.wrap_socket(sock, **ssl_options)
+        else:
+            return self.ssl_context_factory().wrap_socket(sock, **self.ssl_options)

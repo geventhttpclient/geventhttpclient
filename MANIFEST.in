@@ -1,5 +1,3 @@
 include src/geventhttpclient/*.py
-include src/geventhttpclient/cacert.pem
 include ext/*.c
 include ext/*.h
-
