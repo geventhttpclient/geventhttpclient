@@ -1,6 +1,6 @@
 import pytest
 from httplib import HTTPException
-from geventhttpclient.httplib import HTTPConnection
+from geventhttpclient.httplibcompat import HTTPConnection
 import gevent.server
 from contextlib import contextmanager
 
@@ -31,9 +31,11 @@ def test_httplib_exception():
 def success_response(sock, addr):
     sock.recv(4096)
     sock.sendall("HTTP/1.1 200 Ok\r\n"
-               "Content-Type: text/plain\r\n"
-               "Content-Length: 12\r\n\r\n"
-               "Hello World!")
+                 "Content-Type: text/plain\r\n"
+                 "Set-Cookie: foo=bar\r\n"
+                 "Set-Cookie: baz=bar\r\n"
+                 "Content-Length: 12\r\n\r\n"
+                 "Hello World!")
 
 def test_success_response():
     with server(success_response):
@@ -46,3 +48,11 @@ def test_success_response():
         assert response.read() == 'Hello World!'
         assert response.content_length == 12
 
+def test_msg():
+    with server(success_response):
+        connection = HTTPConnection(*listener)
+        connection.request("GET", "/")
+        response = connection.getresponse()
+
+        assert response.msg['Set-Cookie'] == "foo=bar, baz=bar"
+        assert response.msg['Content-Type'] == "text/plain"
