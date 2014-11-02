@@ -1,5 +1,3 @@
-import os
-import ssl
 import gevent.queue
 import gevent.ssl
 import gevent.socket
@@ -12,9 +10,9 @@ except ImportError:
 _CA_CERTS = None
 try:
     from ssl import get_default_verify_paths
-    _certs = ssl.get_default_verify_paths()
+    _certs = get_default_verify_paths()
     if _certs is not None:
-        _CA_CERTS = certs.openssl_cafile_env or certs.cafile or certs.openssl_cafile
+        _CA_CERTS = _certs.openssl_cafile_env or _certs.cafile or _certs.openssl_cafile
 except ImportError:
     import certifi
     _CA_CERTS = certifi.where()
