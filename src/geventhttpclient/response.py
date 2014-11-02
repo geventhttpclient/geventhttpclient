@@ -22,6 +22,7 @@ class HTTPResponse(HTTPResponseParser):
 
     def __init__(self, method='GET', headers_type=Headers):
         super(HTTPResponse, self).__init__()
+        self.msg = None
         self.method = method.upper()
         self.headers_complete = False
         self.message_begun = False
@@ -87,6 +88,9 @@ class HTTPResponse(HTTPResponseParser):
     @property
     def version(self):
         return self.get_http_version()
+
+    def _on_status(self, msg):
+        self.msg = msg
 
     def _on_message_begin(self):
         if self.message_begun:

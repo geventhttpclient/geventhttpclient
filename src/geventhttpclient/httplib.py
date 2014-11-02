@@ -15,6 +15,10 @@ class HTTPResponse(response.HTTPSocketResponse):
         super(HTTPResponse, self).__init__(sock, method=method, **kw)
 
     @property
+    def fp(self):
+        return self
+
+    @property
     def version(self):
         v = self.get_http_version()
         if v == 'HTTP/1.1':
@@ -28,10 +32,6 @@ class HTTPResponse(response.HTTPSocketResponse):
     @property
     def reason(self):
         return self.msg
-
-    @property
-    def msg(self):
-        return httplib.responses[self.status_code]
 
     def _read_status(self):
         return (self.version, self.status_code, self.msg)
