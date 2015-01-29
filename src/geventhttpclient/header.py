@@ -165,11 +165,9 @@ class Headers(dict):
         for key in self:
             val = self[key]
             key = self._format_field(key)
-            if len(val) == 1:
-                val = val[0]
-            else:
-                # TODO: Add escaping of quotes in vals and quoting
+            if isinstance(val, list):
                 val = ', '.join(val)
+                # TODO: Add escaping of quotes in vals and quoting
             ret[key] = val
         return ret
 

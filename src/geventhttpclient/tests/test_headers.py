@@ -157,13 +157,28 @@ def test_fieldname_string_enforcement():
     with pytest.raises(TypeError):
         del h[3]
         
-
-if __name__ == '__main__':
-    test_copy()
-    test_cookielib_compatibility()
-
 def test_header_replace():
     d = {}
     d['Content-Type'] = "text/plain"
     d['content-type'] = "text/html"
     assert d['content-type'] == "text/html"
+
+def test_compat_dict():
+    h = Headers(d='asdf')
+    h.add('e', 'd')
+    h.add('e', 'f')
+    h.add('cookie', 'd')
+    h.add('cookie', 'e')
+    h.add('cookie', 'f')
+    d = h.compatible_dict()
+
+    for x in ('Cookie', 'D', 'E'):
+        assert x in d
+    assert d['D'] == 'asdf'
+    assert d['E'] == 'f'
+    assert d['Cookie'] == 'd, e, f'
+
+if __name__ == '__main__':
+    test_copy()
+    test_compat_dict()
+    test_cookielib_compatibility()
