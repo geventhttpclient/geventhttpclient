@@ -1,6 +1,6 @@
 import pytest
 from httplib import HTTPException
-from geventhttpclient.httplibcompat import HTTPConnection
+from geventhttpclient.httplib import HTTPConnection
 import gevent.server
 from contextlib import contextmanager
 
