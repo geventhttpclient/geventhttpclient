@@ -1,5 +1,5 @@
 import errno
-from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
+from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.response import HTTPSocketPoolResponse
 from geventhttpclient.response import HTTPConnectionClosed
 from geventhttpclient.url import URL
@@ -74,6 +74,8 @@ class HTTPClient(object):
                 self.port = 443
             if not connection_port:
                 connection_port = self.port
+            # Import SSL as late as possible, fail hard with Import Error
+            from geventhttpclient.connectionpool import SSLConnectionPool
             self._connection_pool = SSLConnectionPool(
                 connection_host, connection_port, size=concurrency,
                 ssl_options=ssl_options,

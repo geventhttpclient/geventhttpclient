@@ -2,7 +2,6 @@ httplib = __import__('httplib')
 from geventhttpclient import response
 from geventhttpclient import header
 import gevent.socket
-import gevent.ssl
 
 
 
@@ -102,31 +101,37 @@ class HTTPConnection(httplib.HTTPConnection):
         if self._tunnel_host:
             self._tunnel()
 
+try:
+    import gevent.ssl
+except:
+    pass
+else:
+    class HTTPSConnection(HTTPConnection):
 
-class HTTPSConnection(HTTPConnection):
+        default_port = 443
 
-    default_port = 443
+        def __init__(self, host, port=None, key_file=None, cert_file=None, **kw):
+            HTTPConnection.__init__(self, host, port, **kw)
+            self.key_file = key_file
+            self.cert_file = cert_file
 
-    def __init__(self, host, port=None, key_file=None, cert_file=None, **kw):
-        HTTPConnection.__init__(self, host, port, **kw)
-        self.key_file = key_file
-        self.cert_file = cert_file
+        def connect(self):
+            "Connect to a host on a given (SSL) port."
 
-    def connect(self):
-        "Connect to a host on a given (SSL) port."
-
-        sock = gevent.socket.create_connection((self.host, self.port),
-                                        self.timeout, self.source_address)
-        if self._tunnel_host:
-            self.sock = sock
-            self._tunnel()
-        self.sock = gevent.ssl.wrap_socket(
-            sock, self.key_file, self.cert_file)
+            sock = gevent.socket.create_connection((self.host, self.port),
+                                            self.timeout, self.source_address)
+            if self._tunnel_host:
+                self.sock = sock
+                self._tunnel()
+            self.sock = gevent.ssl.wrap_socket(
+                sock, self.key_file, self.cert_file)
 
 
 def patch():
     httplib.HTTPConnection = HTTPConnection
-    httplib.HTTPSConnection = HTTPSConnection
     httplib.HTTPResponse = HTTPResponse
-
+    try:
+        httplib.HTTPSConnection = HTTPSConnection
+    except NameError:
+        pass
 
