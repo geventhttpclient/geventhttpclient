@@ -5,6 +5,9 @@
 A high performance, concurrent HTTP client library for python using 
 [gevent](http://gevent.org).
 
+`gevent.httplib` support was removed in [gevent 1.0](https://github.com/surfly/gevent/commit/b45b83b1bc4de14e3c4859362825044b8e3df7d6
+), **geventhttpclient** now provides that missing functionality.
+
 **geventhttpclient** use a fast [http parser](http://github.com/joyent/http-parser),
 written in C, originating from nginx, extracted and modified by Joyent.
 
@@ -156,7 +159,6 @@ with open('/tmp/100.dat', 'w') as f:
 The benchmark does 1000 get requests against a local nginx server with
 a concurrency of 10. See *benchmarks* folder.
 
-- httplib2 with gevent monkey patch (*benchmarks/httplib2_simple.py*): **~600 req/s**
 - httplib2 with geventhttpclient monkey patch (*benchmarks/httplib2_patched.py*): **~2500 req/s**
 - geventhttpclient.HTTPClient (*benchmarks/httpclient.py*): **~4000 req/s**
 
