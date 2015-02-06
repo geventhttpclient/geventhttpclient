@@ -1,19 +1,14 @@
-import copy
 import pprint
-from collections import Mapping
+from collections import Mapping, MutableMapping
 
 _dict_setitem = dict.__setitem__
 _dict_getitem = dict.__getitem__
 _dict_delitem = dict.__delitem__
 _dict_contains = dict.__contains__
+_dict_setdefault = dict.setdefault
+
 
 MULTIPLE_HEADERS_ALLOWED = set(['cookie', 'set-cookie', 'set-cookie2'])
-
-def lower(txt):
-    try:
-        return txt.lower()
-    except AttributeError:
-        raise TypeError("Header names must be of type basestring, not %s" % type(txt).__name__)
 
 
 class Headers(dict):
@@ -23,23 +18,26 @@ class Headers(dict):
         in a message if and only if the entire field-value for that header field is defined
         as a comma-separated list.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, headers=None, **kwargs):
         dict.__init__(self)
-        self.update(*args, **kwargs)
+        if headers:
+            self.update(headers)
+        if kwargs:
+            self.update(kwargs)
 
     def __setitem__(self, key, val):
         """ Ensures only lowercase header names
         """
-        return _dict_setitem(self, lower(key), val)
+        return _dict_setitem(self, key.lower(), val)
 
     def __getitem__(self, key):
-        return _dict_getitem(self, lower(key))
+        return _dict_getitem(self, key.lower())
 
     def __delitem__(self, key):
-        return _dict_delitem(self, lower(key))
+        return _dict_delitem(self, key.lower())
 
     def __contains__(self, key):
-        return _dict_contains(self, lower(key))
+        return _dict_contains(self, key.lower())
 
     def iteritems(self):
         """ Iterates all headers also extracting multiple entries
@@ -57,37 +55,27 @@ class Headers(dict):
     def __len__(self):
         return sum(len(vals) if isinstance(vals, list) else 1 for vals in self.itervalues())
 
-    def get(self, key, default=None):
-        """ Overwrite of inbuilt get, to use case-insensitive __getitem__
-        """
-        try:
-            return self[key]
-        except KeyError:
-            return default
+    get = MutableMapping.get
 
     def add(self, key, val):
         """ Insert new header lines to the container. This method creates lists only for multiple,
             not for single lines. This minimizes the overhead for the common case and optimizes the
             total parsing speed of the headers.
         """
-        key = lower(key)
+        key = key.lower()
         # Use lower only once and then stick with inbuilt functions for speed
-        if not _dict_contains(self, key):
-            _dict_setitem(self, key, val)
-        else:
-            item = _dict_getitem(self, key)
-            if isinstance(item, list):
-                item.append(val)
+        cur = _dict_setdefault(self, key, val)
+        if cur is not val:
+            if isinstance(cur, list):
+                # Implicitly allowed
+                cur.append(val)
             else:
                 if key in MULTIPLE_HEADERS_ALLOWED:
                     # Only create duplicate headers for meaningful field names,
                     # else overwrite the field
-                    _dict_setitem(self, key, [item, val])
+                    _dict_setitem(self, key, [cur, val])
                 else:
                     _dict_setitem(self, key, val)
-
-    # Keep some dict-compatible syntax for the Response object
-    setdefault = add
 
     def update(self, *args, **kwds):
         """ Adapted from MutableMapping to use self.add instead of self.__setitem__
@@ -113,21 +101,23 @@ class Headers(dict):
         for key, value in kwds.items():
             self.add(key, value)
 
-    def getheaders(self, name):
+    def getheaders(self, key):
         """ Compatibility with urllib/cookielib: Always return lists
         """
-        try:
-            ret = self[name]
-        except KeyError:
-            return []
+        ret = dict.get(self, key.lower(), [])
+        if isinstance(ret, list):
+            return ret
         else:
-            if isinstance(ret, list):
-                return ret
-            else:
-                return [ret]
+            return [ret]
 
+    get = MutableMapping.get
+    pop = MutableMapping.pop    
+        
     getallmatchingheaders = getheaders
     iget = getheaders
+
+    # Compatibility with urllib3
+    getlist = getheaders
 
     def discard(self, key):
         try:
@@ -149,12 +139,19 @@ class Headers(dict):
                     yield key, val
 
     def __str__(self):
-        return pprint.pformat(sorted(self.pretty_items()))
+        return pprint.pformat(self.pretty_items())
+        
+    def __repr__(self):
+        return "%s(%s)" % (type(self).__name__, self.compatible_dict())
 
     def copy(self):
-        """ Overwrite inbuilt copy method, as inbuilt does not preserve type
-        """
-        return copy.copy(self)
+        clone = type(self)()
+        for key in self:
+            val = _dict_getitem(self, key)
+            if isinstance(val, list):
+                val = list(val)
+            _dict_setitem(clone, key, val)
+        return clone
 
     def compatible_dict(self):
         """ If the client performing the request is not adjusted for this class, this function
@@ -167,7 +164,6 @@ class Headers(dict):
             key = self._format_field(key)
             if isinstance(val, list):
                 val = ', '.join(val)
-                # TODO: Add escaping of quotes in vals and quoting
             ret[key] = val
         return ret
 
