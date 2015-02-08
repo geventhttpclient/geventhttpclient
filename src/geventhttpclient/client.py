@@ -147,11 +147,13 @@ class HTTPClient(object):
         request += CRLF
         return request
 
-    def request(self, method, request_uri, body=b"", headers={}):
-        request = self._build_request(
+    def request(self, method, request_uri, body=b"", headers={}, max_retries=None):
+        request_str = self._build_request(
             method.upper(), request_uri, body=body, headers=headers)
+        return self._send(method, request_str, body, max_retries=max_retries)
 
-        attempts_left = self._connection_pool.size + 1
+    def _send(self, method, request, body, max_retries=None):
+        attempts_left = max_retries or self._connection_pool.size + 1
 
         while 1:
             sock = self._connection_pool.get_socket()
