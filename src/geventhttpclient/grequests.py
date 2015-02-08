@@ -9,13 +9,12 @@ from requests.sessions import Session as _Session, merge_hooks, merge_setting
 from requests.models import Request as _Request, PreparedRequest as _PreparedRequest, Response as _Response
 from requests.cookies import cookiejar_from_dict, merge_cookies, RequestsCookieJar
 from requests.auth import _basic_auth_str
-from requests.utils import DEFAULT_CA_BUNDLE_PATH, get_encoding_from_headers, get_netrc_auth, to_native_string, default_headers
-#                    prepend_scheme_if_needed, urldefragauth)
+from requests.utils import get_encoding_from_headers, get_netrc_auth, to_native_string, default_headers
 
 try:
     from requests.exceptions import ConnectTimeout
 except ImportError:
-    # Compatibility with previous versions
+    # Compatibility with previous requests versions
     from requests.exceptions import Timeout
     class ConnectTimeout(ConnectionError, Timeout):
         """The request timed out while trying to connect to the remote server.
@@ -25,10 +24,8 @@ except ImportError:
 
 from .client import HTTPClientPool
 from .response import HTTPParseError
-from .header import Headers
+from .header import Headers # TODO: Add to_native_string checks
 from .url import URL
-# TODO: Add to_native_string on creation
-
 
 DEFAULT_RETRIES = 5
 
@@ -180,10 +177,11 @@ class GHCAdapter(HTTPAdapter):
         self.init_poolmanager(self._pool_connections, **self._pool_kwargs)
 
     def proxy_manager_for(self, proxy, **proxy_kwargs):
+        # TODO: Implement proxymanager
         raise NotImplementedError
 
     def cert_verify(self, conn, url, verify, cert):
-        # SSL hassle is left to gevent
+        # SSL hassle is left to geventhttpclient
         raise NotImplementedError
 
     def build_response(self, req, resp):
@@ -284,6 +282,7 @@ class GHCAdapter(HTTPAdapter):
                                   body=request.body, headers=request.headers,
                                   max_retries=self.max_retries)
             # No low level handling of chunked requests. Client has to handle that
+            # itself. Don't know why HTTPAdapter implements that here
         except (HTTPParseError, socket.error) as err:
             raise ConnectionError(err, request=request)
         except (socket.timeout, gevent.Timeout) as e:

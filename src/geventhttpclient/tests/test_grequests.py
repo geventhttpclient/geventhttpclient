@@ -1,8 +1,3 @@
-'''
-Created on 08.02.2015
-
-@author: nimrod
-'''
 import gevent.monkey
 gevent.monkey.patch_all()
 

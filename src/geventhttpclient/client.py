@@ -220,3 +220,7 @@ class HTTPClientPool(object):
     def close(self):
         for client in self.clients.values():
             client.close()
+
+    def clear(self):
+        self.close()
+        self.clients.clear()

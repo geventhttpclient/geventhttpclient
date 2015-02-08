@@ -6,8 +6,6 @@ gevent.monkey.patch_all()
 
 from geventhttpclient import grequests
 
-import requests
-
 if __name__ == "__main__":
 
     N = 1000
