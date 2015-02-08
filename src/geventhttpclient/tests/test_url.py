@@ -110,4 +110,5 @@ if __name__ == '__main__':
     test_redirection_abs_path()
     test_redirection_rel_path()
     test_redirection_full_path()
+    test_ipv6_with_port()
     
