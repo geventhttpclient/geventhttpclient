@@ -80,6 +80,12 @@ class Response(_Response):
         self.elapsed = 0
         self.request = None
 
+    def close(self):
+        try:
+            self.raw.release()
+        except AttributeError:
+            pass
+
 
 class Session(_Session):
     def __init__(self):
