@@ -8,3 +8,6 @@ build/
 lib/
 include/
 bin/
+.project
+.pydevproject
+.settings/
