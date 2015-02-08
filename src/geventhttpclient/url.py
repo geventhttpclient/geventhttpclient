@@ -1,6 +1,11 @@
 import urlparse
 from urllib import quote_plus
 
+DEFAULT_PORTS = {
+    'http': 80,
+    'https': 443
+}
+
 
 class URL(object):
     """ A mutable URL class
@@ -29,60 +34,94 @@ class URL(object):
     URL(http://infrae.com/urls?auth_token=asdfaisdfuasdf&param=asdfa)
     """
 
-    DEFAULT_PORTS = {
-        'http': 80,
-        'https': 443
-    }
-
-    __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment')
+    __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment', 'user', 'password')
     quoting_safe = ''
-
+    
     def __init__(self, url=None):
         if url is not None:
-            self.scheme, netloc, self.path, \
-                query, self.fragment = urlparse.urlsplit(url)
+            scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
         else:
-            self.scheme, netloc, self.path, query, self.fragment = \
-                'http', '', '/', '', ''
-        self.port = None
-        self.host = None
-        if netloc is not None:
-            info = netloc.rsplit(':', 1)
-            if len(info) == 2:
-                self.host, port = info
-                self.port = int(port)
+            scheme, netloc, path, query, fragment = 'http', '', '/', '', ''
+
+        self.scheme = scheme
+        self.fragment = fragment
+
+        user, password, host, port = None, None, '', None
+        if netloc:
+            if '@' in netloc:
+                user_pw, netloc = netloc.rsplit('@', 1)
+                if ':' in user_pw:
+                    user, password = user_pw.rsplit(':', 1)
+                else:
+                    user = user_pw
+            
+            if netloc.startswith('['):
+                host, port_pt = netloc.rsplit(']', 1)
+                host = host.strip('[]')
+                if port_pt:
+                    port = int(port_pt.strip(':'))
             else:
-                self.host = info[0]
-                self.port = self.DEFAULT_PORTS.get(self.scheme)
-            # for IPv6 hosts
-            self.host = self.host.strip('[]')
-        if not self.path:
-            self.path = "/"
-        self.query = {}
+                if ':' in netloc:
+                    host, port = netloc.rsplit(':', 1)
+                    port = int(port)
+                else:
+                    host = netloc
+        
+        if not port:
+            port = DEFAULT_PORTS.get(self.scheme)
+        
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+
+        if path:
+            self.path = path
+
+        self.query = dict()
         for key, value in urlparse.parse_qs(query).iteritems():
             if len(value) > 1:
                 self.query[key] = value
             else:
                 self.query[key] = value[0]
-
+    
     @property
     def netloc(self):
-        buf = self.host
+        return self.full_netloc(auth=False)
+    
+    def full_netloc(self, auth=True):
+        buf = ''
+        if self.user and auth:
+            buf += self.user
+            if self.passwort:
+                buf += ':' + self.passwort
+            buf += '@'
+        
+        if ':' in self.host:
+            buf += '[' + self.host + ']'
+        else:
+            buf += self.host
         if self.port is None:
             return buf
-        elif self.DEFAULT_PORTS.get(self.scheme) == self.port:
+        elif DEFAULT_PORTS.get(self.scheme) == self.port:
             return buf
-        buf += ":" + str(self.port)
+        buf += ':' + str(self.port)
         return buf
 
     def __copy__(self):
-        return URL(str(self))
+        clone = type(self)()
+        for key in self.__slots__:
+            val = getattr(self, key)
+            if isinstance(val, dict):
+                val = val.copy()
+            setattr(clone, key, val)
+        return clone
 
     def __repr__(self):
         return "URL(%s)" % str(self)
 
     def __iter__(self):
-        return iter((self.scheme, self.netloc, self.path,
+        return iter((self.scheme, self.full_netloc(), self.path,
                 self.query_string, self.fragment))
 
     def __str__(self):
@@ -136,7 +175,9 @@ class URL(object):
         return self.path
 
     def redirect(self, other):
-        other = type(self)(other)
+        """ Redirect to the other URL, relative to the current one """
+        if not isinstance(other, type(self)):
+            other = type(self)(other)
         if not other.host:
             other.scheme = self.scheme
             other.host = self.host
@@ -147,3 +188,14 @@ class URL(object):
             else:
                 other.path = self.path.rsplit('/', 1)[0] + '/' + other.path
         return other
+    
+    def stripped_auth(self):
+        """ Remove fragment and authentication for proxy handling """
+        clone = type(self)()
+        # Copy all fields except fragment, username and password
+        for key in self.__slots__[:5]:
+            val = getattr(self, key)
+            if isinstance(val, dict):
+                val = val.copy()
+            setattr(clone, key, val)
+        return clone

@@ -80,6 +80,32 @@ def test_equality():
     assert URL('https://example.com/') != URL('http://example.com/')
     assert URL('http://example.com/') == URL('http://example.com/')
 
+def test_pw():
+    url = URL('http://asdf:dd@heise.de/index.php?aaaa=bbbbb')
+    assert url.host == 'heise.de'
+    assert url.port == 80
+    assert url.user == 'asdf'
+    assert url.password == 'dd'
+
+def test_pw_with_port():
+    url = URL('http://asdf:dd@heise.de:90/index.php?aaaa=bbbbb')
+    assert url.host == 'heise.de'
+    assert url.port == 90
+    assert url.user == 'asdf'
+    assert url.password == 'dd'
+
+def test_ipv6():
+    url = URL('http://[2001:db8:85a3:8d3:1319:8a2e:370:7348]/')
+    assert url.host == '2001:db8:85a3:8d3:1319:8a2e:370:7348'
+    assert url.port == 80
+    assert url.user == None
+    
+def test_ipv6_with_port():
+    url = URL('https://[2001:db8:85a3:8d3:1319:8a2e:370:7348]:8080/')
+    assert url.host == '2001:db8:85a3:8d3:1319:8a2e:370:7348'
+    assert url.port == 8080
+    assert url.user == None
+    
 if __name__ == '__main__':
     test_redirection_abs_path()
     test_redirection_rel_path()
