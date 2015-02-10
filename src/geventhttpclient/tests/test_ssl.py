@@ -73,6 +73,14 @@ def test_simple_ssl():
         assert response.status_code == 200
         response.read()
 
+def test_simple_ssl_insecure():
+    with server(simple_ssl_response) as listener:
+        http = HTTPClient(*listener, insecure=True, ssl=True)
+        response = http.get('/')
+        assert response.status_code == 200
+        response.read()
+
+
 def timeout_on_connect(sock, addr):
     sock.recv(1024)
     sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
