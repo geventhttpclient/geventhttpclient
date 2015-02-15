@@ -64,7 +64,7 @@ class CompatRequest(object):
     """
     def __init__(self, url, method='GET', headers=None, payload=None):
         self.set_url(url)
-        self.original_host = self.url_split.netloc
+        self.original_host = self.url_split.host
         self.method = method
         self.headers = headers
         self.payload = payload
@@ -105,6 +105,23 @@ class CompatRequest(object):
 
     def add_unredirected_header(self, key, val):
         self.headers.add(key, val)
+        
+    def _drop_payload(self):
+        self.method = 'GET'
+        self.payload = None
+        for item in ('content-length', 'content-type', 'content-encoding'):
+            self.headers.discard(item) 
+    
+    def _drop_cookies(self):
+        for item in ('cookie', 'cookie2'):
+            self.headers.discard(item)
+            
+    def redirect(self, code, location):
+        """ Modify the request inplace to point to the new location """
+        self.set_url(self.url_split.redirect(location))
+        if code in (302, 303):
+            self._drop_payload()
+        self._drop_cookies()
 
 
 class CompatResponse(object):
@@ -231,7 +248,8 @@ class RestkitCompatResponse(CompatResponse):
 class UserAgent(object):
     response_type = CompatResponse
     request_type = CompatRequest
-    valid_response_codes = set([200, 206, 301, 302, 303, 307])
+    valid_response_codes = frozenset([200, 206, 301, 302, 303, 307])
+    redirect_resonse_codes = frozenset([301, 302, 303, 307])
 
     def __init__(self, max_redirects=3, max_retries=3, retry_delay=0,
                  cookiejar=None, headers=None, **kwargs):
@@ -243,6 +261,12 @@ class UserAgent(object):
             self.default_headers.update(headers)
         self.cookiejar = cookiejar
         self.clientpool = HTTPClientPool(**kwargs)
+
+    def close(self):
+        self.clientpool.close()
+
+    def __del__(self):
+        self.close()
 
     def _make_request(self, url, method='GET', headers=None, payload=None):
         req_headers = self.default_headers.copy()
@@ -320,7 +344,6 @@ class UserAgent(object):
                 gevent.sleep(self.retry_delay)
             for _ in xrange(self.max_redirects):
                 if self.cookiejar is not None:
-                    # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.add_cookie_header(req)
 
                 try:
@@ -334,7 +357,7 @@ class UserAgent(object):
 
                 # We received a response
                 if debug_stream is not None:
-                    debug_stream.write(self._conversation_str(url, resp, payload=req.payload) + '\n\n')
+                    debug_stream.write(self._conversation_str(req.url, resp, payload=req.payload) + '\n\n')
 
                 try:
                     self._verify_status(resp.status_code, url=req.url)
@@ -343,23 +366,18 @@ class UserAgent(object):
                     # Let's collect some debug info
                     e.response = resp
                     e.request = req
-                    e.http_log = self._conversation_str(url, resp)
+                    e.http_log = self._conversation_str(req.url, resp, payload=req.payload)
                     resp.release()
                     e = self._handle_error(e, url=req.url)
                     break # Continue with next retry
 
                 if self.cookiejar is not None:
-                    # Check against None to avoid issues with empty cookiejars
                     self.cookiejar.extract_cookies(resp, req)
 
                 redirection = resp.headers.get('location')
-                if resp.status_code in set([301, 302, 303, 307]) and redirection:
+                if resp.status_code in self.redirect_resonse_codes and redirection:
                     resp.release()
-                    req.set_url(req.url_split.redirect(redirection))
-                    req.method = 'GET' if resp.status_code in set([302, 303]) else req.method
-                    for item in ('content-length', 'content-type', 'content-encoding', 'cookie', 'cookie2'):
-                        req.headers.discard(item)
-                    req.payload = None
+                    req.redirect(resp.status_code, redirection)
                     continue
 
                 if not to_string:
@@ -370,12 +388,12 @@ class UserAgent(object):
                     try:
                         ret = resp.content
                     except Exception as e:
-                        e = self._handle_error(e, url=url)
+                        e = self._handle_error(e, url=req.url)
                         break
                     else:
                         if not ret:
                             e = EmptyResponse(url, "Empty response body received")
-                            e = self._handle_error(e, url=url)
+                            e = self._handle_error(e, url=req.url)
                             break
                         else:
                             return ret
@@ -438,9 +456,6 @@ class UserAgent(object):
         else:
             self._handle_retries_exceeded(url, last_error=e)
         return resp
-
-    def close(self):
-        self.clientpool.close()
 
 
 class RestkitCompatUserAgent(UserAgent):
