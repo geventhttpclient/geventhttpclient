@@ -81,13 +81,13 @@ class CompatRequest(object):
         return self.url
 
     def get_host(self):
-        self.url_split.netloc
+        return self.url_split.host
 
     def get_type(self):
-        self.url_split.scheme
+        return self.url_split.scheme
 
     def get_origin_req_host(self):
-        self.original_host
+        return self.original_host
 
     def is_unverifiable(self):
         """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented! 
@@ -334,7 +334,7 @@ class UserAgent(object):
 
                 # We received a response
                 if debug_stream is not None:
-                    debug_stream.write(self._conversation_str(url, resp) + '\n\n')
+                    debug_stream.write(self._conversation_str(url, resp, payload=req.payload) + '\n\n')
 
                 try:
                     self._verify_status(resp.status_code, url=req.url)
@@ -386,9 +386,11 @@ class UserAgent(object):
             return self._handle_retries_exceeded(url, last_error=e)
 
     @classmethod
-    def _conversation_str(cls, url, resp):
+    def _conversation_str(cls, url, resp, payload=None):
         header_str = '\n'.join('%s: %s' % item for item in resp.headers.pretty_items())
-        ret = 'REQUEST: ' + url + '\n' + resp._sent_request + '\n\n'
+        ret = 'REQUEST: ' + url + '\n' + resp._sent_request
+        if payload:
+            ret += payload + '\n\n'
         ret += 'RESPONSE: ' + resp._response.version + ' ' + \
                            str(resp.status_code) + '\n' + \
                            header_str + '\n\n' + resp.content
