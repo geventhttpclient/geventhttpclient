@@ -97,7 +97,7 @@ def test_timeout_on_connect():
 
         assert e is not None, 'should have raised'
         if isinstance(e, gevent.ssl.SSLError):
-            assert str(e).endswith("handshake operation timed out")
+            assert "operation timed out" in str(e)
 
 def network_timeout(sock, addr):
     sock.recv(1024)
