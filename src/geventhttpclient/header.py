@@ -8,7 +8,7 @@ _dict_contains = dict.__contains__
 _dict_setdefault = dict.setdefault
 
 
-MULTIPLE_HEADERS_ALLOWED = set(['cookie', 'set-cookie', 'set-cookie2'])
+MULTIPLE_HEADERS_ALLOWED = set(['cookie', 'cookie2', 'set-cookie', 'set-cookie2'])
 
 
 class Headers(dict):
