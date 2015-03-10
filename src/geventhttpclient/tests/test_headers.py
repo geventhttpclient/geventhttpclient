@@ -164,18 +164,18 @@ def test_header_replace():
     assert d['content-type'] == "text/html"
 
 def test_compat_dict():
-    h = Headers(d='asdf')
-    h.add('e', 'd')
-    h.add('e', 'f')
-    h.add('cookie', 'd')
-    h.add('cookie', 'e')
-    h.add('cookie', 'f')
+    h = Headers(D='asdf')
+    h.add('E', 'd')
+    h.add('E', 'f')
+    h.add('Cookie', 'd')
+    h.add('Cookie', 'e')
+    h.add('Cookie', 'f')
     d = h.compatible_dict()
 
     for x in ('Cookie', 'D', 'E'):
         assert x in d
     assert d['D'] == 'asdf'
-    assert d['E'] == 'f'
+    assert d['E'] == 'd, f'
     assert d['Cookie'] == 'd, e, f'
 
 if __name__ == '__main__':

@@ -1,4 +1,3 @@
-import pprint
 from collections import Mapping, MutableMapping
 
 _dict_setitem = dict.__setitem__
@@ -8,30 +7,58 @@ _dict_contains = dict.__contains__
 _dict_setdefault = dict.setdefault
 
 
-MULTIPLE_HEADERS_ALLOWED = set(['cookie', 'cookie2', 'set-cookie', 'set-cookie2'])
-
-
 class Headers(dict):
-    """ Storing headers in an easily accessible way and providing cookielib compatibility
-
-        RFC 2616/4.2: Multiple message-header fields with the same field-name MAY be present
-        in a message if and only if the entire field-value for that header field is defined
-        as a comma-separated list.
     """
+    :param headers:
+        An iterable of field-value pairs. Must not contain multiple field names
+        when compared case-insensitively.
+
+    :param kwargs:
+        Additional field-value pairs to pass in to ``dict.update``.
+
+    A ``dict`` like container for storing HTTP Headers.
+
+    Field names are stored and compared case-insensitively in compliance with
+    RFC 7230. Iteration provides the first case-sensitive key seen for each
+    case-insensitive pair.
+
+    Using ``__setitem__`` syntax overwrites fields that compare equal
+    case-insensitively in order to maintain ``dict``'s api. For fields that
+    compare equal, instead create a new ``Headers`` and use ``.add``
+    in a loop.
+
+    If multiple fields that are equal case-insensitively are passed to the
+    constructor or ``.update``, the behavior is undefined and some will be
+    lost.
+
+    >>> headers = Headers()
+    >>> headers.add('Set-Cookie', 'foo=bar')
+    >>> headers.add('set-cookie', 'baz=quxx')
+    >>> headers['content-length'] = '7'
+    >>> headers['SET-cookie']
+    'foo=bar, baz=quxx'
+    >>> headers['Content-Length']
+    '7'
+    """
+
     def __init__(self, headers=None, **kwargs):
         dict.__init__(self)
-        if headers:
-            self.update(headers)
+        if headers is not None:
+            if isinstance(headers, Headers):
+                self._copy_from(headers)
+            else:
+                self.extend(headers)
         if kwargs:
-            self.update(kwargs)
+            self.extend(kwargs)
 
     def __setitem__(self, key, val):
-        """ Ensures only lowercase header names
-        """
-        return _dict_setitem(self, key.lower(), val)
+        return _dict_setitem(self, key.lower(), (key, val))
 
     def __getitem__(self, key):
-        return _dict_getitem(self, key.lower())
+        val = _dict_getitem(self, key.lower())
+        if len(val) == 2:
+            return val[1]
+        return val[1:]
 
     def __delitem__(self, key):
         return _dict_delitem(self, key.lower())
@@ -39,131 +66,158 @@ class Headers(dict):
     def __contains__(self, key):
         return _dict_contains(self, key.lower())
 
-    def iteritems(self):
-        """ Iterates all headers also extracting multiple entries
-        """
-        for key, vals in dict.iteritems(self):
-            if not isinstance(vals, list):
-                yield key, vals
-            else:
-                for val in vals:
-                    yield key, val
+    def __eq__(self, other):
+        if not isinstance(other, Mapping) and not hasattr(other, 'keys'):
+            return False
+        if not isinstance(other, type(self)):
+            other = type(self)(other)
+        return dict((k1, self[k1]) for k1 in self) == dict((k2, other[k2]) for k2 in other)
 
-    def items(self):
-        return list(self.iteritems())
+    def __ne__(self, other):
+        return not self.__eq__(other)
 
-    def __len__(self):
-        return sum(len(vals) if isinstance(vals, list) else 1 for vals in self.itervalues())
-
+    values = MutableMapping.values
     get = MutableMapping.get
+    update = MutableMapping.update
+    iterkeys = MutableMapping.iterkeys
+    itervalues = MutableMapping.itervalues
 
-    def add(self, key, val):
-        """ Insert new header lines to the container. This method creates lists only for multiple,
-            not for single lines. This minimizes the overhead for the common case and optimizes the
-            total parsing speed of the headers.
-        """
-        key = key.lower()
-        # Use lower only once and then stick with inbuilt functions for speed
-        cur = _dict_setdefault(self, key, val)
-        if cur is not val:
-            if isinstance(cur, list):
-                # Implicitly allowed
-                cur.append(val)
-            else:
-                if key in MULTIPLE_HEADERS_ALLOWED:
-                    # Only create duplicate headers for meaningful field names,
-                    # else overwrite the field
-                    _dict_setitem(self, key, [cur, val])
-                else:
-                    _dict_setitem(self, key, val)
+    __marker = object()
 
-    def update(self, *args, **kwds):
-        """ Adapted from MutableMapping to use self.add instead of self.__setitem__
-        """
-        if len(args) > 1:
-            raise TypeError("update() takes at most one positional "
-                            "arguments ({} given)".format(len(args)))
+    def pop(self, key, default=__marker):
+        '''D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
+          If key is not found, d is returned if given, otherwise KeyError is raised.
+        '''
+        # Using the MutableMapping function directly fails due to the private marker.
+        # Using ordinary dict.pop would expose the internal structures.
+        # So let's reinvent the wheel.
         try:
-            other = args[0]
-        except IndexError:
-            pass
+            value = self[key]
+        except KeyError:
+            if default is self.__marker:
+                raise
+            return default
         else:
-            if isinstance(other, Mapping):
-                for key in other:
-                    self.add(key, other[key])
-            elif hasattr(other, "keys"):
-                for key in other.keys():
-                    self.add(key, other[key])
-            else:
-                for key, value in other:
-                    self.add(key, value)
-
-        for key, value in kwds.items():
-            self.add(key, value)
-
-    def getheaders(self, key):
-        """ Compatibility with urllib/cookielib: Always return lists
-        """
-        ret = dict.get(self, key.lower(), [])
-        if isinstance(ret, list):
-            return ret
-        else:
-            return [ret]
-
-    get = MutableMapping.get
-    pop = MutableMapping.pop    
-        
-    getallmatchingheaders = getheaders
-    iget = getheaders
-
-    # Compatibility with urllib3
-    getlist = getheaders
+            del self[key]
+            return value
 
     def discard(self, key):
         try:
-            self.__delitem__(key)
+            del self[key]
         except KeyError:
             pass
 
-    @staticmethod
-    def _format_field(field):
-        return '-'.join(field_pt.capitalize() for field_pt in field.split('-'))
+    def add(self, key, val):
+        """Adds a (name, value) pair, doesn't overwrite the value if it already
+        exists.
 
-    def pretty_items(self):
-        for key, vals in dict.iteritems(self):
-            key = self._format_field(key)
-            if not isinstance(vals, list):
-                yield key, vals
+        >>> headers = Headers(foo='bar')
+        >>> headers.add('Foo', 'baz')
+        >>> headers['foo']
+        'bar, baz'
+        """
+        key_lower = key.lower()
+        new_vals = key, val
+        # Keep the common case aka no item present as fast as possible
+        vals = _dict_setdefault(self, key_lower, new_vals)
+        if new_vals is not vals:
+            # new_vals was not inserted, as there was a previous one
+            if isinstance(vals, list):
+                # If already several items got inserted, we have a list
+                vals.append(val)
             else:
-                for val in vals:
-                    yield key, val
+                # vals should be a tuple then, i.e. only one item so far
+                # Need to convert the tuple to list for further extension
+                _dict_setitem(self, key_lower, [vals[0], vals[1], val])
 
-    def __str__(self):
-        return pprint.pformat(self.pretty_items())
+    def extend(self, *args, **kwargs):
+        """Generic import function for any type of header-like object.
+        Adapted version of MutableMapping.update in order to insert items
+        with self.add instead of self.__setitem__
+        """
+        if len(args) > 1:
+            raise TypeError("extend() takes at most 1 positional "
+                            "arguments ({} given)".format(len(args)))
+        other = args[0] if len(args) >= 1 else ()
         
+        if isinstance(other, Headers):
+            for key, val in other.iteritems():
+                self.add(key, val)
+        elif isinstance(other, Mapping):
+            for key in other:
+                self.add(key, other[key])
+        elif hasattr(other, "keys"):
+            for key in other.keys():
+                self.add(key, other[key])
+        else:
+            for key, value in other:
+                self.add(key, value)
+
+        for key, value in kwargs.items():
+            self.add(key, value)
+
+    def getlist(self, key):
+        """Returns a list of all the values for the named field. Returns an
+        empty list if the key doesn't exist."""
+        try:
+            vals = _dict_getitem(self, key.lower())
+        except KeyError:
+            return []
+        else:
+            if isinstance(vals, tuple):
+                return [vals[1]]
+            else:
+                return vals[1:]
+
+    # Backwards compatibility for httplib
+    getheaders = getlist
+    getallmatchingheaders = getlist
+    iget = getlist
+
     def __repr__(self):
-        return "%s(%s)" % (type(self).__name__, self.compatible_dict())
+        return "%s(%s)" % (type(self).__name__, dict(self.itermerged()))
+
+    def _copy_from(self, other):
+        for key in other:
+            val = _dict_getitem(other, key)
+            if isinstance(val, list):
+                # Don't need to convert tuples
+                val = list(val)
+            _dict_setitem(self, key, val)
 
     def copy(self):
         clone = type(self)()
-        for key in self:
-            val = _dict_getitem(self, key)
-            if isinstance(val, list):
-                val = list(val)
-            _dict_setitem(clone, key, val)
+        clone._copy_from(self)
         return clone
 
-    def compatible_dict(self):
-        """ If the client performing the request is not adjusted for this class, this function
-            can create a backwards and standards compatible version containing comma joined
-            strings instead of lists for multiple headers.
-        """
-        ret = dict()
+    def itermerged(self):
+        """Iterate over all headers, merging duplicate ones together."""
         for key in self:
-            val = self[key]
-            key = self._format_field(key)
-            if isinstance(val, list):
-                val = ', '.join(val)
-            ret[key] = val
-        return ret
+            val = _dict_getitem(self, key)
+            yield val[0], ', '.join(val[1:])
+
+    # Extensions to urllib3, compatibility to previous implementation
+    def __len__(self):
+        return sum(len(self.getlist(key)) for key in self)
+    
+    def compatible_dict(self):
+        return dict(self.itermerged())
+    
+    def iterlower(self):
+        for key in self:
+            vals = _dict_getitem(self, key)
+            for val in vals[1:]:
+                yield key, val
+    
+    iteritems = iterlower
+    
+    def items(self):
+        return list(self.iterlower())
+    
+    def iteroriginal(self):
+        """Iterate over all header lines, including duplicate ones."""
+        for key in self:
+            vals = _dict_getitem(self, key)
+            for val in vals[1:]:
+                yield vals[0], val
 
