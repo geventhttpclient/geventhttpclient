@@ -36,7 +36,7 @@ class URL(object):
 
     __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment', 'user', 'password')
     quoting_safe = ''
-    
+
     def __init__(self, url=None):
         if url is not None:
             scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
@@ -54,7 +54,7 @@ class URL(object):
                     user, password = user_pw.rsplit(':', 1)
                 else:
                     user = user_pw
-            
+
             if netloc.startswith('['):
                 host, port_pt = netloc.rsplit(']', 1)
                 host = host.strip('[]')
@@ -66,17 +66,16 @@ class URL(object):
                     port = int(port)
                 else:
                     host = netloc
-        
+
         if not port:
             port = DEFAULT_PORTS.get(self.scheme)
-        
+
         self.host = host
         self.port = port
         self.user = user
         self.password = password
 
-        if path:
-            self.path = path
+        self.path = path or ''
 
         self.query = dict()
         for key, value in urlparse.parse_qs(query).iteritems():
@@ -84,11 +83,11 @@ class URL(object):
                 self.query[key] = value
             else:
                 self.query[key] = value[0]
-    
+
     @property
     def netloc(self):
         return self.full_netloc(auth=False)
-    
+
     def full_netloc(self, auth=True):
         buf = ''
         if self.user and auth:
@@ -96,7 +95,7 @@ class URL(object):
             if self.passwort:
                 buf += ':' + self.passwort
             buf += '@'
-        
+
         if ':' in self.host:
             buf += '[' + self.host + ']'
         else:
@@ -188,7 +187,7 @@ class URL(object):
             else:
                 other.path = self.path.rsplit('/', 1)[0] + '/' + other.path
         return other
-    
+
     def stripped_auth(self):
         """ Remove fragment and authentication for proxy handling """
         clone = type(self)()

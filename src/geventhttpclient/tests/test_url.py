@@ -19,7 +19,7 @@ def test_path_only():
     assert url.path == '/path/to/something'
     assert url['param'] == 'value'
     assert url['other'] == 'true'
-    
+
 def test_empty():
     url = URL()
     assert url.host == ''
@@ -29,13 +29,16 @@ def test_empty():
     assert url.netloc == ''
     assert str(url) == 'http:///'
 
+def test_empty_path():
+    assert URL('http://getgauss.com').path == ''
+
 def test_consistent_reparsing():
     for surl in (url_full, url_path_only):
         url = URL(surl)
         reparsed = URL(str(url))
         for attr in URL.__slots__:
             assert getattr(reparsed, attr) == getattr(url, attr)
-            
+
 def test_redirection_abs_path():
     url = URL(url_full)
     updated = url.redirect('/test.html')
@@ -44,7 +47,7 @@ def test_redirection_abs_path():
     assert updated.path == '/test.html'
     assert updated.query == {}
     assert updated.fragment == ''
-    
+
 def test_redirection_rel_path():
     url = URL(url_full)
     for redir in ('test.html?key=val', 'folder/test.html?key=val'):
@@ -55,7 +58,7 @@ def test_redirection_rel_path():
         assert updated.path.endswith(redir.split('?', 1)[0])
         assert updated.query == {'key': 'val'}
         assert updated.fragment == ''
-    
+
 def test_redirection_full_path():
     url_full2_plain = 'http://google.de/index'
     url = URL(url_full)
@@ -64,7 +67,7 @@ def test_redirection_full_path():
     for attr in URL.__slots__:
         assert getattr(updated, attr) == getattr(url_full2, attr)
     assert str(url_full2) == url_full2_plain
-    
+
 def test_set_safe_encoding():
     class SafeModURL(URL):
         quoting_safe = '*'
@@ -99,16 +102,15 @@ def test_ipv6():
     assert url.host == '2001:db8:85a3:8d3:1319:8a2e:370:7348'
     assert url.port == 80
     assert url.user == None
-    
+
 def test_ipv6_with_port():
     url = URL('https://[2001:db8:85a3:8d3:1319:8a2e:370:7348]:8080/')
     assert url.host == '2001:db8:85a3:8d3:1319:8a2e:370:7348'
     assert url.port == 8080
     assert url.user == None
-    
+
 if __name__ == '__main__':
     test_redirection_abs_path()
     test_redirection_rel_path()
     test_redirection_full_path()
     test_ipv6_with_port()
-    
