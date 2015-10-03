@@ -160,7 +160,10 @@ class ConnectionPool(object):
 
 try:
     import gevent.ssl
-    from backports.ssl_match_hostname import match_hostname
+    try:
+        from gevent.ssl import match_hostname
+    except ImportError:
+        from backports.ssl_match_hostname import match_hostname
 except ImportError:
     pass
 else:

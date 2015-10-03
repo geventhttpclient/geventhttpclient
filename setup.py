@@ -26,12 +26,12 @@ httpparser = Extension('geventhttpclient._parser',
 
 requirements = [
     'gevent >= 0.13',
+    'certifi',
 ]
 
 if sys.hexversion < 0x02070900:
     requirements += [
-        "backports.ssl_match_hostname",
-        "certifi"
+        'backports.ssl_match_hostname',
     ]
 
 

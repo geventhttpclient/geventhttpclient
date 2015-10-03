@@ -5,7 +5,10 @@ import gevent.socket
 import gevent.ssl
 import os.path
 from geventhttpclient import HTTPClient
-from backports.ssl_match_hostname import CertificateError
+try:
+    from ssl import CertificateError
+except ImportError:
+    from backports.ssl_match_hostname import CertificateError
 
 BASEDIR = os.path.dirname(__file__)
 KEY = os.path.join(BASEDIR, 'server.key')
