@@ -157,15 +157,14 @@ class HTTPClient(object):
             sock = self._connection_pool.get_socket()
             try:
                 sock.sendall(request)
+                if body:
+                    sock.sendall(body)
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if (e.errno == errno.ECONNRESET or e.errno == errno.EPIPE) and attempts_left > 0:
                     attempts_left -= 1
                     continue
                 raise e
-
-            if body:
-                sock.sendall(body)
 
             try:
                 response = HTTPSocketPoolResponse(sock, self._connection_pool,
