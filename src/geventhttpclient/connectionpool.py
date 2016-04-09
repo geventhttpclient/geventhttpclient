@@ -1,5 +1,8 @@
 import gevent.queue
 import gevent.socket
+import os
+
+_CA_CERTS = None
 
 try:
     from ssl import get_default_verify_paths
@@ -9,7 +12,7 @@ else:
     _certs = get_default_verify_paths()
     _CA_CERTS = _certs.cafile or _certs.capath
 
-if not _CA_CERTS:
+if not _CA_CERTS or os.path.isdir(_CA_CERTS):
     import certifi
     _CA_CERTS = certifi.where()
 
@@ -169,7 +172,7 @@ except ImportError:
 else:
     class SSLConnectionPool(ConnectionPool):
         """ SSLConnectionPool creates connections wrapped with SSL/TLS.
-    
+
         :param host: hostname
         :param port: port
         :param ssl_options: accepts any options supported by `ssl.wrap_socket`
