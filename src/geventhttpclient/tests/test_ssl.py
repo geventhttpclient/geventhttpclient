@@ -20,6 +20,8 @@ listener = ('127.0.0.1', 54323)
 
 @contextmanager
 def server(handler, backlog=1):
+    if six.PY3:
+        gevent.sleep(10)
     server = gevent.server.StreamServer(
         listener,
         backlog=backlog,
@@ -34,6 +36,8 @@ def server(handler, backlog=1):
 
 @contextmanager
 def timeout_connect_server():
+    if six.PY3:
+        gevent.sleep(10)
     sock = gevent.socket.socket(gevent.socket.AF_INET,
         gevent.socket.SOCK_STREAM, 0)
     sock = gevent.ssl.wrap_socket(sock, keyfile=KEY, certfile=CERT)
