@@ -1,5 +1,9 @@
+import six
 import pytest
-from httplib import HTTPException #@UnresolvedImport
+if six.PY2:
+    from httplib import HTTPException
+else:
+    from http.client import HTTPException
 from geventhttpclient import HTTPClient
 import gevent.server
 import gevent.socket
@@ -7,7 +11,7 @@ from contextlib import contextmanager
 
 CRLF = "\r\n"
 
-listener = ('127.0.0.1', 54323)
+listener = ('127.0.0.1', 54326)
 
 @contextmanager
 def server(handler):
@@ -22,7 +26,7 @@ def server(handler):
 
 def wrong_response_status_line(sock, addr):
     sock.recv(4096)
-    sock.sendall('HTTP/1.1 apfais df0 asdf\r\n\r\n')
+    sock.sendall(b'HTTP/1.1 apfais df0 asdf\r\n\r\n')
 
 def test_exception():
     with server(wrong_response_status_line):
@@ -70,7 +74,7 @@ def test_timeout_send():
 
 def close_during_content(sock, addr):
     sock.recv(4096)
-    sock.sendall("""HTTP/1.1 200 Ok\r\nContent-Length: 100\r\n\r\n""")
+    sock.sendall(b"""HTTP/1.1 200 Ok\r\nContent-Length: 100\r\n\r\n""")
     sock.close()
 
 def test_close_during_content():
@@ -82,7 +86,7 @@ def test_close_during_content():
 
 def content_too_small(sock, addr):
     sock.recv(4096)
-    sock.sendall("""HTTP/1.1 200 Ok\r\nContent-Length: 100\r\n\r\ncontent""")
+    sock.sendall(b"""HTTP/1.1 200 Ok\r\nContent-Length: 100\r\n\r\ncontent""")
     gevent.sleep(10)
 
 def test_content_too_small():
@@ -94,7 +98,7 @@ def test_content_too_small():
 
 def close_during_chuncked_readline(sock, addr):
     sock.recv(4096)
-    sock.sendall('HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n')
+    sock.sendall(b'HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n')
 
     chunks = ['This is the data in the first chunk\r\n',
         'and this is the second one\r\n',
@@ -102,7 +106,7 @@ def close_during_chuncked_readline(sock, addr):
 
     for chunk in chunks:
         gevent.sleep(0.1)
-        sock.sendall(hex(len(chunk))[2:] + CRLF + chunk + CRLF)
+        sock.sendall((hex(len(chunk))[2:] + CRLF + chunk + CRLF).encode())
     sock.close()
 
 def test_close_during_chuncked_readline():
@@ -120,14 +124,14 @@ def test_close_during_chuncked_readline():
 
 def timeout_during_chuncked_readline(sock, addr):
     sock.recv(4096)
-    sock.sendall('HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n')
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n")
 
     chunks = ['This is the data in the first chunk\r\n',
         'and this is the second one\r\n',
         'con\r\n']
 
     for chunk in chunks:
-        sock.sendall(hex(len(chunk))[2:] + CRLF + chunk + CRLF)
+        sock.sendall((hex(len(chunk))[2:] + CRLF + chunk + CRLF).encode())
     gevent.sleep(2)
     sock.close()
 

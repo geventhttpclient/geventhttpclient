@@ -1,5 +1,10 @@
-import urlparse
-from urllib import quote_plus
+import six
+if six.PY3:
+    from urllib import parse as urlparse
+    from urllib.parse import quote_plus
+else:
+    import urlparse
+    from urllib import quote_plus
 
 DEFAULT_PORTS = {
     'http': 80,
@@ -78,7 +83,7 @@ class URL(object):
         self.path = path or ''
 
         self.query = dict()
-        for key, value in urlparse.parse_qs(query).iteritems():
+        for key, value in six.iteritems(urlparse.parse_qs(query)):
             if len(value) > 1:
                 self.query[key] = value
             else:
@@ -132,7 +137,7 @@ class URL(object):
     @property
     def query_string(self):
         params = []
-        for key, value in self.query.iteritems():
+        for key, value in six.iteritems(self.query):
             if isinstance(value, list):
                 for item in value:
                     params.append("%s=%s" % (

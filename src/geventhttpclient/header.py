@@ -1,4 +1,5 @@
 from collections import Mapping, MutableMapping
+import six
 
 _dict_setitem = dict.__setitem__
 _dict_getitem = dict.__getitem__
@@ -79,8 +80,12 @@ class Headers(dict):
     values = MutableMapping.values
     get = MutableMapping.get
     update = MutableMapping.update
-    iterkeys = MutableMapping.iterkeys
-    itervalues = MutableMapping.itervalues
+    if six.PY3:
+        keys = MutableMapping.keys
+    else:
+        iterkeys = MutableMapping.iterkeys
+    if six.PY2:
+        itervalues = MutableMapping.itervalues
 
     __marker = object()
 
@@ -173,6 +178,14 @@ class Headers(dict):
     getheaders = getlist
     getallmatchingheaders = getlist
     iget = getlist
+
+    # Python3 compatibility
+    def get_all(self, key, failobj=None):
+        vals = self.getlist(key)
+        if not vals:
+            return failobj
+        return vals
+
 
     def __repr__(self):
         return "%s(%s)" % (type(self).__name__, dict(self.itermerged()))

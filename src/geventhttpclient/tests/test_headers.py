@@ -1,11 +1,17 @@
+import six
+from six.moves import xrange
 import gevent
 import gevent.monkey
 gevent.monkey.patch_all()
 
 import pytest
 
-from cookielib import CookieJar
-from urllib2 import Request
+if six.PY2:
+    from cookielib import CookieJar
+    from urllib2 import Request
+else:
+    from http.cookiejar import CookieJar
+    from urllib.request import Request
 import string
 import random
 import time
@@ -106,7 +112,7 @@ def test_cookielib_compatibility():
     # Set time in order to be still valid in some years, when cookie strings expire
     cj._now = cj._policy._now = time.mktime((2012, 1, 1, 0, 0, 0, 0, 0, 0))
 
-    request = Request('')
+    request = Request('http://test.com')
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
     cookies = cj.make_cookies(parser, request)
@@ -121,8 +127,8 @@ def test_compatibility_with_previous_API_read():
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
     for single_item in ('content-encoding', 'content-type', 'content-length', 'cache-control', 'connection'):
-        assert isinstance(parser[single_item], basestring)
-        assert isinstance(parser.get(single_item), basestring)
+        assert isinstance(parser[single_item], six.string_types)
+        assert isinstance(parser.get(single_item), six.string_types)
 
 def test_compatibility_with_previous_API_write():
     h = Headers()

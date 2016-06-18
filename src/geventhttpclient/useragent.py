@@ -6,6 +6,7 @@ import zlib
 import os
 import cStringIO
 from urllib import urlencode
+from six.moves import xrange
 
 import gevent
 try:

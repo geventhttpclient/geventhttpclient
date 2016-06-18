@@ -11,3 +11,6 @@ bin/
 .project
 .pydevproject
 .settings/
+dist/
+.tox
+.cache

@@ -1,5 +1,7 @@
+import six
 import errno
-from geventhttpclient._parser import HTTPResponseParser, HTTPParseError #@UnresolvedImport
+from geventhttpclient._parser import HTTPResponseParser
+from geventhttpclient._parser import HTTPParseError
 from geventhttpclient.header import Headers
 import gevent.socket
 
@@ -8,6 +10,13 @@ HEADER_STATE_INIT = 0
 HEADER_STATE_FIELD = 1
 HEADER_STATE_VALUE = 2
 HEADER_STATE_DONE = 3
+
+
+def copy(data):
+    if six.PY3:
+        return data[:]
+    else:
+        return str(data)
 
 
 class HTTPConnectionClosed(HTTPParseError):
@@ -79,7 +88,10 @@ class HTTPResponse(HTTPResponseParser):
     def content_length(self):
         length = self.get('content-length', None)
         if length is not None:
-            return long(length)
+            if six.PY3:
+                return int(length)
+            else:
+                return long(length)
 
     @property
     def length(self):
@@ -198,11 +210,11 @@ class HTTPSocketResponse(HTTPResponse):
             self.release()
             raise
 
-    def readline(self, sep="\r\n"):
+    def readline(self, sep=b"\r\n"):
         cursor = 0
         multibyte = len(sep) > 1
         while True:
-            cursor = self._body_buffer.find(sep[0], cursor)
+            cursor = self._body_buffer.find(sep[0:1], cursor)
             if cursor >= 0:
                 found = True
                 if multibyte:
@@ -213,14 +225,14 @@ class HTTPSocketResponse(HTTPResponse):
                         found = False
                 if found:
                     length = cursor + len(sep)
-                    line = str(self._body_buffer[:length])
+                    line = copy(self._body_buffer[:length])
                     del self._body_buffer[:length]
                     cursor = 0
                     return line
             else:
                 cursor = 0
             if self.message_complete:
-                return ''
+                return b''
             try:
                 data = self._sock.recv(self.block_size)
                 self.feed(data)
@@ -234,10 +246,10 @@ class HTTPSocketResponse(HTTPResponse):
         if length is not None and len(self._body_buffer) >= length:
             read = self._body_buffer[0:length]
             del self._body_buffer[0:length]
-            return str(read)
+            return copy(read)
 
         if self._sock is None:
-            read = str(self._body_buffer)
+            read = copy(self._body_buffer)
             del self._body_buffer[:]
             return read
 
@@ -251,11 +263,11 @@ class HTTPSocketResponse(HTTPResponse):
             raise
 
         if length is not None:
-            read = str(self._body_buffer[0:length])
+            read = copy(self._body_buffer[0:length])
             del self._body_buffer[0:length]
             return read
 
-        read = str(self._body_buffer)
+        read = copy(self._body_buffer)
         del self._body_buffer[:]
         return read
 

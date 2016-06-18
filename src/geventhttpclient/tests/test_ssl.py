@@ -1,3 +1,4 @@
+import six
 from contextlib import contextmanager
 import pytest
 import gevent.server
@@ -56,7 +57,7 @@ def timeout_connect_server():
 
 def simple_ssl_response(sock, addr):
     sock.recv(1024)
-    sock.sendall('HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n')
+    sock.sendall(b'HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n')
     sock.close()
 
 def test_simple_ssl():
@@ -68,7 +69,7 @@ def test_simple_ssl():
 
 def timeout_on_connect(sock, addr):
     sock.recv(1024)
-    sock.sendall('HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
+    sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
 
 def test_timeout_on_connect():
     with timeout_connect_server():
@@ -105,15 +106,21 @@ def test_timeout_on_connect():
 def network_timeout(sock, addr):
     sock.recv(1024)
     gevent.sleep(10)
-    sock.sendall('HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
+    sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
 
 def test_network_timeout():
     with server(network_timeout):
         http = HTTPClient(*listener, ssl=True, insecure=True,
             network_timeout=0.1, ssl_options={'ca_certs': CERT})
-        with pytest.raises(gevent.ssl.SSLError):
-            response = http.get('/')
-            assert response.status_code == 0, 'should have timed out.'
+        if six.PY3:
+            with pytest.raises(gevent.socket.timeout):
+                response = http.get('/')
+                assert response.status_code == 0, 'should have timed out.'
+        else:
+            with pytest.raises(gevent.ssl.SSLError):
+                response = http.get('/')
+                assert response.status_code == 0, 'should have timed out.'
+
 
 def test_verify_hostname():
     with server(simple_ssl_response):

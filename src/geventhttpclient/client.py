@@ -1,3 +1,4 @@
+import six
 import errno
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.response import HTTPSocketPoolResponse
@@ -156,9 +157,12 @@ class HTTPClient(object):
         while 1:
             sock = self._connection_pool.get_socket()
             try:
-                sock.sendall(request)
+                sock.sendall(request.encode())
                 if body:
-                    sock.sendall(body)
+                    if type(body) == six.text_type:
+                        sock.sendall(body.encode('iso-8859-1'))
+                    else:
+                        sock.sendall(body)
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if (e.errno == errno.ECONNRESET or e.errno == errno.EPIPE) and attempts_left > 0:

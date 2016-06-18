@@ -7,6 +7,7 @@ from gevent.ssl import SSLError #@UnresolvedImport
 import gevent.pool
 
 import gevent.server
+from six.moves import xrange
 
 
 listener = ('127.0.0.1', 54323)
@@ -84,7 +85,7 @@ def test_client_ssl():
 
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "onecert.pem")
+        os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
     client = HTTPClient('www.google.fr', ssl_options={'ca_certs': certs})
     assert client.port == 443
     with pytest.raises(SSLError):
@@ -117,13 +118,13 @@ class StreamTestIterator(object):
                  'index': i,
                  'title': 'this is line %d' % i})
                  for i in xrange(0, count)]
-        self.buf = sep.join(lines) + sep
-        self.cursor = 0
+        self.buf = (sep.join(lines) + sep).encode()
 
     def __len__(self):
         return len(self.buf)
 
     def __iter__(self):
+        self.cursor = 0
         return self
 
     def next(self):
@@ -137,11 +138,14 @@ class StreamTestIterator(object):
 
         return data
 
+    def __next__(self):
+        return self.next()
+
 
 def readline_iter(sock, addr):
     sock.recv(1024)
     iterator = StreamTestIterator("\n", 100)
-    sock.sendall("HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
     for block in iterator:
         sock.sendall(block)
 
@@ -151,18 +155,18 @@ def test_readline():
         response = client.get('/')
         lines = []
         while True:
-            line = response.readline("\n")
+            line = response.readline(b"\n")
             if not line:
                 break
-            data = json.loads(line[:-1])
+            data = json.loads(line[:-1].decode())
             lines.append(data)
         assert len(lines) == 100
-        assert map(lambda x: x['index'], lines) == range(0, 100)
+        assert [x['index'] for x in lines] == [x for x in range(0, 100)]
 
 def readline_multibyte_sep(sock, addr):
     sock.recv(1024)
     iterator = StreamTestIterator("\r\n", 100)
-    sock.sendall("HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
     for block in iterator:
         sock.sendall(block)
 
@@ -172,20 +176,20 @@ def test_readline_multibyte_sep():
         response = client.get('/')
         lines = []
         while True:
-            line = response.readline("\r\n")
+            line = response.readline(b"\r\n")
             if not line:
                 break
-            data = json.loads(line[:-1])
+            data = json.loads(line[:-1].decode())
             lines.append(data)
         assert len(lines) == 100
-        assert map(lambda x: x['index'], lines) == range(0, 100)
+        assert [x['index'] for x in lines] == [x for x in range(0, 100)]
 
 def readline_multibyte_splitsep(sock, addr):
     sock.recv(1024)
-    sock.sendall("HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
-    sock.sendall('{"a": 1}\r')
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
+    sock.sendall(b'{"a": 1}\r')
     gevent.sleep(0)
-    sock.sendall('\n{"a": 2}\r\n{"a": 3}\r\n')
+    sock.sendall(b'\n{"a": 2}\r\n{"a": 3}\r\n')
 
 def test_readline_multibyte_splitsep():
     with server(readline_multibyte_splitsep):
@@ -194,10 +198,10 @@ def test_readline_multibyte_splitsep():
         lines = []
         last_index = 0
         while True:
-            line = response.readline("\r\n")
+            line = response.readline(b"\r\n")
             if not line:
                 break
-            data = json.loads(line[:-2])
+            data = json.loads(line[:-2].decode())
             assert data['a'] == last_index + 1
             last_index = data['a']
         len(lines) == 3
@@ -213,7 +217,7 @@ def internal_server_error(sock, addr):
            '</head>\n  <body>\n    <h1>Internal Server Error</h1>\n    \n  ' \
            '</body>\n</html>\n\n'
 
-    sock.sendall(head + body)
+    sock.sendall((head + body).encode())
     sock.close()
 
 def test_internal_server_error():

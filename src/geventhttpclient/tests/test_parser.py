@@ -1,10 +1,16 @@
+import six
 from geventhttpclient.response import HTTPResponse
 from geventhttpclient._parser import HTTPParseError
-from cStringIO import StringIO
+if six.PY3:
+    from io import StringIO
+else:
+    from cStringIO import StringIO
 import pytest
 
 from functools import wraps
 import sys
+from six.moves import xrange
+
 
 RESPONSE = 'HTTP/1.1 301 Moved Permanently\r\nLocation: http://www.google.fr/\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Thu, 13 Oct 2011 15:03:12 GMT\r\nExpires: Sat, 12 Nov 2011 15:03:12 GMT\r\nCache-Control: public, max-age=2592000\r\nServer: gws\r\nContent-Length: 218\r\nX-XSS-Protection: 1; mode=block\r\n\r\n<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF="http://www.google.fr/">here</A>.\r\n</BODY></HTML>\r\n'
 

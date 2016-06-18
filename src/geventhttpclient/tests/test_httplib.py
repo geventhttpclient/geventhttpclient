@@ -1,5 +1,10 @@
+import six
 import pytest
-from httplib import HTTPException
+if six.PY2:
+    from httplib import HTTPException
+else:
+    from http.client import HTTPException
+
 from geventhttpclient.httplib import HTTPConnection
 import gevent.server
 from contextlib import contextmanager
@@ -19,7 +24,7 @@ def server(handler):
 
 def wrong_response_status_line(sock, addr):
     sock.recv(4096)
-    sock.sendall('HTTP/1.1 apfais df0 asdf\r\n\r\n')
+    sock.sendall(b'HTTP/1.1 apfais df0 asdf\r\n\r\n')
 
 def test_httplib_exception():
     with server(wrong_response_status_line):
@@ -30,12 +35,12 @@ def test_httplib_exception():
 
 def success_response(sock, addr):
     sock.recv(4096)
-    sock.sendall("HTTP/1.1 200 Ok\r\n"
-                 "Content-Type: text/plain\r\n"
-                 "Set-Cookie: foo=bar\r\n"
-                 "Set-Cookie: baz=bar\r\n"
-                 "Content-Length: 12\r\n\r\n"
-                 "Hello World!")
+    sock.sendall(b"HTTP/1.1 200 Ok\r\n"
+                 b"Content-Type: text/plain\r\n"
+                 b"Set-Cookie: foo=bar\r\n"
+                 b"Set-Cookie: baz=bar\r\n"
+                 b"Content-Length: 12\r\n\r\n"
+                 b"Hello World!")
 
 def test_success_response():
     with server(success_response):
@@ -45,7 +50,7 @@ def test_success_response():
         assert response.should_keep_alive()
         assert response.message_complete
         assert not response.should_close()
-        assert response.read() == 'Hello World!'
+        assert response.read().decode() == 'Hello World!'
         assert response.content_length == 12
 
 def test_msg():

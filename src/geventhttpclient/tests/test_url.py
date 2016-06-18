@@ -1,3 +1,4 @@
+import six
 from geventhttpclient.url import URL
 
 url_full = 'http://getgauss.com/subdir/file.py?param=value&other=true#frag'
@@ -73,10 +74,10 @@ def test_set_safe_encoding():
         quoting_safe = '*'
     surl = '/path/to/something?param=value&other=*'
 
-    assert URL(surl).query_string == 'other=%2A&param=value'
-    assert SafeModURL(surl).query_string == 'other=*&param=value'
+    assert URL(surl).query_string == 'other=%2A&param=value' or  URL(surl).query_string == 'param=value&other=%2A'
+    assert SafeModURL(surl).query_string == 'other=*&param=value' or SafeModURL(surl).query_string == 'param=value&other=*'
     URL.quoting_safe = '*'
-    assert URL(surl).query_string == 'other=*&param=value'
+    assert URL(surl).query_string == 'other=*&param=value' or URL(surl).query_string == 'param=value&other=*'
     URL.quoting_safe = ''
 
 def test_equality():

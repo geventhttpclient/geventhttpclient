@@ -177,7 +177,7 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
 {
     char* buf = NULL;
     Py_ssize_t buf_len;
-    int succeed = PyArg_ParseTuple(args, "t#", &buf, &buf_len);
+    int succeed = PyArg_ParseTuple(args, "s#", &buf, &buf_len);
     /* cast Py_ssize_t signed integer to unsigned */
     size_t unsigned_buf_len = buf_len + size_t_MAX + 1;
     if (succeed) {
@@ -210,12 +210,21 @@ PyHTTPResponseParser_parser_failed(PyHTTPResponseParser* self)
     Py_RETURN_FALSE;
 }
 
+#if PY_MAJOR_VERSION >= 3
+static PyObject*
+PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
+{
+    return PyUnicode_FromFormat("HTTP/%u.%u", self->parser->http_major,
+        self->parser->http_minor);
+}
+#else
 static PyObject*
 PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
 {
     return PyString_FromFormat("HTTP/%u.%u", self->parser->http_major,
         self->parser->http_minor);
 }
+#endif
 
 static PyObject*
 PyHTTPResponseParser_get_remaining_content_length(PyHTTPResponseParser *self)
@@ -269,8 +278,7 @@ static PyMethodDef PyHTTPResponseParser_methods[] = {
 };
 
 static PyTypeObject HTTPParserType = {
-    PyObject_HEAD_INIT(NULL)
-    0,                         /*ob_size*/
+    PyVarObject_HEAD_INIT(NULL, 0)
     "HTTPResponseParser",      /*tp_name*/
     sizeof(PyHTTPResponseParser),      /*tp_basicsize*/
     0,                         /*tp_itemsize*/
@@ -314,30 +322,56 @@ static PyMethodDef module_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-#ifndef PyMODINIT_FUNC /* declarations for DLL import/export */
-#define PyMODINIT_FUNC void
-#endif
+#if PY_MAJOR_VERSION >= 3
+static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "_parser",
+        "HTTP Parser from nginx/Joyent.",
+        0,
+        module_methods,
+        NULL,
+        NULL,
+        NULL,
+        NULL
+};
+
+#define INITERROR return NULL
 PyMODINIT_FUNC
+PyInit__parser(void)
+
+#else
+#define INITERROR return
+void
 init_parser(void)
+#endif
 {
-    PyObject* module;
-
     if (PyType_Ready(&HTTPParserType) < 0)
-        return;
+        INITERROR;
 
-    module = Py_InitModule3("_parser", module_methods,
+    #if PY_MAJOR_VERSION >= 3
+    PyObject *module = PyModule_Create(&moduledef);
+    #else
+    PyObject* module = Py_InitModule3("_parser", module_methods,
                        "HTTP Parser from nginx/Joyent.");
+    #endif
 
     Py_INCREF(&HTTPParserType);
     PyModule_AddObject(module, "HTTPResponseParser", (PyObject *)&HTTPParserType);
 
+    #if PY_MAJOR_VERSION >= 3
+    PyObject* httplib = PyImport_ImportModule("http.client");
+    #else
     PyObject* httplib = PyImport_ImportModule("httplib");
+    #endif
     PyObject* HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
 
     PyExc_HTTPParseError = PyErr_NewException(
             "_parser.HTTPParseError", HTTPException, NULL);
     Py_INCREF(PyExc_HTTPParseError);
     PyModule_AddObject(module, "HTTPParseError", PyExc_HTTPParseError);
+    #if PY_MAJOR_VERSION >= 3
+    return  module;
+    #endif
 }
 
 #undef PY_SSIZE_T_CLEAN

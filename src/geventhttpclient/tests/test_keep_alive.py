@@ -50,7 +50,7 @@ def test_close_connection_and_no_content_length():
     response.feed("HTTP/1.1 200 Ok\r\n"
                 "Connection: close\r\n\r\n"
                 "Hello World!")
-    assert response._body_buffer == bytearray("Hello World!")
+    assert response._body_buffer == bytearray(b"Hello World!")
     assert not response.should_keep_alive()
     assert response.should_close()
 
