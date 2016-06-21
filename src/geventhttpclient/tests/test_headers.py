@@ -68,7 +68,7 @@ def test_create_from_kwargs():
 def test_create_from_iterator():
     h = Headers((x, x*5) for x in string.ascii_lowercase)
     assert len(h) == len(string.ascii_lowercase)
-    
+
 def test_create_from_dict():
     h = Headers(dict(ab=1, cd=2, ef=3, gh=4))
     assert len(h) == 4
@@ -130,7 +130,7 @@ def test_compatibility_with_previous_API_write():
     h['asdf'] = 'dfdf'
     # Lists only if necessary
     assert h['asdf'] == 'dfdf'
-    
+
 def test_copy():
     rnd_txt = lambda length: ''.join(random.choice(string.ascii_letters) for _ in xrange(length))
     h = Headers((rnd_txt(10), rnd_txt(50)) for _ in xrange(100))
@@ -145,7 +145,7 @@ def test_copy():
         c[rnd_key] = rnd_txt(10)
         assert rnd_key in c
         assert rnd_key not in h
-    
+
 def test_fieldname_string_enforcement():
     with pytest.raises(Exception):
         Headers({3: 3})
@@ -156,7 +156,7 @@ def test_fieldname_string_enforcement():
         h.add(3, 4)
     with pytest.raises(Exception):
         del h[3]
-        
+
 def test_header_replace():
     d = {}
     d['Content-Type'] = "text/plain"

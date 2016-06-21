@@ -54,8 +54,8 @@ class EmptyResponse(ConnectionError):
 
 
 class CompatRequest(object):
-    """ urllib / cookielib compatible request class. 
-        See also: http://docs.python.org/library/cookielib.html 
+    """ urllib / cookielib compatible request class.
+        See also: http://docs.python.org/library/cookielib.html
     """
     def __init__(self, url, method='GET', headers=None, payload=None):
         self.set_url(url)
@@ -85,7 +85,7 @@ class CompatRequest(object):
         return self.original_host
 
     def is_unverifiable(self):
-        """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented! 
+        """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!
         """
         return False
 
@@ -100,17 +100,17 @@ class CompatRequest(object):
 
     def add_unredirected_header(self, key, val):
         self.headers.add(key, val)
-        
+
     def _drop_payload(self):
         self.method = 'GET'
         self.payload = None
         for item in ('content-length', 'content-type', 'content-encoding'):
-            self.headers.discard(item) 
-    
+            self.headers.discard(item)
+
     def _drop_cookies(self):
         for item in ('cookie', 'cookie2'):
             self.headers.discard(item)
-            
+
     def redirect(self, code, location):
         """ Modify the request inplace to point to the new location """
         self.set_url(self.url_split.redirect(location))
@@ -120,7 +120,7 @@ class CompatRequest(object):
 
 
 class CompatResponse(object):
-    """ Adapter for urllib responses with some extensions 
+    """ Adapter for urllib responses with some extensions
     """
     __slots__ = 'headers', '_response', '_request', '_sent_request', '_cached_content'
 
@@ -132,14 +132,14 @@ class CompatResponse(object):
 
     @property
     def status(self):
-        """ The returned http status 
+        """ The returned http status
         """
         # TODO: Should be a readable string
         return str(self.status_code)
 
     @property
     def status_code(self):
-        """ The http status code as plain integer 
+        """ The http status code as plain integer
         """
         return self._response.get_code()
 
@@ -148,7 +148,7 @@ class CompatResponse(object):
         return self._response
 
     def read(self, n=None):
-        """ Read n bytes from the response body 
+        """ Read n bytes from the response body
         """
         return self._response.read(n)
 
@@ -172,7 +172,7 @@ class CompatResponse(object):
 
     @property
     def content(self):
-        """ Unzips if necessary and buffers the received body. Careful with large files! 
+        """ Unzips if necessary and buffers the received body. Careful with large files!
         """
         try:
             return self._cached_content
@@ -202,7 +202,7 @@ class CompatResponse(object):
         return ret
 
     def __len__(self):
-        """ The content lengths as should be returned from the headers 
+        """ The content lengths as should be returned from the headers
         """
         try:
             return int(self.headers.getheaders('content-length')[0])
@@ -210,12 +210,12 @@ class CompatResponse(object):
             return len(self.content)
 
     def __nonzero__(self):
-        """ If we have an empty response body, we still don't want to evaluate as false 
+        """ If we have an empty response body, we still don't want to evaluate as false
         """
         return True
 
     def info(self):
-        """ Adaption to cookielib: Alias for headers  
+        """ Adaption to cookielib: Alias for headers
         """
         return self.headers
 
@@ -227,7 +227,7 @@ class CompatResponse(object):
 
 
 class RestkitCompatResponse(CompatResponse):
-    """ Some extra lines to also serve as a drop in replacement for restkit 
+    """ Some extra lines to also serve as a drop in replacement for restkit
     """
     def body_string(self):
         return self.content
@@ -294,7 +294,7 @@ class UserAgent(object):
         return CompatResponse(resp, request=request, sent_request=resp._sent_request)
 
     def _verify_status(self, status_code, url=None):
-        """ Hook for subclassing 
+        """ Hook for subclassing
         """
         if status_code not in self.valid_response_codes:
             raise BadStatusCode(url, code=status_code)
@@ -317,13 +317,13 @@ class UserAgent(object):
         raise e, None, sys.exc_info()[2]
 
     def _handle_retries_exceeded(self, url, last_error=None):
-        """ Hook for subclassing 
+        """ Hook for subclassing
         """
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
     def urlopen(self, url, method='GET', response_codes=valid_response_codes,
                 headers=None, payload=None, to_string=False, debug_stream=None, **kwargs):
-        """ Open an URL, do retries and redirects and verify the status code 
+        """ Open an URL, do retries and redirects and verify the status code
         """
         # POST or GET parameters can be passed in **kwargs
         if kwargs:

@@ -45,7 +45,7 @@ class HTTPResponse(HTTPResponseParser):
 
     def items(self):
         return self._headers_index.items()
-    
+
     def info(self):
         """ Basic cookielib compatibility """
         return self._headers_index
@@ -80,7 +80,7 @@ class HTTPResponse(HTTPResponseParser):
         length = self.get('content-length', None)
         if length is not None:
             return long(length)
-    
+
     @property
     def length(self):
       return self.content_length
@@ -130,7 +130,7 @@ class HTTPResponse(HTTPResponseParser):
 
     def _flush_header(self):
         if self._current_header_field is not None:
-            self._headers_index.add(self._current_header_field, 
+            self._headers_index.add(self._current_header_field,
                                     self._current_header_value)
             self._header_position += 1
             self._current_header_field = None
