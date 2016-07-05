@@ -16,33 +16,27 @@ KEY = os.path.join(BASEDIR, 'server.key')
 CERT = os.path.join(BASEDIR, 'server.crt')
 
 
-listener = ('127.0.0.1', 54323)
-
 @contextmanager
 def server(handler, backlog=1):
-    if six.PY3:
-        gevent.sleep(10)
     server = gevent.server.StreamServer(
-        listener,
+        ("localhost", 0),
         backlog=backlog,
         handle=handler,
         keyfile=KEY,
         certfile=CERT)
     server.start()
     try:
-        yield
+        yield (server.server_host, server.server_port)
     finally:
         server.stop()
 
 @contextmanager
 def timeout_connect_server():
-    if six.PY3:
-        gevent.sleep(10)
     sock = gevent.socket.socket(gevent.socket.AF_INET,
         gevent.socket.SOCK_STREAM, 0)
     sock = gevent.ssl.wrap_socket(sock, keyfile=KEY, certfile=CERT)
     sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1)
-    sock.bind(listener)
+    sock.bind(("localhost", 0))
     sock.listen(1)
 
     def run(sock):
@@ -55,7 +49,8 @@ def timeout_connect_server():
 
     job = gevent.spawn(run, sock)
     try:
-        yield
+        yield sock.getsockname()
+        sock.close()
     finally:
         job.kill()
 
@@ -65,7 +60,7 @@ def simple_ssl_response(sock, addr):
     sock.close()
 
 def test_simple_ssl():
-    with server(simple_ssl_response):
+    with server(simple_ssl_response) as listener:
         http = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={'ca_certs': CERT})
         response = http.get('/')
         assert response.status_code == 200
@@ -76,14 +71,17 @@ def timeout_on_connect(sock, addr):
     sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
 
 def test_timeout_on_connect():
-    with timeout_connect_server():
+    with timeout_connect_server() as listener:
         http = HTTPClient(*listener,
             insecure=True, ssl=True, ssl_options={'ca_certs': CERT})
 
         def run(http, wait_time=100):
-            response = http.get('/')
-            gevent.sleep(wait_time)
-            response.read()
+            try:
+                response = http.get('/')
+                gevent.sleep(wait_time)
+                response.read()
+            except Exception:
+                pass
 
         gevent.spawn(run, http)
         gevent.sleep(0)
@@ -113,7 +111,7 @@ def network_timeout(sock, addr):
     sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
 
 def test_network_timeout():
-    with server(network_timeout):
+    with server(network_timeout) as listener:
         http = HTTPClient(*listener, ssl=True, insecure=True,
             network_timeout=0.1, ssl_options={'ca_certs': CERT})
         if six.PY3:
@@ -127,7 +125,7 @@ def test_network_timeout():
 
 
 def test_verify_hostname():
-    with server(simple_ssl_response):
+    with server(simple_ssl_response) as listener:
         http = HTTPClient(*listener, ssl=True, ssl_options={'ca_certs': CERT})
         with pytest.raises(CertificateError):
             http.get('/')

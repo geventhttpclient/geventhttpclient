@@ -1,9 +1,10 @@
 import six
 from geventhttpclient.response import HTTPResponse
-from geventhttpclient._parser import HTTPParseError
 if six.PY3:
+    from http.client import HTTPException
     from io import StringIO
 else:
+    from httplib import HTTPException
     from cStringIO import StringIO
 import pytest
 
@@ -87,7 +88,7 @@ def test_parse_error():
         response.feed("")
         assert response.status_code, 0
         assert response.message_begun
-    except HTTPParseError as e:
+    except HTTPException as e:
         assert 'invalid HTTP status code' in str(e)
     else:
         assert False, "should have raised"
@@ -96,7 +97,7 @@ def test_parse_error():
 def test_incomplete_response():
     response = HTTPResponse()
     response.feed("""HTTP/1.1 200 Ok\r\nContent-Length:10\r\n\r\n1""")
-    with pytest.raises(HTTPParseError):
+    with pytest.raises(HTTPException):
         response.feed("")
     assert response.should_keep_alive()
     assert response.should_close()
@@ -105,7 +106,7 @@ def test_incomplete_response():
 def test_response_too_long():
     response = HTTPResponse()
     data = """HTTP/1.1 200 Ok\r\nContent-Length:1\r\n\r\ntoolong"""
-    with pytest.raises(HTTPParseError):
+    with pytest.raises(HTTPException):
         response.feed(data)
 
 @wrap_refcount
