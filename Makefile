@@ -19,5 +19,4 @@ dist:
 release:
 	cat release.md
 
-.PHONY: develop
-
+.PHONY: develop dist release test
