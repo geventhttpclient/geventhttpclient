@@ -181,15 +181,18 @@ PyHTTPResponseParser_feed(PyHTTPResponseParser *self, PyObject* args)
     /* cast Py_ssize_t signed integer to unsigned */
     size_t unsigned_buf_len = buf_len + size_t_MAX + 1;
     if (succeed) {
+        size_t nread;
+        PyObject * exception;
+
         /* in case feed is called again after an error occured */
         if (self->parser->http_errno != HPE_OK)
             return set_parser_exception(self->parser);
 
-        size_t nread = http_parser_execute(self->parser,
+        nread = http_parser_execute(self->parser,
                 &_parser_settings, buf, unsigned_buf_len);
 
         /* Exception in callbacks */
-        PyObject * exception = PyErr_Occurred();
+        exception = PyErr_Occurred();
         if (exception != NULL)
             return NULL;
 
@@ -345,13 +348,15 @@ void
 init_parser(void)
 #endif
 {
+    PyObject *module, *httplib, *HTTPException;
+
     if (PyType_Ready(&HTTPParserType) < 0)
         INITERROR;
 
     #if PY_MAJOR_VERSION >= 3
-    PyObject *module = PyModule_Create(&moduledef);
+    module = PyModule_Create(&moduledef);
     #else
-    PyObject* module = Py_InitModule3("_parser", module_methods,
+    module = Py_InitModule3("_parser", module_methods,
                        "HTTP Parser from nginx/Joyent.");
     #endif
 
@@ -359,11 +364,11 @@ init_parser(void)
     PyModule_AddObject(module, "HTTPResponseParser", (PyObject *)&HTTPParserType);
 
     #if PY_MAJOR_VERSION >= 3
-    PyObject* httplib = PyImport_ImportModule("http.client");
+    httplib = PyImport_ImportModule("http.client");
     #else
-    PyObject* httplib = PyImport_ImportModule("httplib");
+    httplib = PyImport_ImportModule("httplib");
     #endif
-    PyObject* HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
+    HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
 
     PyExc_HTTPParseError = PyErr_NewException(
             "_parser.HTTPParseError", HTTPException, NULL);
