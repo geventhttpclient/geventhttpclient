@@ -6,7 +6,7 @@ import zlib
 import os
 import cStringIO
 from urllib import urlencode
-from six.moves import xrange
+from six.moves import xrange, reraise
 
 import gevent
 try:
@@ -315,7 +315,7 @@ class UserAgent(object):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise e, None, sys.exc_info()[2]
+        raise reraise(type(e), e, sys.exc_info()[2])
 
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing
