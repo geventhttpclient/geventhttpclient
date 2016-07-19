@@ -1,28 +1,36 @@
+import six
 import socket
 import errno
 import sys
 import ssl
 import zlib
 import os
-import cStringIO
-from urllib import urlencode
-from six.moves import xrange, reraise
+from six.moves import xrange
+if six.PY3:
+    from io import StringIO
+    from urllib.parse import urlencode
+else:
+    from urllib import urlencode
+    from cStringIO import StringIO
 
 import gevent
 try:
     from gevent.dns import DNSError
 except ImportError:
-    class DNSError(StandardError): pass
+    if six.PY3:
+        class DNSError(Exception): pass
+    else:
+        class DNSError(StandardError): pass
 
-from url import URL
-from client import HTTPClient, HTTPClientPool
+from .url import URL
+from .client import HTTPClient, HTTPClientPool
 
 
 class ConnectionError(Exception):
     def __init__(self, url, *args, **kwargs):
         self.url = url
         self.__dict__.update(kwargs)
-        if args and isinstance(args[0], basestring):
+        if args and isinstance(args[0], six.string_types):
             try:
                 self.text = args[0] % args[1:]
             except TypeError:
@@ -277,14 +285,14 @@ class UserAgent(object):
                 req_headers['content-length'] = len(payload)
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
-                payload = payload if isinstance(payload, basestring) else str(payload)
+                payload = payload if isinstance(payload, six.string_types) else str(payload)
                 req_headers['content-length'] = len(payload)
             elif content_type.startswith("multipart/form-data"):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
             else:
-                payload = payload if isinstance(payload, basestring) else str(payload)
+                payload = payload if isinstance(payload, six.string_types) else str(payload)
                 req_headers['content-length'] = len(payload)
         return CompatRequest(url, method=method, headers=req_headers, payload=payload)
 
@@ -315,7 +323,7 @@ class UserAgent(object):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise reraise(type(e), e, sys.exc_info()[2])
+        raise six.reraise(type(e), e, sys.exc_info()[2])
 
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing
@@ -460,9 +468,9 @@ class RestkitCompatUserAgent(UserAgent):
 
 class XmlrpcCompatUserAgent(UserAgent):
     def request(self, host, handler, request, verbose=False):
-        debug_stream = None if not verbose else cStringIO.StringIO()
+        debug_stream = None if not verbose else StringIO.StringIO()
         ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
         if debug_stream is not None:
             debug_stream.seek(0)
-            print debug_stream.read()
+            print(debug_stream.read())
         return ret
