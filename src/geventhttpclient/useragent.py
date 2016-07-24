@@ -4,25 +4,25 @@ import sys
 import ssl
 import zlib
 import os
-import cStringIO
-from urllib import urlencode
-from six.moves import xrange
+from six.moves import xrange, cStringIO
+from six.moves.urllib.parse import urlencode
+from six import print_, reraise, string_types
 
 import gevent
 try:
     from gevent.dns import DNSError
 except ImportError:
-    class DNSError(StandardError): pass
+    class DNSError(Exception): pass
 
-from url import URL
-from client import HTTPClient, HTTPClientPool
+from .url import URL
+from .client import HTTPClient, HTTPClientPool
 
 
 class ConnectionError(Exception):
     def __init__(self, url, *args, **kwargs):
         self.url = url
         self.__dict__.update(kwargs)
-        if args and isinstance(args[0], basestring):
+        if args and isinstance(args[0], string_types):
             try:
                 self.text = args[0] % args[1:]
             except TypeError:
@@ -277,14 +277,14 @@ class UserAgent(object):
                 req_headers['content-length'] = len(payload)
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
-                payload = payload if isinstance(payload, basestring) else str(payload)
+                payload = payload if isinstance(payload, string_types) else str(payload)
                 req_headers['content-length'] = len(payload)
             elif content_type.startswith("multipart/form-data"):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
             else:
-                payload = payload if isinstance(payload, basestring) else str(payload)
+                payload = payload if isinstance(payload, string_types) else str(payload)
                 req_headers['content-length'] = len(payload)
         return CompatRequest(url, method=method, headers=req_headers, payload=payload)
 
@@ -315,7 +315,7 @@ class UserAgent(object):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise e, None, sys.exc_info()[2]
+        raise reraise(type(e), e, sys.exc_info()[2])
 
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing
@@ -464,5 +464,5 @@ class XmlrpcCompatUserAgent(UserAgent):
         ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
         if debug_stream is not None:
             debug_stream.seek(0)
-            print debug_stream.read()
+            print_(debug_stream.read())
         return ret
