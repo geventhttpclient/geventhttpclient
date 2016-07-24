@@ -40,6 +40,12 @@ def test_string_post():
         useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload="12345")
 
 
+def test_bytes_post():
+    with wsgiserver(check_upload(b"12345", 5)):
+        useragent = UserAgent()
+        useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=b"12345")
+
+
 def test_redirect():
     with wsgiserver(check_redirect()):
         useragent = UserAgent()

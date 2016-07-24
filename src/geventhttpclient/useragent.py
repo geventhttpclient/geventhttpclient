@@ -274,18 +274,12 @@ class UserAgent(object):
             if not content_type and isinstance(payload, dict):
                 req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
-                req_headers['content-length'] = len(payload)
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
-                payload = payload if isinstance(payload, string_types) else str(payload)
-                req_headers['content-length'] = len(payload)
             elif content_type.startswith("multipart/form-data"):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
-            else:
-                payload = payload if isinstance(payload, string_types) else str(payload)
-                req_headers['content-length'] = len(payload)
         return CompatRequest(url, method=method, headers=req_headers, payload=payload)
 
     def _urlopen(self, request):
