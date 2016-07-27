@@ -61,6 +61,15 @@ def test_string_post():
         useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload="12345")
 
 
+def test_unicode_post():
+    byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
+    unicode_string = byte_string.decode('utf-8')
+    headers = {'CONTENT_LENGTH': str(len(byte_string)), 'CONTENT_TYPE': 'application/octet-stream'}
+    with wsgiserver(check_upload(byte_string, headers)):
+        useragent = UserAgent()
+        useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=unicode_string)
+
+
 def test_bytes_post():
     headers = {'CONTENT_LENGTH': '5', 'CONTENT_TYPE': 'application/octet-stream'}
     with wsgiserver(check_upload(b"12345", headers)):

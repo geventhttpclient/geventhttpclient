@@ -269,3 +269,10 @@ def test_string_post():
     with wsgiserver(check_upload("12345", 5)):
         client = HTTPClient(*listener)
         client.post('/', "12345")
+
+def test_unicode_post():
+    byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
+    unicode_string = byte_string.decode('utf-8')
+    with wsgiserver(check_upload(byte_string, len(byte_string))):
+        client = HTTPClient(*listener)
+        client.post('/', unicode_string)

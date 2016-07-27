@@ -163,6 +163,9 @@ class HTTPClient(object):
         return request
 
     def request(self, method, request_uri, body=b"", headers={}):
+        if type(body) == six.text_type:
+            body = body.encode('utf-8')
+
         request = self._build_request(
             method.upper(), request_uri, body=body, headers=headers)
 
@@ -173,11 +176,10 @@ class HTTPClient(object):
             try:
                 sock.sendall(request.encode())
                 if body:
-                    if type(body) == six.text_type:
-                        sock.sendall(body.encode('iso-8859-1'))
-                    elif type(body) == six.binary_type:
+                    if type(body) == six.binary_type:
                         sock.sendall(body)
                     else:
+                        # TODO: Support non file-like iterables, e.g. `(u"string1", u"string2")`.
                         if six.PY3:
                             sock.sendfile(body)
                         else:
