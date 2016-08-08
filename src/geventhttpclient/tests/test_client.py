@@ -1,4 +1,5 @@
 import os
+import sys
 import tempfile
 import pytest
 import json
@@ -10,7 +11,6 @@ import gevent.pool
 import gevent.server
 import gevent.pywsgi
 from six.moves import xrange
-
 
 listener = ('127.0.0.1', 54323)
 
@@ -85,6 +85,10 @@ def test_response_context_manager():
         r = response
     assert r._sock is None # released
 
+@pytest.mark.skipif(
+    os.environ.get("TRAVIS") == "true",
+    reason="We have issues on travis with the SSL tests"
+)
 def test_client_ssl():
     client = HTTPClient('www.google.fr', ssl=True)
     assert client.port == 443
@@ -93,6 +97,11 @@ def test_client_ssl():
     body = response.read()
     assert len(body)
 
+@pytest.mark.skipif(
+    sys.version_info < (2, 7)
+    and os.environ.get("TRAVIS") == "true",
+    reason="We have issues on travis with the SSL tests"
+)
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "oncert.pem")

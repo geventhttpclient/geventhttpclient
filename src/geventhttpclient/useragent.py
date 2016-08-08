@@ -1,5 +1,6 @@
 import socket
 import errno
+import six
 import sys
 import ssl
 import zlib
@@ -31,7 +32,7 @@ class ConnectionError(Exception):
             self.text = str(args[0]) if len(args) == 1 else ''
         if kwargs:
             self.text += ', ' if self.text else ''
-            self.text += ', '.join("%s=%s" % (key, val) for key, val in kwargs.iteritems())
+            self.text += ', '.join("%s=%s" % (key, val) for key, val in six.iteritems(kwargs))
         else:
             self.text = ''
 
@@ -397,13 +398,25 @@ class UserAgent(object):
 
     @classmethod
     def _conversation_str(cls, url, resp, payload=None):
-        header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
-        ret = 'REQUEST: ' + url + '\n' + resp._sent_request
-        if payload:
-            ret += payload + '\n\n'
-        ret += 'RESPONSE: ' + resp._response.version + ' ' + \
-                           str(resp.status_code) + '\n' + \
-                           header_str + '\n\n' + resp.content
+        if six.PY2:
+            header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
+            ret = 'REQUEST: ' + url + '\n' + resp._sent_request
+            if payload and isinstance(payload, string_types):
+                ret += payload + '\n\n'
+            ret += 'RESPONSE: ' + resp._response.version + ' ' + \
+                   str(resp.status_code) + '\n' + \
+                   header_str + '\n\n' + resp.content
+        else:
+            header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
+            ret = 'REQUEST: ' + url + '\n' + resp._sent_request
+            if payload:
+                if isinstance(payload, six.binary_type):
+                    ret += payload.decode('utf-8') + '\n\n'
+                elif isinstance(payload, six.text_type):
+                    ret += payload + '\n\n'
+            ret += 'RESPONSE: ' + resp._response.version + ' ' + \
+                   str(resp.status_code) + '\n' + \
+                header_str + '\n\n' + resp.content[:].decode('utf-8')
         return ret
 
     def download(self, url, fpath, chunk_size=16 * 1024, resume=False, **kwargs):
