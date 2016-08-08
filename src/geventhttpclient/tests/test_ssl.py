@@ -1,15 +1,22 @@
 import six
+import sys
 from contextlib import contextmanager
 import pytest
 import gevent.server
 import gevent.socket
 import gevent.ssl
-import os.path
+import os
 from geventhttpclient import HTTPClient
 try:
     from ssl import CertificateError
 except ImportError:
     from backports.ssl_match_hostname import CertificateError
+
+pytestmark = pytest.mark.skipif(
+    sys.version_info < (2, 7)
+    and os.environ.get("TRAVIS") == "true",
+    reason="We have issues on travis with the SSL tests"
+)
 
 BASEDIR = os.path.dirname(__file__)
 KEY = os.path.join(BASEDIR, 'server.key')
