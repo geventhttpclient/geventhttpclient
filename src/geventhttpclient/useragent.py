@@ -6,7 +6,7 @@ import zlib
 import os
 from six.moves import xrange, cStringIO
 from six.moves.urllib.parse import urlencode
-from six import print_, reraise, string_types
+from six import print_, reraise, string_types, text_type
 
 import gevent
 try:
@@ -274,6 +274,8 @@ class UserAgent(object):
             if not content_type and isinstance(payload, dict):
                 req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
+            elif not content_type and isinstance(payload, text_type):
+                req_headers['content-type'] = 'text/plain; charset=utf-8'
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
             elif content_type.startswith("multipart/form-data"):
