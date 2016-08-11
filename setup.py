@@ -6,21 +6,26 @@ from setuptools import find_packages
 DESC = """
 A high performance, concurrent HTTP client library for python using gevent.
 
-geventhttpclient use a fast http parser, written in C, originating from nginx,
-extracted and modified by Joyent.
+gevent.httplib support was removed in gevent 1.0, geventhttpclient now
+provides that missing functionality.
+
+geventhttpclient uses a fast http parser, written in C, originating from
+nginx, extracted and modified by Joyent.
 
 geventhttpclient has been specifically designed for high concurrency,
 streaming and support HTTP 1.1 persistent connections. More generally it is
-designed for efficiently pulling from REST APIs and streaming API's
+designed for efficiently pulling from REST APIs and streaming APIs
 like Twitter's.
 
-Safe SSL support is provided by default.
+Safe SSL support is provided by default. geventhttpclient depends on
+the certifi CA Bundle. This is the same CA Bundle which ships with the
+Requests codebase, and is derived from Mozilla Firefox's canonical set.
 
-Python 2.6 and 2.7 are supported as well as gevent 0.13 and gevent 1.0.
+Python 2.7 and 3.4+ are supported.
+Python 2.6 is no longer supported.
 
-Use of SSL/TLS with python 2.7.9 is not recommanded and may be broken.
+Use of SSL/TLS with python 2.7.9 is not recommended and may be broken.
 """
-
 
 httpparser = Extension('geventhttpclient._parser',
                     sources = ['ext/_parser.c', 'ext/http_parser.c'],
