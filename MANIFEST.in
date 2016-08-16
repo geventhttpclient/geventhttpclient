@@ -2,3 +2,5 @@ include src/geventhttpclient/*.py
 include ext/*.c
 include ext/*.h
 recursive-include src/geventhttpclient/tests *
+global-exclude __pycache__
+global-exclude *.py[co]
