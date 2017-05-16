@@ -204,8 +204,13 @@ else:
                 family, socktype, protocol)
 
             if self.ssl_context_factory is None:
-                ssl_options = self.default_options.copy()
-                ssl_options.update(self.ssl_options)
+                ssl_options = {}
+                if not self.insecure:
+                    ssl_options = self.default_options.copy()
+                    ssl_options.update(self.ssl_options)
                 return gevent.ssl.wrap_socket(sock, **ssl_options)
             else:
+                if self.insecure:
+                    self.ssl_options = {}
+
                 return self.ssl_context_factory().wrap_socket(sock, **self.ssl_options)
