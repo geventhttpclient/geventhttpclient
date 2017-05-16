@@ -174,11 +174,12 @@ class HTTPClient(object):
         while 1:
             sock = self._connection_pool.get_socket()
             try:
-                sock.sendall(request.encode())
+                _request = request.encode()
                 if body:
                     if isinstance(body, six.binary_type):
-                        sock.sendall(body)
+                        sock.sendall(_request + body)
                     else:
+                        sock.sendall(_request)
                         # TODO: Support non file-like iterables, e.g. `(u"string1", u"string2")`.
                         if six.PY3:
                             sock.sendfile(body)
@@ -188,6 +189,8 @@ class HTTPClient(object):
                                 if not chunk:
                                     break
                                 sock.sendall(chunk)
+                else:
+                    sock.sendall(_request)
             except gevent.socket.error as e:
                 self._connection_pool.release_socket(sock)
                 if (e.errno == errno.ECONNRESET or e.errno == errno.EPIPE) and attempts_left > 0:
