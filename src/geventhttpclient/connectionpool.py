@@ -196,6 +196,8 @@ else:
 
         def after_connect(self, sock):
             super(SSLConnectionPool, self).after_connect(sock)
+            sock.check_hostname = True
+            sock.do_handshake()
             if not self.insecure:
                 match_hostname(sock.getpeercert(), self._host)
 
@@ -206,6 +208,9 @@ else:
             if self.ssl_context_factory is None:
                 ssl_options = self.default_options.copy()
                 ssl_options.update(self.ssl_options)
-                return gevent.ssl.wrap_socket(sock, **ssl_options)
+                ssl_options.update(dict(do_handshake_on_connect=False))
+                sock = gevent.ssl.wrap_socket(sock, **ssl_options)
+                sock.server_hostname = self._host
+                return sock
             else:
                 return self.ssl_context_factory().wrap_socket(sock, **self.ssl_options)
