@@ -283,13 +283,13 @@ class UserAgent(object):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
-        return CompatRequest(url, method=method, headers=req_headers, payload=payload)
+        return self.request_type(url, method=method, headers=req_headers, payload=payload)
 
     def _urlopen(self, request):
         client = self.clientpool.get_client(request.url_split)
         resp = client.request(request.method, request.url_split.request_uri,
                               body=request.payload, headers=request.headers)
-        return CompatResponse(resp, request=request, sent_request=resp._sent_request)
+        return self.response_type(resp, request=request, sent_request=resp._sent_request)
 
     def _verify_status(self, status_code, url=None):
         """ Hook for subclassing
