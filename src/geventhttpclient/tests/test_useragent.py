@@ -4,6 +4,11 @@ import pytest
 import six
 import tempfile
 
+if six.PY2:
+    from cookielib import CookieJar
+else:
+    from http.cookiejar import CookieJar
+
 from contextlib import contextmanager
 from geventhttpclient.useragent import UserAgent, BadStatusCode
 
@@ -48,6 +53,12 @@ def check_redirect():
             assert env.get('PATH_INFO') == "/redirected"
             start_response('200 OK', [])
             return [b"redirected"]
+    return wsgi_handler
+
+def set_cookie():
+    def wsgi_handler(env, start_response):
+        start_response('200 OK', [('Set-Cookie', 'testcookie=testdata')])
+        return []
     return wsgi_handler
 
 
@@ -115,3 +126,9 @@ def test_server_error_with_file():
                     useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=body)
     finally:
         os.remove(name)
+
+
+def test_cookiejar():
+    with wsgiserver(set_cookie()):
+        useragent = UserAgent(cookiejar=CookieJar())
+        assert b"" == useragent.urlopen('http://127.0.0.1:54323/').read()

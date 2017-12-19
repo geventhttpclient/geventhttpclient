@@ -59,6 +59,8 @@ class CompatRequest(object):
     """ urllib / cookielib compatible request class.
         See also: http://docs.python.org/library/cookielib.html
     """
+    unverifiable = False
+
     def __init__(self, url, method='GET', headers=None, payload=None):
         self.set_url(url)
         self.original_host = self.url_split.host
