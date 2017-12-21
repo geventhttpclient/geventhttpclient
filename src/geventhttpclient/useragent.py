@@ -91,6 +91,10 @@ class CompatRequest(object):
         """
         return False
 
+    @property
+    def unverifiable(self):
+        return self.is_unverifiable()
+
     def get_header(self, header_name, default=None):
         return self.headers.get(header_name, default)
 
