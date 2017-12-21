@@ -59,8 +59,6 @@ class CompatRequest(object):
     """ urllib / cookielib compatible request class.
         See also: http://docs.python.org/library/cookielib.html
     """
-    unverifiable = False
-
     def __init__(self, url, method='GET', headers=None, payload=None):
         self.set_url(url)
         self.original_host = self.url_split.host
@@ -92,6 +90,10 @@ class CompatRequest(object):
         """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!
         """
         return False
+
+    @property
+    def unverifiable(self):
+        return self.is_unverifiable()
 
     def get_header(self, header_name, default=None):
         return self.headers.get(header_name, default)
