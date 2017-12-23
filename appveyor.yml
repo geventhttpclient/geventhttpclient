@@ -1,0 +1,11 @@
+build_script:
+  - pip install cibuildwheel==0.6.0
+  - cibuildwheel --output-dir wheelhouse
+  - ps: >-
+      if ($env:APPVEYOR_REPO_TAG -eq "true") {
+        python -m pip install twine
+        python -m twine upload --skip-existing (resolve-path wheelhouse\*.whl)
+      }
+artifacts:
+  - path: "wheelhouse\\*.whl"
+    name: Wheels
