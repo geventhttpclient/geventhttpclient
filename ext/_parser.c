@@ -101,8 +101,7 @@ static int on_header_field(http_parser* parser, const char *at, size_t length)
 
 static int on_header_value(http_parser* parser, const char *at, size_t length)
 {
-    int res = on_http_data_cb(parser, at, length, "_on_header_value");
-    return res;
+    return on_http_data_cb(parser, at, length, "_on_header_value");
 }
 
 static int on_body(http_parser* parser, const char *at, size_t length)
