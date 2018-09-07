@@ -373,9 +373,12 @@ class UserAgent(object):
 
                 redirection = resp.headers.get('location')
                 if resp.status_code in self.redirect_resonse_codes and redirection:
-                    resp.release()
-                    req.redirect(resp.status_code, redirection)
-                    continue
+                    try:
+                        resp.release()
+                        req.redirect(resp.status_code, redirection)
+                        continue
+                    except Exception as e:
+                        raise
 
                 if not to_string:
                     return resp
