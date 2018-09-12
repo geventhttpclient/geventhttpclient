@@ -253,7 +253,7 @@ class UserAgent(object):
     redirect_resonse_codes = frozenset([301, 302, 303, 307])
 
     def __init__(self, max_redirects=3, max_retries=3, retry_delay=0,
-                 cookiejar=None, headers=None, max_client_pool_size=None,
+                 cookiejar=None, headers=None, client_pool_size=None,
                  **kwargs):
         self.max_redirects = int(max_redirects)
         self.max_retries = int(max_retries)
@@ -262,7 +262,7 @@ class UserAgent(object):
         if headers:
             self.default_headers.update(headers)
         self.cookiejar = cookiejar
-        self.clientpool = HTTPClientPool(max_client_pool_size, **kwargs)
+        self.clientpool = HTTPClientPool(client_pool_size, **kwargs)
 
     def close(self):
         self.clientpool.close()
