@@ -236,7 +236,7 @@ class HTTPClientPool(object):
     # TODO: Add some housekeeping and cleanup logic
     default_pool_size = 32
 
-    def __init__(self, pool_size: int = None, **kwargs):
+    def __init__(self, pool_size=None, **kwargs):
         self.__client_kwargs = kwargs
         self.get_client = functools.lru_cache(
             maxsize=pool_size or self.default_pool_size)(self.get_client)
