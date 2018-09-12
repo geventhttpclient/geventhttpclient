@@ -149,7 +149,7 @@ class ConnectionPool(object):
 
             resp = sock.recv(4096)
             parts = resp.split()
-            if parts[1] != b"200":
+            if not parts or parts[1] != b"200":
                 raise RuntimeError(
                     "Error response from Proxy server : %s" % resp)
 
