@@ -1,6 +1,7 @@
 import six
 import errno
 import os
+import functools
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.response import HTTPSocketPoolResponse
 from geventhttpclient.response import HTTPConnectionClosed
@@ -116,6 +117,9 @@ class HTTPClient(object):
     def close(self):
         self._connection_pool.close()
 
+    def __del__(self):
+        self.close()
+
     # Like urllib2, try to treat the body as a file if we can't determine the
     # file length with `len()`
     def _get_body_length(self, body):
@@ -228,24 +232,19 @@ class HTTPClient(object):
 
 
 class HTTPClientPool(object):
-    """ Factory for maintaining a bunch of clients, one per host:port """
+    """ Factory for maintaining a bunch of clients, one per URL"""
     # TODO: Add some housekeeping and cleanup logic
+    default_pool_size = 32
 
-    def __init__(self, **kwargs):
-        self.clients = dict()
-        self.client_args = kwargs
+    def __init__(self, pool_size: int = None, **kwargs):
+        self.__client_kwargs = kwargs
+        self.get_client = functools.lru_cache(
+            maxsize=pool_size or self.default_pool_size)(self.get_client)
 
     def get_client(self, url):
         if not isinstance(url, URL):
             url = URL(url)
-        client_key = url.host, url.port
-        try:
-            return self.clients[client_key]
-        except KeyError:
-            client = HTTPClient.from_url(url, **self.client_args)
-            self.clients[client_key] = client
-            return client
+        return HTTPClient.from_url(url, **self.__client_kwargs)
 
     def close(self):
-        for client in self.clients.values():
-            client.close()
+        self.get_client.cache_clear()
