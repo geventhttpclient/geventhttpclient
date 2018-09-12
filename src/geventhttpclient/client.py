@@ -234,12 +234,11 @@ class HTTPClient(object):
 class HTTPClientPool(object):
     """ Factory for maintaining a bunch of clients, one per URL"""
     # TODO: Add some housekeeping and cleanup logic
-    default_pool_size = 32
 
     def __init__(self, pool_size=None, **kwargs):
         self.__client_kwargs = kwargs
         self.get_client = functools.lru_cache(
-            maxsize=pool_size or self.default_pool_size)(self.get_client)
+            maxsize=pool_size)(self.get_client)
 
     def get_client(self, url):
         if not isinstance(url, URL):
