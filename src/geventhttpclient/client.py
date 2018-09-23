@@ -79,13 +79,17 @@ class HTTPClient(object):
             # Import SSL as late as possible, fail hard with Import Error
             from geventhttpclient.connectionpool import SSLConnectionPool
             self._connection_pool = SSLConnectionPool(
-                connection_host, connection_port, size=concurrency,
+                connection_host, connection_port,
+                self.host, self.port,
+                size=concurrency,
                 ssl_options=ssl_options,
                 ssl_context_factory=ssl_context_factory,
                 insecure=insecure,
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
-                disable_ipv6=disable_ipv6)
+                disable_ipv6=disable_ipv6,
+                use_proxy=self.use_proxy
+            )
         else:
             self.ssl = False
             if not self.port:
@@ -94,10 +98,13 @@ class HTTPClient(object):
                 connection_port = self.port
             self._connection_pool = ConnectionPool(
                 connection_host, connection_port,
+                self.host, self.port,
                 size=concurrency,
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
-                disable_ipv6=disable_ipv6)
+                disable_ipv6=disable_ipv6,
+                use_proxy=self.use_proxy
+            )
         self.version = version
         self.headers_type = headers_type
         self.default_headers = headers_type()
