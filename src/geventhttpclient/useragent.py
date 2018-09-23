@@ -349,7 +349,7 @@ class UserAgent(object):
                     raise
                 except BaseException as e:
                     e.request = req
-                    e = self._handle_error(e, url=req.url)
+                    last_error = self._handle_error(e, url=req.url)
                     break # Continue with next retry
 
                 # We received a response
@@ -365,7 +365,7 @@ class UserAgent(object):
                     e.request = req
                     e.http_log = self._conversation_str(req.url, resp, payload=req.payload)
                     resp.release()
-                    e = self._handle_error(e, url=req.url)
+                    last_error = self._handle_error(e, url=req.url)
                     break # Continue with next retry
 
                 if self.cookiejar is not None:
@@ -374,8 +374,12 @@ class UserAgent(object):
                 redirection = resp.headers.get(b'location')
                 if resp.status_code in self.redirect_resonse_codes and redirection:
                     resp.release()
-                    req.redirect(resp.status_code, six.text_type(redirection, 'utf8'))
-                    continue
+                    try:
+                        req.redirect(resp.status_code, six.text_type(redirection, 'utf8'))
+                        continue
+                    except Exception as e:
+                        last_error = self._handle_error(e, url=req.url)
+                        break
 
                 if not to_string:
                     return resp
@@ -385,20 +389,20 @@ class UserAgent(object):
                     try:
                         ret = resp.content
                     except Exception as e:
-                        e = self._handle_error(e, url=req.url)
+                        last_error = self._handle_error(e, url=req.url)
                         break
                     else:
                         if not ret:
                             e = EmptyResponse(url, "Empty response body received")
-                            e = self._handle_error(e, url=req.url)
+                            last_error = self._handle_error(e, url=req.url)
                             break
                         else:
                             return ret
             else:
                 e = RetriesExceeded(url, "Redirection limit reached (%s)" % self.max_redirects)
-                e = self._handle_error(e, url=url)
+                last_error = self._handle_error(e, url=url)
         else:
-            return self._handle_retries_exceeded(url, last_error=e)
+            return self._handle_retries_exceeded(url, last_error=last_error)
 
     @classmethod
     def _conversation_str(cls, url, resp, payload=None):
