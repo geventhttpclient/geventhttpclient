@@ -371,10 +371,10 @@ class UserAgent(object):
                 if self.cookiejar is not None:
                     self.cookiejar.extract_cookies(resp, req)
 
-                redirection = resp.headers.get('location')
+                redirection = resp.headers.get(b'location')
                 if resp.status_code in self.redirect_resonse_codes and redirection:
                     resp.release()
-                    req.redirect(resp.status_code, redirection)
+                    req.redirect(resp.status_code, six.text_type(redirection, 'utf8'))
                     continue
 
                 if not to_string:

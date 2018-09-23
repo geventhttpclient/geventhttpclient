@@ -207,7 +207,7 @@ class Headers(dict):
         """Iterate over all headers, merging duplicate ones together."""
         for key in self:
             val = _dict_getitem(self, key)
-            yield val[0], ', '.join(val[1:])
+            yield val[0], b', '.join(val[1:])
 
     # Extensions to urllib3, compatibility to previous implementation
     def __len__(self):
