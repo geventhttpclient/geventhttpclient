@@ -73,7 +73,7 @@ static int on_http_data_cb(http_parser* parser, const char *at, size_t length, c
     PyObject* self = (PyObject*)parser->data;
     if (PyObject_HasAttrString(self, python_cb)) {
         PyObject* callable = PyObject_GetAttrString(self, python_cb);
-        PyObject* args = Py_BuildValue("(s#)", at, length);
+        PyObject* args = Py_BuildValue("(y#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
         PyObject* exception = PyErr_Occurred();
         if (exception != NULL) {
