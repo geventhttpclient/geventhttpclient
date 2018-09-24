@@ -23,15 +23,15 @@ jobs:
         - cibuildwheel --output-dir wheelhouse
         # Upload to PyPI on tags
         - if [ "${TRAVIS_TAG:-}" != "" ]; then
-            pip install twine;
-            python -m twine upload --skip-existing wheelhouse/*;
+            pip3 install twine;
+            python3 -m twine upload --skip-existing wheelhouse/*;
           fi
     - stage: build
       sudo: required
       os: osx
       osx_image: xcode8.3
       language: null
-      python: null
+      python: "3.6"
       install:
         # Python 3 is needed to run cibuildwheel
         - if [ "${TRAVIS_OS_NAME:-}" == "osx" ]; then
