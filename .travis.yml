@@ -33,7 +33,7 @@ jobs:
       os: osx
       osx_image: xcode8.3
       language: null
-      python: "3.6"
+      python: null
       install:
         # Python 3 is needed to run cibuildwheel
         - if [ "${TRAVIS_OS_NAME:-}" == "osx" ]; then
