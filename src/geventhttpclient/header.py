@@ -32,6 +32,9 @@ class Headers(dict):
     constructor or ``.update``, the behavior is undefined and some will be
     lost.
 
+    Note: b'asdf' and 'u'asdf' are separate things. This class tries not to
+    enforce the one or the other.
+
     >>> headers = Headers()
     >>> headers.add('Set-Cookie', 'foo=bar')
     >>> headers.add('set-cookie', 'baz=quxx')
@@ -207,7 +210,9 @@ class Headers(dict):
         """Iterate over all headers, merging duplicate ones together."""
         for key in self:
             val = _dict_getitem(self, key)
-            yield val[0], b', '.join(val[1:])
+            # this should preserve either binary or string type
+            sep = u', ' if isinstance(val[1], six.string_types) else b', '
+            yield val[0], sep.join(val[1:])
 
     # Extensions to urllib3, compatibility to previous implementation
     def __len__(self):
@@ -233,4 +238,3 @@ class Headers(dict):
             vals = _dict_getitem(self, key)
             for val in vals[1:]:
                 yield vals[0], val
-

@@ -46,11 +46,12 @@ def internal_server_error():
 
 def check_redirect():
     def wsgi_handler(env, start_response):
-        if env.get('PATH_INFO') == "/":
+        path_info = env.get('PATH_INFO')
+        if path_info == "/":
             start_response('301 Moved Permanently', [('Location', 'http://127.0.0.1:54323/redirected')])
             return []
         else:
-            assert env.get('PATH_INFO') == "/redirected"
+            assert path_info == "/redirected"
             start_response('200 OK', [])
             return [b"redirected"]
     return wsgi_handler
@@ -95,8 +96,9 @@ def test_bytes_post():
 
 def test_redirect():
     with wsgiserver(check_redirect()):
-        useragent = UserAgent()
-        assert b"redirected" == useragent.urlopen('http://127.0.0.1:54323/').read()
+        resp = UserAgent().urlopen('http://127.0.0.1:54323/')
+        assert resp.status_code == 200
+        assert b"redirected" == resp.content
 
 
 def test_server_error_with_bytes():

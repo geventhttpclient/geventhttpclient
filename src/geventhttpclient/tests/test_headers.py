@@ -164,7 +164,7 @@ def test_fieldname_string_enforcement():
         del h[3]
 
 def test_header_replace():
-    d = {}
+    d = Headers()
     d['Content-Type'] = "text/plain"
     d['content-type'] = "text/html"
     assert d['content-type'] == "text/html"
