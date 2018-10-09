@@ -71,6 +71,9 @@ class HTTPClient(object):
         if ssl and ssl_options is None:
             ssl_options = {}
         if ssl_options is not None:
+            if ssl_context_factory is not None:
+                requested_hostname = headers.get('host', self.host)
+                ssl_options.setdefault('server_hostname', requested_hostname)
             self.ssl = True
             if not self.port:
                 self.port = 443
