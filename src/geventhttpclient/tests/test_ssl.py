@@ -11,6 +11,7 @@ import gevent.ssl
 import os
 
 from gevent import joinall
+from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
 from geventhttpclient.connectionpool import SSLConnectionPool
@@ -86,17 +87,17 @@ def timeout_on_connect(sock, addr):
     sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
 
 def test_implicit_sni_from_host_in_ssl():
-    server_addr, server_port, sent_sni = _get_sni_sent_from_client()
-    assert sent_sni == server_addr
+    server_host, server_port, sent_sni = _get_sni_sent_from_client()
+    assert sent_sni == server_host
 
 def test_implicit_sni_from_header_in_ssl():
-    server_addr, server_port, sent_sni = _get_sni_sent_from_client(
+    server_host, server_port, sent_sni = _get_sni_sent_from_client(
         headers={'host': 'ololo_special_host'},
     )
     assert sent_sni == 'ololo_special_host'
 
 def test_explicit_sni_in_ssl():
-    server_addr, server_port, sent_sni = _get_sni_sent_from_client(
+    server_host, server_port, sent_sni = _get_sni_sent_from_client(
         ssl_options={'server_hostname': 'test_sni'},
         headers={'host': 'ololo_special_host'},
     )
@@ -113,15 +114,15 @@ def _get_sni_sent_from_client(**additional_client_args):
             insecure=True,
             ssl=True,
             connection_timeout=.1,
-            ssl_context_factory=SSLConnectionPool.ssl_context_factory,
+            ssl_context_factory=gevent.ssl.create_default_context,
 
-            **additional_client_args,
+            **additional_client_args
         )
 
         def run(http):
             try:
                 http.get('/')
-            except socket.timeout:
+            except socket_error:
                 pass # handshake will not be completed
 
         client_greenlet = gevent.spawn(run, http)
@@ -130,7 +131,7 @@ def _get_sni_sent_from_client(**additional_client_args):
     return server_host, server_port, server_greenlet.value
 
 @contextmanager
-def  sni_checker_server():
+def sni_checker_server():
     sock = gevent.socket.socket(gevent.socket.AF_INET,
         gevent.socket.SOCK_STREAM, 0)
     sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1)
@@ -145,17 +146,19 @@ def  sni_checker_server():
             client_hello = conn.recv(1024)
             return extract_sni_from_client_hello(client_hello)
 
-    def extract_sni_from_client_hello(hello_packet: bytes) -> str:
+    def extract_sni_from_client_hello(hello_packet):
+
         records, bytes_used = dpkt.ssl.tls_multi_factory(hello_packet)
 
         for record in records:
             # TLS handshake only
             if record.type != 22:
                 continue
+
             if len(record.data) == 0:
                 continue
             # Client Hello only
-            if record.data[0] != 1:
+            if record.data[0] not in (1, chr(1)):
                 continue
 
             handshake = dpkt.ssl.TLSHandshake(record.data)
