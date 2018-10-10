@@ -119,8 +119,10 @@ def _get_sni_sent_from_client(**additional_client_args):
         )
 
         def run(http):
-            with pytest.raises(socket.timeout):
-                response = http.get('/')
+            try:
+                http.get('/')
+            except socket.timeout:
+                pass # handshake will not be completed
 
         client_greenlet = gevent.spawn(run, http)
         joinall([client_greenlet, server_greenlet])
