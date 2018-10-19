@@ -105,10 +105,11 @@ def test_client_ssl():
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
-    client = HTTPClient('httpbin.org', ssl_options={'ca_certs': certs})
+    client = HTTPClient('github.com', ssl_options={'ca_certs': certs})
     assert client.port == 443
-    with pytest.raises(SSLError):
+    with pytest.raises(SSLError) as e_info:
         client.get('/')
+    assert e_info.value.reason == 'CERTIFICATE_VERIFY_FAILED'
 
 def test_multi_queries_greenlet_safe():
     client = HTTPClient('httpbin.org', concurrency=3)
