@@ -42,6 +42,9 @@ if sys.hexversion < 0x02070900:
         'backports.ssl_match_hostname',
     ]
 
+def get_requirements(filename):
+    with open(filename) as f:
+        return f.read().splitlines()
 
 setup(name='geventhttpclient',
       version = '1.3.1dev',
@@ -55,4 +58,8 @@ setup(name='geventhttpclient',
       package_dir={'': 'src'},
       ext_modules = [httpparser],
       include_package_data=True,
-      install_requires=requirements)
+      install_requires=requirements,
+      extras_require={
+          'dev': get_requirements('requirements-dev.txt'),
+      },
+)
