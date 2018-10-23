@@ -107,7 +107,7 @@ def _get_sni_sent_from_client(**additional_client_args):
     with sni_checker_server() as ctx:
         server_sock, server_greenlet = ctx
         server_addr, server_port = server_sock.getsockname()[:2]
-        server_host = socket.gethostbyaddr(server_addr)[0]
+        server_host = gevent.socket.gethostbyaddr(server_addr)[0]
         http = HTTPClient(
             server_host,
             server_port,
