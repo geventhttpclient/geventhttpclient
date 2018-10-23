@@ -6,7 +6,8 @@ python:
   - "3.5"
   - "3.6"
 install:
-  - "pip install .[dev]"
+  - "pip install -r requirements-dev.txt"
+  - "pip install ."
 script: py.test src/geventhttpclient/tests
 
 jobs:
