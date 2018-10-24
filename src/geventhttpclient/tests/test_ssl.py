@@ -1,4 +1,5 @@
-import socket
+import mock
+from mock import patch, Mock
 
 import dpkt.ssl
 import six
@@ -14,7 +15,6 @@ from gevent import joinall
 from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
-from geventhttpclient.connectionpool import SSLConnectionPool
 
 try:
     from ssl import CertificateError
@@ -103,32 +103,46 @@ def test_explicit_sni_in_ssl():
     )
     assert sent_sni == 'test_sni'
 
+
 def _get_sni_sent_from_client(**additional_client_args):
     with sni_checker_server() as ctx:
         server_sock, server_greenlet = ctx
         server_addr, server_port = server_sock.getsockname()[:2]
-        server_host = gevent.socket.gethostbyaddr(server_addr)[0]
-        http = HTTPClient(
-            server_host,
-            server_port,
-            insecure=True,
-            ssl=True,
-            connection_timeout=.1,
-            ssl_context_factory=gevent.ssl.create_default_context,
 
-            **additional_client_args
+        mock_addrinfo = (
+            gevent.socket.AF_INET,
+            gevent.socket.SOCK_STREAM,
+            gevent.socket.IPPROTO_TCP,
+            'localhost',
+            ('127.0.0.1', server_port)
         )
+        with mock.patch(
+            'gevent.socket.getaddrinfo', Mock(return_value=[mock_addrinfo])
+        ):
 
-        def run(http):
-            try:
-                http.get('/')
-            except socket_error:
-                pass # handshake will not be completed
+            server_host = 'some_foo'
+            http = HTTPClient(
+                server_host,
+                server_port,
+                insecure=True,
+                ssl=True,
+                connection_timeout=.1,
+                ssl_context_factory=gevent.ssl.create_default_context,
 
-        client_greenlet = gevent.spawn(run, http)
-        joinall([client_greenlet, server_greenlet])
+                **additional_client_args
+            )
+
+            def run(http):
+                try:
+                    http.get('/')
+                except socket_error:
+                    pass  # handshake will not be completed
+
+            client_greenlet = gevent.spawn(run, http)
+            joinall([client_greenlet, server_greenlet])
 
     return server_host, server_port, server_greenlet.value
+
 
 @contextmanager
 def sni_checker_server():
