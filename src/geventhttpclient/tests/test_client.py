@@ -35,7 +35,7 @@ def wsgiserver(handler):
         server.stop()
 
 def test_client_simple():
-    client = HTTPClient('www.google.fr')
+    client = HTTPClient('httpbin.org')
     assert client.port == 80
     response = client.get('/')
     assert response.status_code == 200
@@ -43,18 +43,18 @@ def test_client_simple():
     assert len(body)
 
 def test_client_without_leading_slash():
-    client = HTTPClient('www.google.fr')
+    client = HTTPClient('httpbin.org')
     with client.get("") as response:
         assert response.status_code == 200
-    with client.get("maps") as response:
+    with client.get("base64/test") as response:
         assert(response.status_code in (200, 301, 302))
 
 test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
 def test_client_with_default_headers():
-    client = HTTPClient.from_url('www.google.fr/', headers=test_headers)
+    client = HTTPClient.from_url('httpbin.org/', headers=test_headers)
 
 def test_request_with_headers():
-    client = HTTPClient('www.google.fr')
+    client = HTTPClient('httpbin.org')
     response = client.get('/', headers=test_headers)
     assert response.status_code == 200
 
@@ -78,7 +78,7 @@ def test_build_request_invalid_host():
         client._build_request('GET', 'http://www.spiegel.de/')
 
 def test_response_context_manager():
-    client = HTTPClient.from_url('http://www.google.fr/')
+    client = HTTPClient.from_url('http://httpbin.org/')
     r = None
     with client.get('/') as response:
         assert response.status_code == 200
@@ -90,7 +90,7 @@ def test_response_context_manager():
     reason="We have issues on travis with the SSL tests"
 )
 def test_client_ssl():
-    client = HTTPClient('www.google.fr', ssl=True)
+    client = HTTPClient('github.com', ssl=True)
     assert client.port == 443
     response = client.get('/')
     assert response.status_code == 200
@@ -105,13 +105,14 @@ def test_client_ssl():
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
-    client = HTTPClient('www.google.fr', ssl_options={'ca_certs': certs})
+    client = HTTPClient('github.com', ssl_options={'ca_certs': certs})
     assert client.port == 443
-    with pytest.raises(SSLError):
+    with pytest.raises(SSLError) as e_info:
         client.get('/')
+    assert e_info.value.reason == 'CERTIFICATE_VERIFY_FAILED'
 
 def test_multi_queries_greenlet_safe():
-    client = HTTPClient('www.google.fr', concurrency=3)
+    client = HTTPClient('httpbin.org', concurrency=3)
     group = gevent.pool.Group()
     event = gevent.event.Event()
 

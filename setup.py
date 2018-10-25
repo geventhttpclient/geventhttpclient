@@ -42,7 +42,6 @@ if sys.hexversion < 0x02070900:
         'backports.ssl_match_hostname',
     ]
 
-
 setup(name='geventhttpclient',
       version = '1.3.1dev',
       description = 'http client library for gevent',

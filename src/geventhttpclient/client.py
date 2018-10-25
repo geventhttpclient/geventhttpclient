@@ -46,16 +46,18 @@ class HTTPClient(object):
             kw.pop('ssl_options', None)
         return cls(url.host, port=url.port, ssl=enable_ssl, **kw)
 
-    def __init__(self, host, port=None, headers={},
-            block_size=BLOCK_SIZE,
-            connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
-            network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
-            disable_ipv6=False,
-            concurrency=1,
-            ssl=False, ssl_options=None, ssl_context_factory=None,
-            insecure=False,
-            proxy_host=None, proxy_port=None, version=HTTP_11,
-            headers_type=Headers):
+    def __init__(self, host, port=None, headers=None,
+                 block_size=BLOCK_SIZE,
+                 connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
+                 network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
+                 disable_ipv6=False,
+                 concurrency=1,
+                 ssl=False, ssl_options=None, ssl_context_factory=None,
+                 insecure=False,
+                 proxy_host=None, proxy_port=None, version=HTTP_11,
+                 headers_type=Headers):
+        if headers is None:
+            headers = {}
         self.host = host
         self.port = port
         connection_host = self.host
@@ -68,9 +70,12 @@ class HTTPClient(object):
             connection_port = proxy_port
         else:
             self.use_proxy = False
-        if ssl and ssl_options is None:
-            ssl_options = {}
+        if ssl:
+            ssl_options = ssl_options.copy() if ssl_options else {}
         if ssl_options is not None:
+            if ssl_context_factory is not None:
+                requested_hostname = headers.get('host', self.host)
+                ssl_options.setdefault('server_hostname', requested_hostname)
             self.ssl = True
             if not self.port:
                 self.port = 443
