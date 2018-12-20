@@ -204,9 +204,6 @@ class HTTPClient(object):
         :return:
         """
 
-        if headers is None:
-            headers = {}
-
         if isinstance(body, six.text_type):
             body = body.encode('utf-8')
 
@@ -255,44 +252,28 @@ class HTTPClient(object):
                 response._sent_request = request
                 return response
 
-    def get(self, request_uri, headers=None):
-        if headers is None:
-            headers = {}
+    def get(self, request_uri, headers={}):
         return self.request(METHOD_GET, request_uri, headers=headers)
 
     def head(self, request_uri, headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_HEAD, request_uri, headers=headers)
 
     def post(self, request_uri, body=u'', headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
     def put(self, request_uri, body=u'', headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
     def delete(self, request_uri, body=u'', headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
 
     def patch(self, request_uri, body=u'', headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_PATCH, request_uri, body=body, headers=headers)
 
     def trace(self, request_uri, body=u'', headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_TRACE, request_uri, body=body, headers=headers)
 
     def options(self, request_uri, headers=None):
-        if headers is None:
-            headers = {}
         return self.request(METHOD_OPTIONS, request_uri, headers=headers)
 
 
