@@ -1,13 +1,15 @@
-import six
 import errno
 import os
-from geventhttpclient.connectionpool import ConnectionPool
-from geventhttpclient.response import HTTPSocketPoolResponse
-from geventhttpclient.response import HTTPConnectionClosed
-from geventhttpclient.url import URL
-from geventhttpclient.header import Headers
-from geventhttpclient import __version__
+
 import gevent.socket
+import six
+
+from geventhttpclient import __version__
+from geventhttpclient.connectionpool import ConnectionPool
+from geventhttpclient.header import Headers
+from geventhttpclient.response import HTTPConnectionClosed
+from geventhttpclient.response import HTTPSocketPoolResponse
+from geventhttpclient.url import URL
 
 CRLF = "\r\n"
 WHITESPACE = " "
@@ -19,19 +21,38 @@ PROTO_HTTPS = "https"
 HEADER_HOST = "Host"
 HEADER_CONTENT_LENGTH = "Content-Length"
 
-METHOD_GET      = "GET"
-METHOD_HEAD     = "HEAD"
-METHOD_POST     = "POST"
-METHOD_PUT      = "PUT"
-METHOD_DELETE   = "DELETE"
+METHOD_GET = "GET"
+METHOD_HEAD = "HEAD"
+METHOD_POST = "POST"
+METHOD_PUT = "PUT"
+METHOD_DELETE = "DELETE"
+METHOD_PATCH = "PATCH"
+METHOD_OPTIONS = "OPTIONS"
+METHOD_TRACE = "TRACE"
+
+
+def _get_body_length(body):
+    """
+    Get len of string or file
+
+    :param body:
+    :return:
+    :rtype: int
+    """
+    try:
+        return len(body)
+    except TypeError:
+        try:
+            return os.fstat(body.fileno()).st_size
+        except (AttributeError, OSError):
+            return None
 
 
 class HTTPClient(object):
-
     HTTP_11 = 'HTTP/1.1'
     HTTP_10 = 'HTTP/1.0'
 
-    BLOCK_SIZE = 1024 * 4 # 4KB
+    BLOCK_SIZE = 1024 * 4  # 4KB
 
     DEFAULT_HEADERS = Headers({
         'User-Agent': 'python/gevent-http-client-' + __version__
@@ -130,16 +151,25 @@ class HTTPClient(object):
 
     # Like urllib2, try to treat the body as a file if we can't determine the
     # file length with `len()`
-    def _get_body_length(self, body):
-        try:
-            return len(body)
-        except TypeError:
-            try:
-                return os.fstat(body.fileno()).st_size
-            except (AttributeError, OSError):
-                return None
 
-    def _build_request(self, method, request_uri, body="", headers={}):
+    def _build_request(self, method, request_uri, body="", headers=None):
+        """
+
+        :param method:
+        :type method: basestring
+        :param request_uri:
+        :type request_uri: basestring
+        :param body:
+        :type body: basestring or file
+        :param headers:
+        :type headers: dict
+        :return:
+        :rtype: basestring
+        """
+
+        if headers is None:
+            headers = {}
+
         header_fields = self.headers_type()
         header_fields.update(self.default_headers)
         header_fields.update(headers)
@@ -149,7 +179,7 @@ class HTTPClient(object):
                 host_port += HOST_PORT_SEP + str(self.port)
             header_fields[HEADER_HOST] = host_port
         if body and HEADER_CONTENT_LENGTH not in header_fields:
-            body_length = self._get_body_length(body)
+            body_length = _get_body_length(body)
             if body_length:
                 header_fields[HEADER_CONTENT_LENGTH] = body_length
 
@@ -163,18 +193,27 @@ class HTTPClient(object):
             request_url = SLASH + request_url
         elif request_url.startswith(PROTO_HTTP):
             if request_url.startswith(self._base_url_string):
-                request_url = request_url[len(self._base_url_string)-1:]
+                request_url = request_url[len(self._base_url_string) - 1:]
             else:
                 raise ValueError("Invalid host in URL")
 
         request = method + WHITESPACE + request_url + WHITESPACE + self.version + CRLF
 
-        for field, value in header_fields.iteritems():
+        for field, value in header_fields.items():
             request += field + FIELD_VALUE_SEP + str(value) + CRLF
         request += CRLF
         return request
 
-    def request(self, method, request_uri, body=b"", headers={}):
+    def request(self, method, request_uri, body=b"", headers=None):
+        """
+
+        :param method:
+        :param request_uri:
+        :param body: byte or file
+        :param headers:
+        :return:
+        """
+
         if isinstance(body, six.text_type):
             body = body.encode('utf-8')
 
@@ -212,7 +251,7 @@ class HTTPClient(object):
 
             try:
                 response = HTTPSocketPoolResponse(sock, self._connection_pool,
-                    block_size=self.block_size, method=method.upper(), headers_type=self.headers_type)
+                                                  block_size=self.block_size, method=method.upper(), headers_type=self.headers_type)
             except HTTPConnectionClosed as e:
                 # connection is released by the response itself
                 if attempts_left > 0:
@@ -226,21 +265,31 @@ class HTTPClient(object):
     def get(self, request_uri, headers={}):
         return self.request(METHOD_GET, request_uri, headers=headers)
 
-    def head(self, request_uri, headers={}):
+    def head(self, request_uri, headers=None):
         return self.request(METHOD_HEAD, request_uri, headers=headers)
 
-    def post(self, request_uri, body=u'', headers={}):
+    def post(self, request_uri, body=u'', headers=None):
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
-    def put(self, request_uri, body=u'', headers={}):
+    def put(self, request_uri, body=u'', headers=None):
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
-    def delete(self, request_uri, body=u'', headers={}):
+    def delete(self, request_uri, body=u'', headers=None):
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
+
+    def patch(self, request_uri, body=u'', headers=None):
+        return self.request(METHOD_PATCH, request_uri, body=body, headers=headers)
+
+    def trace(self, request_uri, body=u'', headers=None):
+        return self.request(METHOD_TRACE, request_uri, body=body, headers=headers)
+
+    def options(self, request_uri, headers=None):
+        return self.request(METHOD_OPTIONS, request_uri, headers=headers)
 
 
 class HTTPClientPool(object):
     """ Factory for maintaining a bunch of clients, one per host:port """
+
     # TODO: Add some housekeeping and cleanup logic
 
     def __init__(self, **kwargs):
