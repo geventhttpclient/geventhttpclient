@@ -1,5 +1,9 @@
-from collections import Mapping, MutableMapping
 import six
+
+if six.PY3:
+    from collections.abc import Mapping, MutableMapping
+else:
+    from collections import Mapping, MutableMapping
 
 _dict_setitem = dict.__setitem__
 _dict_getitem = dict.__getitem__
