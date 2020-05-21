@@ -42,16 +42,14 @@ jobs:
     env:
     - CIBW_SKIP=cp33
 deploy:
-  password0:
-    secure: PzCRJ9U3RZbSgHhgPDrjyzDTiT8JpF8OLI2ODMXA4QREz/Fi1iSeXprp0gQ+OEHeH3e88xHpIrK4nxxJcE56jejC0ToTEFqc20DMycV21AVd/+UJmeeUHRK6ULGEVp4R5AqkmRdAG059RJu519gOQBvY5LWb0N61o2ZkVw8uJmI=
-  password1:
-    secure: TKTsO49APvmPHa8Ex0SMzWuGsTZHDX+/ozBLEVTl3ImYNRk+4bvZIpOD4wCrpoqE/Mn2oYm14RaxPLpPZ6CUcggwCagzEkuJvV501gqiLs+Z04/+TQvM/v+MyuZqzikSHi2OKuDPPCAJ5/m9yW6DHyjSQJLQBtQmlj2GcWSM14E=
-  password2:
-    secure: CYeIqItHVMmXWTNcpKOflApNYEvy6CIJO9IyRuIIBipZ6Sj9eN/EG023/r2FxBIbe/aJ6L+OLrFK5VF9TGI7+v+NORVleSpmCBfneSnKX+JxOnL3xj2oyaQ9LQRrTjXptS/2oO4cQzlRFXGk/coar1xE3lz6wE6IQF1kDpMsQXM=
   provider: pypi
-    user: __token__
-    password: $PASSWORD0$PASSWORD1$PASSWORD2
-    distributions: sdist
+  user: __token__
+  password: "$TWINE_TOKEN0$TWINE_TOKEN1$TWINE_TOKEN2"
+  distributions: sdist
   on:
     tags: true
-
+env:
+  global:
+  - secure: aNOiDvBeWT0eO3bI60Xps5fR3GuKh83kESA+zvWvLI3f2N/jXGGM17bSbSRFJvpTLSCeLFmn0wLG28Q4vZHMHsfTvBtYmLCA06IMuh4vgU4TWRS62GhRR5FCn7NN3XDY8lSA1MOBGERQ16LYXYG+uVK5G1hFb6iqZs0ActsAwn0=
+  - secure: TtNdqjEKxxXPabDFAoqP/Vkx3Lr6FlWV3Vb9K3xKsojXgTEyTFLVQyRgufegqus0CviC9Q06hzITJ6VjL5yAjIcE3Zwmt3d1NBvkoIY/4HGBXTt0Wla6wLZ4DikmXygjibDZmc8A8gsC1y/4BPyTx+2nGgUi7owqt9JeK87AZxo=
+  - secure: IM2exBCtdZmmUgCKh9XHjohAaamXf1YB3EBVkez00XGDZo1fRWEz3mO9B7TtA1xfQQfD0eM3q89R9cVNNqX09+5MA6Ac7G04dtxYAe5WkO5phFCi9EufPCqoGS6TwuniJjHi/39QVh2R4MAQ/GwXXnSbmWLpY7bhChiQRmHTiLY=
