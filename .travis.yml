@@ -25,22 +25,6 @@ jobs:
       --skip-existing wheelhouse/*; fi
     env:
     - CIBW_SKIP=cp33
-  - stage: build
-    sudo: required
-    os: osx
-    osx_image: xcode8.3
-    language: 
-    python: 
-    install:
-    - if [ "${TRAVIS_OS_NAME:-}" == "osx" ]; then brew update; brew upgrade python;
-      fi
-    - pip install cibuildwheel==0.8.0
-    script:
-    - cibuildwheel --output-dir wheelhouse
-    - if [ "${TRAVIS_TAG:-}" != "" ]; then pip install twine; python -m twine upload
-      --skip-existing wheelhouse/*; fi
-    env:
-    - CIBW_SKIP=cp33
 deploy:
   provider: pypi
   user: __token__
