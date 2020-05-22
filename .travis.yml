@@ -16,15 +16,38 @@ jobs:
     services:
     - docker
     os: linux
-    python: '3.6'
+    python: "3.8"
     install:
-    - pip install cibuildwheel==0.8.0
+    - pip install cibuildwheel==1.3.0
     script:
     - cibuildwheel --output-dir wheelhouse
+    - python setup.py sdist -d wheelhouse
     - if [ "${TRAVIS_TAG:-}" != "" ]; then pip install twine; python -m twine upload
       --skip-existing wheelhouse/*; fi
     env:
-    - CIBW_SKIP=cp33
+    - CIBW_SKIP="cp33 cp34"
+  - stage: build
+    sudo: required
+    os: osx
+    osx_image: xcode9.4
+    language: generic
+    install:
+      # Python 3 is needed to run cibuildwheel
+      - if [ "${TRAVIS_OS_NAME:-}" == "osx" ]; then
+          brew update;
+          brew upgrade python;
+          true;
+        fi
+      - pip3 install cibuildwheel==1.3.0
+    script:
+      - cibuildwheel --output-dir wheelhouse
+      # Upload to PyPI on tags
+      - if [ "${TRAVIS_TAG:-}" != "" ]; then
+          pip install twine;
+          python -m twine upload --skip-existing wheelhouse/*;
+        fi
+    env:
+      - CIBW_SKIP="cp33 cp34"
 deploy:
   provider: pypi
   user: __token__
