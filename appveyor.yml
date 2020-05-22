@@ -1,3 +1,4 @@
+image: Visual Studio 2015
 build_script:
   - SET PATH=C:\Python38;C:\Python38\Scripts;%PATH%
   - python -m pip install --upgrade pip
@@ -12,4 +13,4 @@ artifacts:
   - path: "wheelhouse\\*.whl"
     name: Wheels
 environment:
-  CIBW_SKIP: "cp27-*"
+  CIBW_SKIP: cp27-*
