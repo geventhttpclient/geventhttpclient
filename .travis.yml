@@ -48,13 +48,17 @@ jobs:
         fi
     env:
       - CIBW_SKIP="cp33 cp34"
-deploy:
-  provider: pypi
-  user: __token__
-  password: "$TWINE_TOKEN0$TWINE_TOKEN1$TWINE_TOKEN2"
-  distributions: sdist
-  on:
-    tags: true
+  - stage: deploy
+    python: 3.8
+    install: skip  # no tests, no depedencies needed
+    script: skip  # we're not running tests
+    - deploy:
+      provider: pypi
+      user: __token__
+      password: "$TWINE_TOKEN0$TWINE_TOKEN1$TWINE_TOKEN2"
+      distributions: sdist
+      on:
+        tags: true
 env:
   global:
   - secure: aNOiDvBeWT0eO3bI60Xps5fR3GuKh83kESA+zvWvLI3f2N/jXGGM17bSbSRFJvpTLSCeLFmn0wLG28Q4vZHMHsfTvBtYmLCA06IMuh4vgU4TWRS62GhRR5FCn7NN3XDY8lSA1MOBGERQ16LYXYG+uVK5G1hFb6iqZs0ActsAwn0=
