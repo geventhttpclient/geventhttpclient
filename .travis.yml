@@ -1,5 +1,4 @@
 language: python
-sudo: false
 python:
 - '2.7'
 - '3.5'
@@ -9,10 +8,12 @@ install:
 - pip install -r requirements-dev.txt
 - pip install .
 script: py.test src/geventhttpclient/tests
+stages:
+  - build
+  - deploy
 jobs:
   include:
   - stage: build
-    sudo: required
     services:
     - docker
     os: linux
@@ -25,9 +26,8 @@ jobs:
     - if [ "${TRAVIS_TAG:-}" != "" ]; then pip install twine; python -m twine upload
       --skip-existing wheelhouse/*; fi
     env:
-    - CIBW_SKIP="cp33 cp34"
+      - CIBW_SKIP="cp33 cp34"
   - stage: build
-    sudo: required
     os: osx
     osx_image: xcode9.4
     language: generic
@@ -50,15 +50,16 @@ jobs:
       - CIBW_SKIP="cp33 cp34"
   - stage: deploy
     python: 3.8
-    install: skip  # no tests, no depedencies needed
-    script: skip  # we're not running tests
-    - deploy:
+    install: skip
+    script: skip
+    deploy:
       provider: pypi
       user: __token__
       password: "$TWINE_TOKEN0$TWINE_TOKEN1$TWINE_TOKEN2"
       distributions: sdist
       on:
         tags: true
+        branch: master
 env:
   global:
   - secure: aNOiDvBeWT0eO3bI60Xps5fR3GuKh83kESA+zvWvLI3f2N/jXGGM17bSbSRFJvpTLSCeLFmn0wLG28Q4vZHMHsfTvBtYmLCA06IMuh4vgU4TWRS62GhRR5FCn7NN3XDY8lSA1MOBGERQ16LYXYG+uVK5G1hFb6iqZs0ActsAwn0=
