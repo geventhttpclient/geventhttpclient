@@ -1,5 +1,7 @@
 build_script:
-  - pip install cibuildwheel==0.6.0
+  - SET PATH=C:\Python38;C:\Python38\Scripts;%PATH%
+  - python -m pip install --upgrade pip
+  - pip install cibuildwheel==1.3.0
   - cibuildwheel --output-dir wheelhouse
   - ps: >-
       if ($env:APPVEYOR_REPO_TAG -eq "true") {
@@ -9,3 +11,5 @@ build_script:
 artifacts:
   - path: "wheelhouse\\*.whl"
     name: Wheels
+environment:
+  CIBW_SKIP: "cp33 cp34"
