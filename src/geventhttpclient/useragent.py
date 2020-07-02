@@ -421,7 +421,10 @@ class UserAgent(object):
             ret = 'REQUEST: ' + url + '\n' + resp._sent_request
             if payload:
                 if isinstance(payload, six.binary_type):
-                    ret += payload.decode('utf-8') + '\n\n'
+                    try:
+                        ret += payload.decode('utf-8') + '\n\n'
+                    except UnicodeDecodeError:
+                        ret += 'UnicodeDecodeError' + '\n\n'
                 elif isinstance(payload, six.text_type):
                     ret += payload + '\n\n'
             ret += 'RESPONSE: ' + resp._response.version + ' ' + \
