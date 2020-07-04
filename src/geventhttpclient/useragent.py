@@ -32,7 +32,8 @@ class ConnectionError(Exception):
             self.text = str(args[0]) if len(args) == 1 else ''
         if kwargs:
             self.text += ', ' if self.text else ''
-            self.text += ', '.join("%s=%s" % (key, val) for key, val in six.iteritems(kwargs))
+            self.kwargs_text = ', '.join('%s=%s' % (key, val) for key, val in six.iteritems(kwargs))
+            self.text += self.kwargs_text
         else:
             self.text = ''
 
@@ -41,6 +42,12 @@ class ConnectionError(Exception):
             return "URL %s: %s" % (self.url, self.text)
         else:
             return "URL %s" % self.url
+
+    def __repr__(self):
+        repr_str = super().__repr__()
+        if self.kwargs_text:
+            return repr_str.replace(')', ''.join([', ', self.kwargs_text, ')']))
+        return repr_str
 
 
 class RetriesExceeded(ConnectionError):
