@@ -7,3 +7,4 @@ global-exclude *.py[co]
 include LICENSE-MIT
 include README.mdown
 include CHANGELOG
+include pytest.ini
