@@ -2,7 +2,7 @@ image: Visual Studio 2015
 build_script:
   - SET PATH=C:\Python38;C:\Python38\Scripts;%PATH%
   - python -m pip install --upgrade pip
-  - pip install cibuildwheel==1.3.0
+  - pip install cibuildwheel==1.4.2
   - cibuildwheel --output-dir wheelhouse
   - ps: python -m pip install twine
   - ps: python -m twine upload --skip-existing (resolve-path wheelhouse\*.whl)
