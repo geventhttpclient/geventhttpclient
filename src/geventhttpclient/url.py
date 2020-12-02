@@ -1,15 +1,45 @@
 import six
 if six.PY3:
     from urllib import parse as urlparse
+    from urllib.parse import urlencode
     from urllib.parse import quote_plus
+    from collections.abc import Mapping
+    basestring = (str, bytes)
 else:
     import urlparse
-    from urllib import quote_plus
+    from urllib import quote_plus, urlencode
+    from collections import Mapping
 
 DEFAULT_PORTS = {
     'http': 80,
     'https': 443
 }
+
+
+def to_key_val_list(value):
+    """Take an object and test to see if it can be represented as a
+    dictionary. If it can be, return a list of tuples, e.g.,
+    ::
+        >>> to_key_val_list([('key', 'val')])
+        [('key', 'val')]
+        >>> to_key_val_list({'key': 'val'})
+        [('key', 'val')]
+        >>> to_key_val_list('string')
+        Traceback (most recent call last):
+        ...
+        ValueError: cannot encode objects that are not 2-tuples
+    :rtype: list
+    """
+    if value is None:
+        return None
+
+    if isinstance(value, (str, bytes, bool, int)):
+        raise ValueError('cannot encode objects that are not 2-tuples')
+
+    if isinstance(value, Mapping):
+        value = value.items()
+
+    return list(value)
 
 
 class URL(object):
@@ -28,21 +58,16 @@ class URL(object):
     >>> str(url)
     'http://getgauss.com/urls?param=asdfa'
 
-    You can manipulate query arguments.
-    >>> url.query['auth_token'] = 'asdfaisdfuasdf'
-    >>> url
-    URL(http://getgauss.com/urls?auth_token=asdfaisdfuasdf&param=asdfa)
-
     You can change attributes.
     >>> url.host = 'infrae.com'
     >>> url
     URL(http://infrae.com/urls?auth_token=asdfaisdfuasdf&param=asdfa)
     """
 
-    __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment', 'user', 'password')
+    __slots__ = ('scheme', 'host', 'port', 'path', 'query', 'fragment', 'user', 'password', 'params')
     quoting_safe = ''
 
-    def __init__(self, url=None):
+    def __init__(self, url=None, params=None):
         if url is not None:
             scheme, netloc, path, query, fragment = urlparse.urlsplit(url)
         else:
@@ -81,13 +106,9 @@ class URL(object):
         self.password = password
 
         self.path = path or ''
-
-        self.query = dict()
-        for key, value in six.iteritems(urlparse.parse_qs(query)):
-            if len(value) > 1:
-                self.query[key] = value
-            else:
-                self.query[key] = value[0]
+        
+        self.query = query
+        self.params = params
 
     @property
     def netloc(self):
@@ -133,21 +154,40 @@ class URL(object):
 
     def __eq__(self, other):
         return str(self) == str(other)
+    
+    @staticmethod
+    def _encode_params(data):
+        """Encode parameters in a piece of data.
+        Will successfully encode parameters when passed as a dict or a list of
+        2-tuples.
+        """
 
+        if isinstance(data, (str, bytes)):
+            return data
+        elif hasattr(data, 'read'):
+            return data
+        elif hasattr(data, '__iter__'):
+            result = []
+            for k, vs in to_key_val_list(data):
+                if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):
+                    vs = [vs]
+                for v in vs:
+                    if v is not None:
+                        result.append(
+                            (k.encode('utf-8') if isinstance(k, str) else k,
+                             v.encode('utf-8') if isinstance(v, str) else v))
+            return urlencode(result, doseq=True)
+        else:
+            return data
+    
     @property
     def query_string(self):
-        params = []
-        for key, value in six.iteritems(self.query):
-            if isinstance(value, list):
-                for item in value:
-                    params.append("%s=%s" % (
-                        quote_plus(key), quote_plus(str(item), safe=self.quoting_safe)))
-            else:
-                params.append("%s=%s" % (
-                    quote_plus(key), quote_plus(str(value), safe=self.quoting_safe)))
-        if params:
-            return "&".join(params)
-        return ''
+        query = []
+        if self.query:
+            query.append(self.query)
+        if self.params:
+            query.append(self._encode_params(self.params))
+        return "&".join(query)
 
     @property
     def request_uri(self):
@@ -155,16 +195,6 @@ class URL(object):
         if not query:
             return self.path
         return self.path + '?' + query
-
-    def __getitem__(self, key):
-        return self.query[key]
-
-    def get(self, key):
-        return self.query.get(key)
-
-    def __setitem__(self, key, value):
-        self.query[key] = value
-        return value
 
     def append_to_path(self, value):
         if value.startswith('/'):
