@@ -42,7 +42,7 @@ jobs:
       #    brew upgrade python;
       #    true;
       #  fi
-      - pip3 install cibuildwheel==1.3.0
+      - pip3 install cibuildwheel>=1.7.1
     script:
       - cibuildwheel --output-dir wheelhouse
       # Upload to PyPI on tags
