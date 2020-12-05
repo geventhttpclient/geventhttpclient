@@ -66,7 +66,8 @@ class CompatRequest(object):
     """ urllib / cookielib compatible request class.
         See also: http://docs.python.org/library/cookielib.html
     """
-    def __init__(self, url, method='GET', headers=None, payload=None):
+    def __init__(self, url, method='GET', headers=None, payload=None, params=None):
+        self.params = params
         self.set_url(url)
         self.original_host = self.url_split.host
         self.method = method
@@ -79,7 +80,7 @@ class CompatRequest(object):
             self.url_split = url
         else:
             self.url = url
-            self.url_split = URL(self.url)
+            self.url_split = URL(self.url, params=self.params)
 
     def get_full_url(self):
         return self.url
@@ -276,7 +277,7 @@ class UserAgent(object):
     def __del__(self):
         self.close()
 
-    def _make_request(self, url, method='GET', headers=None, payload=None):
+    def _make_request(self, url, method='GET', headers=None, payload=None, params=None):
         req_headers = self.default_headers.copy()
         if headers:
             req_headers.update(headers)
@@ -294,7 +295,7 @@ class UserAgent(object):
                 # See restkit for some example implementation
                 # TODO: Implement it
                 raise NotImplementedError
-        return self.request_type(url, method=method, headers=req_headers, payload=payload)
+        return self.request_type(url, method=method, headers=req_headers, payload=payload, params=params)
 
     def _urlopen(self, request):
         client = self.clientpool.get_client(request.url_split)
@@ -331,7 +332,7 @@ class UserAgent(object):
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
     def urlopen(self, url, method='GET', response_codes=valid_response_codes,
-                headers=None, payload=None, to_string=False, debug_stream=None, **kwargs):
+                headers=None, payload=None, to_string=False, debug_stream=None, params=None, **kwargs):
         """ Open an URL, do retries and redirects and verify the status code
         """
         # POST or GET parameters can be passed in **kwargs
@@ -341,7 +342,7 @@ class UserAgent(object):
             elif isinstance(payload, dict):
                 payload.update(kwargs)
 
-        req = self._make_request(url, method=method, headers=headers, payload=payload)
+        req = self._make_request(url, method=method, headers=headers, payload=payload, params=params)
         for retry in xrange(self.max_retries):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified

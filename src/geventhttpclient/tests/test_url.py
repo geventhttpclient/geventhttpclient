@@ -9,8 +9,7 @@ def test_simple_url():
     assert url.path == '/subdir/file.py'
     assert url.host == 'getgauss.com'
     assert url.port == 80
-    assert url['param'] == 'value'
-    assert url['other'] == 'true'
+    assert url.query_string == 'param=value&other=true'
     assert url.fragment == 'frag'
 
 def test_path_only():
@@ -18,14 +17,29 @@ def test_path_only():
     assert url.host == ''
     assert url.port == None
     assert url.path == '/path/to/something'
-    assert url['param'] == 'value'
-    assert url['other'] == 'true'
+    assert url.query_string == 'param=value&other=true'
+
+def test_params():
+    url = URL(url_full, params={"pp":"hello"})
+    assert url.path == '/subdir/file.py'
+    assert url.host == 'getgauss.com'
+    assert url.port == 80
+    assert url.query_string == 'param=value&other=true&pp=hello'
+    assert url.fragment == 'frag'
+
+def test_params_urlencoded():
+    url = URL(url_full, params={"a/b":"c/d"})
+    assert url.path == '/subdir/file.py'
+    assert url.host == 'getgauss.com'
+    assert url.port == 80
+    assert url.query_string == 'param=value&other=true&a%2Fb=c%2Fd'
+    assert url.fragment == 'frag'    
 
 def test_empty():
     url = URL()
     assert url.host == ''
     assert url.port == 80
-    assert url.query == {}
+    assert url.query_string == ''
     assert url.fragment == ''
     assert url.netloc == ''
     assert str(url) == 'http:///'
@@ -46,7 +60,7 @@ def test_redirection_abs_path():
     assert updated.host == url.host
     assert updated.port == url.port
     assert updated.path == '/test.html'
-    assert updated.query == {}
+    assert updated.query_string == ''
     assert updated.fragment == ''
 
 def test_redirection_rel_path():
@@ -57,7 +71,7 @@ def test_redirection_rel_path():
         assert updated.port == url.port
         assert updated.path.startswith('/subdir/')
         assert updated.path.endswith(redir.split('?', 1)[0])
-        assert updated.query == {'key': 'val'}
+        assert updated.query_string == 'key=val'
         assert updated.fragment == ''
 
 def test_redirection_full_path():
@@ -69,16 +83,10 @@ def test_redirection_full_path():
         assert getattr(updated, attr) == getattr(url_full2, attr)
     assert str(url_full2) == url_full2_plain
 
-def test_set_safe_encoding():
-    class SafeModURL(URL):
-        quoting_safe = '*'
-    surl = '/path/to/something?param=value&other=*'
 
-    assert URL(surl).query_string == 'other=%2A&param=value' or  URL(surl).query_string == 'param=value&other=%2A'
-    assert SafeModURL(surl).query_string == 'other=*&param=value' or SafeModURL(surl).query_string == 'param=value&other=*'
-    URL.quoting_safe = '*'
-    assert URL(surl).query_string == 'other=*&param=value' or URL(surl).query_string == 'param=value&other=*'
-    URL.quoting_safe = ''
+def test_params():
+    assert URL("/some/url", params={"a":"b", "c":2}).query_string == "a=b&c=2"
+
 
 def test_equality():
     assert URL('https://example.com/') != URL('http://example.com/')

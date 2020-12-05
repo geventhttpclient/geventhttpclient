@@ -33,16 +33,16 @@ jobs:
       - CIBW_SKIP="cp33 cp34"
   - stage: build
     os: osx
-    osx_image: xcode9.4
+    osx_image: xcode12.2
     language: generic
     install:
       # Python 3 is needed to run cibuildwheel
-      - if [ "${TRAVIS_OS_NAME:-}" == "osx" ]; then
-          brew update;
-          brew upgrade python;
-          true;
-        fi
-      - pip3 install cibuildwheel==1.3.0
+      #- if [ "${TRAVIS_OS_NAME:-}" == "osx" ]; then
+      #    brew update;
+      #    brew upgrade python;
+      #    true;
+      #  fi
+      - pip3 install cibuildwheel>=1.7.1
     script:
       - cibuildwheel --output-dir wheelhouse
       # Upload to PyPI on tags
