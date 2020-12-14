@@ -1,5 +1,7 @@
-import mock
-from mock import patch, Mock
+try:
+    import unittest.mock as mock
+except ImportError:
+    import mock
 
 import dpkt.ssl
 import six
@@ -117,7 +119,7 @@ def _get_sni_sent_from_client(**additional_client_args):
             ('127.0.0.1', server_port)
         )
         with mock.patch(
-            'gevent.socket.getaddrinfo', Mock(return_value=[mock_addrinfo])
+            'gevent.socket.getaddrinfo', mock.Mock(return_value=[mock_addrinfo])
         ):
 
             server_host = 'some_foo'
