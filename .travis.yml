@@ -1,4 +1,7 @@
 language: python
+arch:
+  - arm64
+  - amd64
 python:
 - '2.7'
 - '3.5'
@@ -16,21 +19,38 @@ stages:
 jobs:
   include:
   - stage: build
+    arch: arm64
     services:
     - docker
     os: linux
-    python: "3.8"
+    python: 3.8
+    install:
+    - pip install cibuildwheel==1.10.0
+    script:
+    - cibuildwheel --output-dir wheelhouse
+    - if [ "${TRAVIS_TAG:-}" != "" ]; then
+        pip install twine;
+        python -m twine upload --skip-existing wheelhouse/*;
+      fi
+    env:
+      - CIBW_SKIP="cp27-*"
+  - stage: build
+    arch: amd64
+    services:
+    - docker
+    os: linux
+    python: 3.8
     install:
     - pip install cibuildwheel==1.3.0
     script:
     - cibuildwheel --output-dir wheelhouse
     - python setup.py sdist -d wheelhouse
-    - if [ "${TRAVIS_TAG:-}" != "" ]; then 
-        pip install twine; 
+    - if [ "${TRAVIS_TAG:-}" != "" ]; then
+        pip install twine;
         python -m twine upload --skip-existing wheelhouse/*;
       fi
     env:
-      - CIBW_SKIP="cp33 cp34"
+      - CIBW_SKIP="cp27-*"
   - stage: build
     os: osx
     osx_image: xcode12.2
@@ -51,8 +71,9 @@ jobs:
           python -m twine upload --skip-existing wheelhouse/*;
         fi
     env:
-      - CIBW_SKIP="cp33 cp34"
+      - CIBW_SKIP="cp27-*"
   - stage: deploy
+    arch: amd64
     python: 3.8
     install: skip
     script: skip
