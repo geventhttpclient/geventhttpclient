@@ -96,7 +96,7 @@ class ConnectionPool(object):
         return sock
 
     def _create_socket(self):
-        """ might be overriden and super for wrapping into a ssl socket
+        """ might be overridden and super for wrapping into a ssl socket
             or set tcp/socket options
         """
         sock_infos = self._resolve()
@@ -208,7 +208,7 @@ else:
         :param port: port
         :param ssl_options: accepts any options supported by `ssl.wrap_socket`
         :param ssl_context_factory: use `ssl.create_default_context` by default
-            if provided. It must be a callbable that returns a SSLContext.
+            if provided. It must be a callable that returns a SSLContext.
         """
 
         default_options = {
