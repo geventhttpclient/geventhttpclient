@@ -69,6 +69,14 @@ def set_cookie():
         return []
     return wsgi_handler
 
+def return_brotli():
+    def wsgi_handler(env, start_response):
+        path_info = env.get('PATH_INFO')
+        if path_info == "/":
+            start_response('200 OK', [("Content-Encoding", "br")])
+        return [b"\x1b'\x00\x98\x04rq\x88\xa1'\xbf]\x12\xac+g!%\x98\xf4\x02\xc4\xda~)8\xba\x06xO\x11)Y\x02"]
+    return wsgi_handler
+
 
 def test_file_post():
     body = tempfile.NamedTemporaryFile("a+b", delete=False)
@@ -152,3 +160,10 @@ def test_cookiejar():
     with wsgiserver(set_cookie()):
         useragent = UserAgent(cookiejar=CookieJar())
         assert b"" == useragent.urlopen('http://127.0.0.1:54323/').read()
+
+
+def test_brotli_response():
+    with wsgiserver(return_brotli()):
+        resp = UserAgent().urlopen('http://127.0.0.1:54323/', params={"path":"/"})
+        assert resp.status_code == 200
+        assert resp.content == b"https://github.com/gwik/geventhttpclient"
