@@ -47,7 +47,9 @@ jobs:
       - name: Build wheels
         run: pip install cibuildwheel==2.0.0b2 && python -m cibuildwheel --output-dir wheelhouse
         env:
-          CIBW_SKIP: "cp33 cp34"
+          CIBW_SKIP: "cp33 cp34 cp27-*"
+          CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
+          CIBW_ARCHS_LINUX: "auto aarch64"
 
       - uses: actions/upload-artifact@v2
         if: startsWith(github.event.ref, 'refs/tags')
