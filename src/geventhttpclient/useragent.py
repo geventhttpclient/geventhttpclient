@@ -5,6 +5,7 @@ import sys
 import ssl
 import zlib
 import os
+import brotli
 from six.moves import xrange, cStringIO
 from six.moves.urllib.parse import urlencode
 from six import print_, reraise, string_types, text_type
@@ -172,10 +173,12 @@ class CompatResponse(object):
     def release(self):
         return self._response.release()
 
-    def unzipped(self, gzip=True):
+    def unzipped(self, gzip=True, br=False):
         bodystr = self._response.read()
         if gzip:
             return zlib.decompress(bodystr, 16 + zlib.MAX_WBITS)
+        elif br:
+            return brotli.decompress(bodystr)
         else:
             # zlib only provides the zlib compress format, not the deflate format;
             # so on top of all there's this workaround:
@@ -207,6 +210,8 @@ class CompatResponse(object):
             ret = self.unzipped(gzip=False)
         elif content_type == 'identity':
             ret = self._response.read()
+        elif content_type == 'br':
+            ret = self.unzipped(gzip=False, br=True)
         elif content_type == 'compress':
             raise ValueError("Compression type not supported: %s" % content_type)
         else:
