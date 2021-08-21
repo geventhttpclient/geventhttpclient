@@ -1,0 +1,32 @@
+name: Publish
+
+on: 
+  workflow_dispatch:
+    inputs:
+      pypi_access_token:
+        description: 'Temporary pypi access token'     
+        required: true
+
+jobs:
+  build_and_publish:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, windows-2019, macOS-10.15]
+    needs: tests
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+      - run: python -m pip install cibuildwheel==2.1.1
+      - run: python -m cibuildwheel --output-dir dist
+        env:
+          CIBW_SKIP: "cp33 cp34 cp27-*"
+          CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
+          CIBW_ARCHS_LINUX: "auto aarch64"
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        if: startsWith(github.event.ref, 'refs/tags')
+        with:
+          user: __token__
+          password: ${{ github.event.inputs.pypi_access_token }}
+          skip_existing: true
