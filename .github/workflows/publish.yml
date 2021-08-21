@@ -25,7 +25,6 @@ jobs:
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
           CIBW_ARCHS_LINUX: "auto aarch64"
       - uses: pypa/gh-action-pypi-publish@release/v1
-        if: startsWith(github.event.ref, 'refs/tags')
         with:
           user: __token__
           password: ${{ github.event.inputs.pypi_access_token }}
