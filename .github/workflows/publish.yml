@@ -22,7 +22,7 @@ jobs:
         env:
           CIBW_SKIP: "cp33 cp34 cp27-*"
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
-          CIBW_ARCHS_LINUX: "auto aarch64"
+          CIBW_ARCHS_LINUX: "auto" # aarch64 fails with: The requested image's platform (linux/arm64) does not match the detected host platform (linux/amd64)
       - uses: actions/upload-artifact@v2
         with:
           path: wheelhouse/*.whl
