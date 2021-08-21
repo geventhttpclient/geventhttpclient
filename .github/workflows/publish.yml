@@ -31,10 +31,9 @@ jobs:
     needs: build
     steps:
       - uses: actions/download-artifact@v2
-        with:
-          path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
+          packages_dir: artifacts
           password: ${{ github.event.inputs.pypi_access_token }}
           skip_existing: true
