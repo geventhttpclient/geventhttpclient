@@ -8,7 +8,7 @@ on:
         required: true
 
 jobs:
-  build_and_publish:
+  build:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -18,11 +18,21 @@ jobs:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
       - run: python -m pip install cibuildwheel==2.1.1
-      - run: python -m cibuildwheel --output-dir dist
+      - run: python -m cibuildwheel --output-dir wheelhouse
         env:
           CIBW_SKIP: "cp33 cp34 cp27-*"
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
           CIBW_ARCHS_LINUX: "auto aarch64"
+      - uses: actions/upload-artifact@v2
+        with:
+          path: wheelhouse/*.whl
+  publish:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/download-artifact@v2
+          with:
+            name: wheelhouse
+            path: dist
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
