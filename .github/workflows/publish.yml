@@ -14,7 +14,6 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04, windows-2019, macOS-10.15]
-    needs: tests
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
