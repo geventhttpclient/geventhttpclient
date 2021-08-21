@@ -34,7 +34,8 @@ httpparser = Extension('geventhttpclient._parser',
 requirements = [
     'gevent >= 0.13',
     'certifi',
-    'six'
+    'six',
+    'brotli'
 ]
 
 if sys.hexversion < 0x02070900:
