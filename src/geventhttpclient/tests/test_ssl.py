@@ -154,7 +154,8 @@ def sni_checker_server():
     sock.bind(("localhost", 0))
     sock.listen(1)
 
-    sock.last_seen_sni = None
+    # @cyberw 2021-07-10: seems this doesnt exist any more, hope it doesnt make any difference
+    # sock.last_seen_sni = None 
 
     def run(sock):
         while True:
