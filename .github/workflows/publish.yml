@@ -1,11 +1,7 @@
 name: Publish
 
 on: 
-  workflow_dispatch:
-    inputs:
-      pypi_access_token:
-        description: 'Temporary pypi access token'     
-        required: true
+  workflow_dispatch
 
 jobs:
   source:
@@ -20,7 +16,7 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
-          password: ${{ github.event.inputs.pypi_access_token }}
+          password: ${{ secrets.PYPI_API_TOKEN }}
           skip_existing: true
   build:
     name: Build wheels on ${{ matrix.os }}
@@ -50,5 +46,5 @@ jobs:
         with:
           user: __token__
           packages_dir: artifact
-          password: ${{ github.event.inputs.pypi_access_token }}
+          password: ${{ secrets.PYPI_API_TOKEN }}
           skip_existing: true
