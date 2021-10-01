@@ -28,11 +28,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
+      - uses: docker/setup-qemu-action@v1
+        if: ${{ matrix.os == 'ubuntu-20.04' }}
+        name: Set up QEMU
       - run: python -m pip install cibuildwheel==2.1.1
       - run: python -m cibuildwheel --output-dir wheelhouse
         env:
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
-          CIBW_ARCHS_LINUX: "auto" # aarch64 fails with: The requested image's platform (linux/arm64) does not match the detected host platform (linux/amd64)
+          CIBW_ARCHS_LINUX: "auto aarch64"
       - uses: actions/upload-artifact@v2
         with:
           path: wheelhouse/*.whl
