@@ -50,7 +50,8 @@ class ConnectionPool(object):
                  size=5, disable_ipv6=False,
                  connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
                  network_timeout=DEFAULT_NETWORK_TIMEOUT,
-                 use_proxy=False):
+                 use_proxy=False,
+                 proxy_headers=None):
         self._closed = False
         self._connection_host = connection_host
         self._connection_port = connection_port
@@ -59,6 +60,7 @@ class ConnectionPool(object):
         self._semaphore = lock.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
         self._use_proxy = use_proxy
+        self._proxy_headers = proxy_headers or (lambda s: {})
 
         self.connection_timeout = connection_timeout
         self.network_timeout = network_timeout
@@ -134,15 +136,26 @@ class ConnectionPool(object):
 
     def _connect_socket(self, sock, address):
         sock.connect(address)
-        self._setup_proxy(sock)
+        extra_headers = self._proxy_headers(address)
+        self._setup_proxy(sock, extra_headers)
         return sock
 
-    def _setup_proxy(self, sock):
+    def _get_connect_string(self, extra_headers):
+        connect_string = (
+            "CONNECT {self._request_host}:{self._request_port} "
+            "HTTP/1.1\r\n")
+
+        for h, v in extra_headers.items():
+            connect_string = connect_string + "{h}: {v}\r\n".format(h=h, v=v)
+
+        connect_string = connect_string + "\r\n"
+        return connect_string
+
+    def _setup_proxy(self, sock, proxy_headers):
         if self._use_proxy:
+            connect_string = self._get_connect_string(proxy_headers)
             sock.send(
-                six.binary_type(
-                    "CONNECT {self._request_host}:{self._request_port} "
-                    "HTTP/1.1\r\n\r\n".format(self=self),
+                six.binary_type(connect_string.format(self=self),
                     'utf8'
                 )
             )

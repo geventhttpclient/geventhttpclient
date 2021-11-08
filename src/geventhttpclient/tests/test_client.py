@@ -298,3 +298,42 @@ def test_unicode_post():
     with wsgiserver(check_upload(byte_string, len(byte_string))):
         client = HTTPClient(*listener)
         client.post('/', unicode_string)
+
+def proxy_headers(address):
+    assert address[0] == listener[0]
+    assert address[1] == listener[1]
+    return {"Proxy-Authorization": "Basic a_string"}
+
+
+def validate_connect(auth, env):
+    if auth:
+        assert env["HTTP_PROXY_AUTHORIZATION"] == "Basic a_string"
+    else:
+        assert env.get("HTTP_PROXY_AUTHORIZATION", "Not set") == "Not set"
+    assert env["PATH_INFO"] == "asite.com:2828"
+
+def validate_get(env):
+    assert env["PATH_INFO"] == "http://asite.com:2828/thepath"
+    assert env["HTTP_HOST"] == "asite.com:2828"
+
+def check_proxy(auth=False):
+    def wsgi_handler(env, start_response):
+        if env["REQUEST_METHOD"] == "CONNECT":
+            validate_connect(auth, env)
+        elif env["REQUEST_METHOD"] == "GET":
+            validate_get(env)
+        else:
+            assert False, "Unknown method"
+        start_response('200 OK', [])
+        return []
+    return wsgi_handler
+
+def test_proxy_connect_with_auth():
+    with wsgiserver(check_proxy(auth=True)):
+        client = HTTPClient("asite.com", 2828, proxy_host=listener[0], proxy_port=listener[1], proxy_headers=proxy_headers)
+        client.get("/thepath")
+
+def test_proxy_connect_without_auth():
+    with wsgiserver(check_proxy(auth=False)):
+        client = HTTPClient("asite.com", 2828, proxy_host=listener[0], proxy_port=listener[1])
+        client.get("/thepath")

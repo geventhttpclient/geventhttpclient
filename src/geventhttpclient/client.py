@@ -76,7 +76,8 @@ class HTTPClient(object):
                  ssl=False, ssl_options=None, ssl_context_factory=None,
                  insecure=False,
                  proxy_host=None, proxy_port=None, version=HTTP_11,
-                 headers_type=Headers):
+                 headers_type=Headers,
+                 **kwargs):
         if headers is None:
             headers = {}
         self.host = host
@@ -114,7 +115,8 @@ class HTTPClient(object):
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
-                use_proxy=self.use_proxy
+                use_proxy=self.use_proxy,
+                **kwargs
             )
         else:
             self.ssl = False
@@ -129,7 +131,8 @@ class HTTPClient(object):
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
-                use_proxy=self.use_proxy
+                use_proxy=self.use_proxy,
+                **kwargs
             )
         self.version = version
         self.headers_type = headers_type
