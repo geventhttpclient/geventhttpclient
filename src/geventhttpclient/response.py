@@ -59,12 +59,6 @@ class HTTPResponse(HTTPResponseParser):
         """ Basic cookielib compatibility """
         return self._headers_index
 
-    def should_keep_alive(self):
-        """ return if the headers instruct to keep the connection
-        alive.
-        """
-        return bool(super(HTTPResponse, self).should_keep_alive())
-
     def should_close(self):
         """ return if we should close the connection.
 

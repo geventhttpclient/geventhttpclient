@@ -50,7 +50,7 @@ def wrap_refcount(method):
 @wrap_refcount
 def test_parse():
     parser = HTTPResponse()
-    assert parser.feed(RESPONSE), len(RESPONSE)
+    parser.feed(RESPONSE)
     assert parser.message_begun
     assert parser.headers_complete
     assert parser.message_complete
@@ -89,7 +89,7 @@ def test_parse_error():
         assert response.status_code, 0
         assert response.message_begun
     except HTTPException as e:
-        assert 'invalid HTTP status code' in str(e)
+        assert 'Invalid response status' in str(e)
     else:
         assert False, "should have raised"
 
