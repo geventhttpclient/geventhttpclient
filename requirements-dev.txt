@@ -2,3 +2,4 @@
 pytest
 dpkt
 mock
+requests
