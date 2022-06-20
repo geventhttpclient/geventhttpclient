@@ -14,16 +14,12 @@ import gevent
 from urllib3 import encode_multipart_formdata
 from urllib3.fields import RequestField
 
-if six.PY3:
-    from collections.abc import Mapping
-else:
-    from collections import Mapping
 try:
     from gevent.dns import DNSError
 except ImportError:
     class DNSError(Exception): pass
 
-from .url import URL
+from .url import URL, to_key_val_list
 from .client import HTTPClient, HTTPClientPool
 
 basestring = (str, bytes)
@@ -326,23 +322,35 @@ class UserAgent(object):
             raise BadStatusCode(url, code=status_code)
 
     def _encode_files(self, files, data):
-        """Build the body for a multipart/form-data request.
+        """
+        Method taken from models in requests library , usage is the same. Only difference is that you can add custom
+        boundary in 5-tuple version.
+
+        Build the body for a multipart/form-data request.
 
         Will successfully encode files when passed as a dict or a list of
         tuples. Order is retained if data is a list of tuples but arbitrary
         if parameters are supplied as a dict.
-        The tuples may be 2-tuples (filename, fileobj), 3-tuples (filename, fileobj, contentype)
-        , 4-tuples (filename, fileobj, contentype, custom_headers) or 5-tuples (filename, fileobj, contentype,
-        custom_headers, custom boundary).
+
+        The tuples may be
+        2-tuples (filename, fileobj),
+        3-tuples (filename, fileobj, contentype),
+        4-tuples (filename, fileobj, contentype, custom_headers) or
+        5-tuples (filename, fileobj, contentype, custom_headers, custom boundary).
+
+        example:
+        files = {'file': ('report.xls', body, 'application/vnd.ms-excel', {'Expires': '0'}, 'custom_boundary')}
+
         """
+
         if not files:
             raise ValueError("Files must be provided.")
         elif isinstance(data, basestring):
             raise ValueError("Data must not be a string.")
 
         new_fields = []
-        fields = self.to_key_val_list(data or {})
-        files = self.to_key_val_list(files or {})
+        fields = to_key_val_list(data or {})
+        files = to_key_val_list(files or {})
 
         for field, val in fields:
             if isinstance(val, basestring) or not hasattr(val, "__iter__"):
@@ -529,38 +537,9 @@ class UserAgent(object):
         return ret
 
     @classmethod
-    def to_key_val_list(cls, value):
-        """Take an object and test to see if it can be represented as a
-        dictionary. If it can be, return a list of tuples, e.g.,
-
-        ::
-
-            >>> to_key_val_list([('key', 'val')])
-            [('key', 'val')]
-            >>> to_key_val_list({'key': 'val'})
-            [('key', 'val')]
-            >>> to_key_val_list('string')
-            Traceback (most recent call last):
-            ...
-            ValueError: cannot encode objects that are not 2-tuples
-
-        :rtype: list
-        """
-        if value is None:
-            return None
-
-        if isinstance(value, (str, bytes, bool, int)):
-            raise ValueError("cannot encode objects that are not 2-tuples")
-
-        if isinstance(value, Mapping):
-            value = value.items()
-
-        return list(value)
-
-    @classmethod
-    def guess_filename(cls, obj):
+    def guess_filename(cls, file):
         """Tries to guess the filename of the given object."""
-        name = getattr(obj, "name", None)
+        name = getattr(file, "name", None)
         if name and isinstance(name, basestring) and name[0] != "<" and name[-1] != ">":
             return os.path.basename(name)
 
