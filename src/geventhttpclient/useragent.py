@@ -19,7 +19,7 @@ from .utils import basestring, to_key_val_list, guess_filename
 try:
     from gevent.dns import DNSError
 except ImportError:
-    class DNSError(Exception):pass
+    class DNSError(Exception): pass
 
 from .url import URL
 from .client import HTTPClient, HTTPClientPool
