@@ -1,6 +1,11 @@
 import os
-from collections.abc import Mapping
 
+import six
+
+if six.PY3:
+    from collections.abc import Mapping
+else:
+    from collections import Mapping
 basestring = (str, bytes)
 
 
