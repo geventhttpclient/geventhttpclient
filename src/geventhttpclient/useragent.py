@@ -11,10 +11,16 @@ from six.moves.urllib.parse import urlencode
 from six import print_, reraise, string_types, text_type
 
 import gevent
+from urllib3 import encode_multipart_formdata
+from urllib3.fields import RequestField
+
+from .utils import basestring, to_key_val_list, guess_filename
+
 try:
     from gevent.dns import DNSError
 except ImportError:
-    class DNSError(Exception): pass
+    class DNSError(Exception):
+        pass
 
 from .url import URL
 from .client import HTTPClient, HTTPClientPool
@@ -67,6 +73,7 @@ class CompatRequest(object):
     """ urllib / cookielib compatible request class.
         See also: http://docs.python.org/library/cookielib.html
     """
+
     def __init__(self, url, method='GET', headers=None, payload=None, params=None):
         self.params = params
         self.set_url(url)
@@ -204,7 +211,7 @@ class CompatResponse(object):
             # No content-encoding header set
             content_type = 'identity'
 
-        if  content_type == 'gzip':
+        if content_type == 'gzip':
             ret = self.unzipped(gzip=True)
         elif content_type == 'deflate':
             ret = self.unzipped(gzip=False)
@@ -248,6 +255,7 @@ class CompatResponse(object):
 class RestkitCompatResponse(CompatResponse):
     """ Some extra lines to also serve as a drop in replacement for restkit
     """
+
     def body_string(self):
         return self.content
 
@@ -282,13 +290,17 @@ class UserAgent(object):
     def __del__(self):
         self.close()
 
-    def _make_request(self, url, method='GET', headers=None, payload=None, params=None):
+    def _make_request(self, url, method='GET', headers=None, payload=None, params=None, files=None):
         req_headers = self.default_headers.copy()
         if headers:
             req_headers.update(headers)
-        if payload:
+        if payload or files:
             # Adjust headers depending on payload content
             content_type = req_headers.get('content-type', None)
+            if files:
+                (body, content_type) = self._encode_files(files, payload)
+                payload = body
+                req_headers['content-type'] = content_type
             if not content_type and isinstance(payload, dict):
                 req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
@@ -296,10 +308,6 @@ class UserAgent(object):
                 req_headers['content-type'] = 'text/plain; charset=utf-8'
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
-            elif content_type.startswith("multipart/form-data"):
-                # See restkit for some example implementation
-                # TODO: Implement it
-                raise NotImplementedError
         return self.request_type(url, method=method, headers=req_headers, payload=payload, params=params)
 
     def _urlopen(self, request):
@@ -313,6 +321,78 @@ class UserAgent(object):
         """
         if status_code not in self.valid_response_codes:
             raise BadStatusCode(url, code=status_code)
+
+    def _encode_files(self, files, data):
+        """Build the body for a multipart/form-data request.
+
+        Will successfully encode files when passed as a dict or a list of
+        tuples. Order is retained if data is a list of tuples but arbitrary
+        if parameters are supplied as a dict.
+        The tuples may be 2-tuples (filename, fileobj), 3-tuples (filename, fileobj, contentype)
+        , 4-tuples (filename, fileobj, contentype, custom_headers) or 5-tuples (filename, fileobj, contentype,
+        custom_headers, custom boundary).
+        """
+        if not files:
+            raise ValueError("Files must be provided.")
+        elif isinstance(data, basestring):
+            raise ValueError("Data must not be a string.")
+
+        new_fields = []
+        fields = to_key_val_list(data or {})
+        files = to_key_val_list(files or {})
+
+        for field, val in fields:
+            if isinstance(val, basestring) or not hasattr(val, "__iter__"):
+                val = [val]
+            for v in val:
+                if v is not None:
+                    # Don't call str() on bytestrings: in Py3 it all goes wrong.
+                    if not isinstance(v, bytes):
+                        v = str(v)
+
+                    new_fields.append(
+                        (
+                            field.decode("utf-8")
+                            if isinstance(field, bytes)
+                            else field,
+                            v.encode("utf-8") if isinstance(v, str) else v,
+                        )
+                    )
+
+        for (k, v) in files:
+            # support for explicit filename
+            ft = None
+            fh = None
+            boundary = None
+            if isinstance(v, (tuple, list)):
+                if len(v) == 2:
+                    fn, fp = v
+                elif len(v) == 3:
+                    fn, fp, ft = v
+                elif len(v) == 4:
+                    fn, fp, ft, fh = v
+                else:
+                    fn, fp, ft, fh, boundary = v
+            else:
+                fn = guess_filename(v) or k
+                fp = v
+
+            if isinstance(fp, (str, bytes, bytearray)):
+                fdata = fp
+            elif hasattr(fp, "read"):
+                fdata = fp.read()
+            elif fp is None:
+                continue
+            else:
+                fdata = fp
+
+            rf = RequestField(name=k, data=fdata, filename=fn, headers=fh)
+            rf.make_multipart(content_type=ft)
+            new_fields.append(rf)
+
+        body, content_type = encode_multipart_formdata(new_fields, boundary)
+
+        return body, content_type
 
     def _handle_error(self, e, url=None):
         """ Hook for subclassing. Raise the error to interrupt further retrying,
@@ -347,7 +427,7 @@ class UserAgent(object):
             elif isinstance(payload, dict):
                 payload.update(kwargs)
 
-        req = self._make_request(url, method=method, headers=headers, payload=payload, params=params)
+        req = self._make_request(url, method=method, headers=headers, payload=payload, params=params, **kwargs)
         for retry in xrange(self.max_retries):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified
@@ -363,7 +443,7 @@ class UserAgent(object):
                 except BaseException as e:
                     e.request = req
                     last_error = self._handle_error(e, url=req.url)
-                    break # Continue with next retry
+                    break  # Continue with next retry
 
                 # We received a response
                 if debug_stream is not None:
@@ -379,7 +459,7 @@ class UserAgent(object):
                     e.http_log = self._conversation_str(req.url, resp, payload=req.payload)
                     resp.release()
                     last_error = self._handle_error(e, url=req.url)
-                    break # Continue with next retry
+                    break  # Continue with next retry
 
                 if self.cookiejar is not None:
                     self.cookiejar.extract_cookies(resp, req)
@@ -442,7 +522,7 @@ class UserAgent(object):
                     ret += payload + '\n\n'
             ret += 'RESPONSE: ' + resp._response.version + ' ' + \
                    str(resp.status_code) + '\n' + \
-                header_str + '\n\n' + resp.content[:].decode('utf-8')
+                   header_str + '\n\n' + resp.content[:].decode('utf-8')
         return ret
 
     def download(self, url, fpath, chunk_size=16 * 1024, resume=False, **kwargs):
@@ -460,7 +540,7 @@ class UserAgent(object):
                 resp = self.urlopen(url, headers=headers, **kwargs)
                 cr = resp.headers.get('Content-Range')
                 if resp.status_code != 206 or not cr or not cr.startswith('bytes') or \
-                            not cr.split(None, 1)[1].startswith(str(offset)):
+                        not cr.split(None, 1)[1].startswith(str(offset)):
                     resp.release()
                     offset = 0
             if not offset:

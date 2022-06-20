@@ -93,6 +93,34 @@ def test_file_post():
         os.remove(name)
 
 
+def test_multipart_post():
+    body = tempfile.NamedTemporaryFile("a+b", delete=False)
+    name = body.name
+    try:
+        body.write(b"123456789")
+        headers = {'CONTENT_LENGTH': '237',
+                   'CONTENT_TYPE': 'multipart/form-data; boundary=custom_boundary'}
+        files = {'file': ('report.xls', body, 'application/vnd.ms-excel', {'Expires': '0'}, 'custom_boundary')}
+
+        with wsgiserver(check_upload((b'--custom_boundary\r\n'
+                                      b'Content-Disposition: form-data; name="files"\r\n'
+                                      b'\r\n'
+                                      b'file\r\n'
+                                      b'--custom_boundary\r\n'
+                                      b'Content-Disposition: form-data; name="file"; filename="report.xls"\r\n'
+                                      b'Content-Type: application/vnd.ms-excel\r\n'
+                                      b'Expires: 0\r\n'
+                                      b'\r\n'
+                                      b'\r\n'
+                                      b'--custom_boundary--'
+                                      b'\r\n'), headers)):
+            useragent = UserAgent()
+            useragent.urlopen('http://127.0.0.1:54323/', method='POST', files=files)
+    finally:
+        body.close()
+        os.remove(name)
+
+
 def test_unicode_post():
     byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
     unicode_string = byte_string.decode('utf-8')
