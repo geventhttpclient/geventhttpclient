@@ -14,8 +14,10 @@ import gevent
 from urllib3 import encode_multipart_formdata
 from urllib3.fields import RequestField
 
-from .utils import basestring, to_key_val_list, guess_filename
-
+if six.PY3:
+    from collections.abc import Mapping
+else:
+    from collections import Mapping
 try:
     from gevent.dns import DNSError
 except ImportError:
@@ -23,6 +25,8 @@ except ImportError:
 
 from .url import URL
 from .client import HTTPClient, HTTPClientPool
+
+basestring = (str, bytes)
 
 
 class ConnectionError(Exception):
@@ -337,8 +341,8 @@ class UserAgent(object):
             raise ValueError("Data must not be a string.")
 
         new_fields = []
-        fields = to_key_val_list(data or {})
-        files = to_key_val_list(files or {})
+        fields = self.to_key_val_list(data or {})
+        files = self.to_key_val_list(files or {})
 
         for field, val in fields:
             if isinstance(val, basestring) or not hasattr(val, "__iter__"):
@@ -373,7 +377,7 @@ class UserAgent(object):
                 else:
                     fn, fp, ft, fh, boundary = v
             else:
-                fn = guess_filename(v) or k
+                fn = self.guess_filename(v) or k
                 fp = v
 
             if isinstance(fp, (str, bytes, bytearray)):
@@ -523,6 +527,42 @@ class UserAgent(object):
                    str(resp.status_code) + '\n' + \
                    header_str + '\n\n' + resp.content[:].decode('utf-8')
         return ret
+
+    @classmethod
+    def to_key_val_list(cls, value):
+        """Take an object and test to see if it can be represented as a
+        dictionary. If it can be, return a list of tuples, e.g.,
+
+        ::
+
+            >>> to_key_val_list([('key', 'val')])
+            [('key', 'val')]
+            >>> to_key_val_list({'key': 'val'})
+            [('key', 'val')]
+            >>> to_key_val_list('string')
+            Traceback (most recent call last):
+            ...
+            ValueError: cannot encode objects that are not 2-tuples
+
+        :rtype: list
+        """
+        if value is None:
+            return None
+
+        if isinstance(value, (str, bytes, bool, int)):
+            raise ValueError("cannot encode objects that are not 2-tuples")
+
+        if isinstance(value, Mapping):
+            value = value.items()
+
+        return list(value)
+
+    @classmethod
+    def guess_filename(cls, obj):
+        """Tries to guess the filename of the given object."""
+        name = getattr(obj, "name", None)
+        if name and isinstance(name, basestring) and name[0] != "<" and name[-1] != ">":
+            return os.path.basename(name)
 
     def download(self, url, fpath, chunk_size=16 * 1024, resume=False, **kwargs):
         kwargs.pop('to_string', None)
