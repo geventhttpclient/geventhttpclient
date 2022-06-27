@@ -437,8 +437,10 @@ class UserAgent(object):
                 payload = kwargs
             elif isinstance(payload, dict):
                 payload.update(kwargs)
-
-        req = self._make_request(url, method=method, headers=headers, payload=payload, params=params, **kwargs)
+            files = kwargs.get("files", None)
+        else:
+            files = None
+        req = self._make_request(url, method=method, headers=headers, payload=payload, params=params, files=files)
         for retry in xrange(self.max_retries):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified
