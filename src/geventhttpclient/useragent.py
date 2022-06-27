@@ -428,7 +428,7 @@ class UserAgent(object):
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
     def urlopen(self, url, method='GET', response_codes=valid_response_codes,
-                headers=None, payload=None, to_string=False, debug_stream=None, params=None, **kwargs):
+                headers=None, payload=None, to_string=False, debug_stream=None, params=None, files=None, **kwargs):
         """ Open an URL, do retries and redirects and verify the status code
         """
         # POST or GET parameters can be passed in **kwargs
@@ -437,9 +437,7 @@ class UserAgent(object):
                 payload = kwargs
             elif isinstance(payload, dict):
                 payload.update(kwargs)
-            files = kwargs.get("files", None)
-        else:
-            files = None
+
         req = self._make_request(url, method=method, headers=headers, payload=payload, params=params, files=files)
         for retry in xrange(self.max_retries):
             if retry > 0 and self.retry_delay:
