@@ -8,8 +8,8 @@ A high performance, concurrent HTTP client library for python using
 `gevent.httplib` support was removed in [gevent 1.0](https://github.com/surfly/gevent/commit/b45b83b1bc4de14e3c4859362825044b8e3df7d6
 ), **geventhttpclient** now provides that missing functionality.
 
-**geventhttpclient** use a fast [http parser](http://github.com/joyent/http-parser),
-written in C, originating from nginx, extracted and modified by Joyent.
+**geventhttpclient** uses a fast [http parser](https://github.com/nodejs/llhttp),
+written in C.
 
 **geventhttpclient** has been specifically designed for high concurrency,
 streaming and support HTTP 1.1 persistent connections. More generally it is
