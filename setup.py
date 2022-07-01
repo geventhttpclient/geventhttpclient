@@ -27,9 +27,15 @@ but Python 2.7 and 3.5 *should* work too.
 Use of SSL/TLS with python 2.7.9 is not recommended and may be broken.
 """
 
-httpparser = Extension('geventhttpclient._parser',
-                    sources = ['ext/_parser.c', 'ext/http_parser.c'],
-                    include_dirs = ['ext'])
+httpparser = Extension(
+    'geventhttpclient._parser',
+    sources=[
+        'ext/_parser.c',
+        'ext/api.c',
+        'ext/http.c',
+        'ext/llhttp.c',
+    ],
+)
 
 requirements = [
     'gevent >= 0.13',
