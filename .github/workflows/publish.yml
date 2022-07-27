@@ -20,12 +20,11 @@ jobs:
           skip_existing: true
   build:
     name: Build wheels on ${{ matrix.os }}
-    continue-on-error: true # dont let one failing OS block publishing other OS:es
     runs-on: ${{ matrix.os }}
     needs: source
     strategy:
       matrix:
-        os: [ubuntu-20.04, windows-2019, windows-2022, macos-10.15, macos-11, macos-12]
+        os: [ubuntu-20.04, windows-2019, windows-2022, macos-11, macos-12]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
