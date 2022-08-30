@@ -300,8 +300,9 @@ class UserAgent(object):
                 (body, content_type) = self._encode_files(files, payload)
                 payload = body
                 req_headers['content-type'] = content_type
-            if not content_type and isinstance(payload, dict):
-                req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
+            if isinstance(payload, dict):
+                if not content_type:
+                    req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
             elif not content_type and isinstance(payload, text_type):
                 req_headers['content-type'] = 'text/plain; charset=utf-8'
