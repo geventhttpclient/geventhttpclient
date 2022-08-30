@@ -137,6 +137,14 @@ def test_bytes_post():
         useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=b"12345")
 
 
+def test_dict_post_with_content_type():
+    headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+    payload = {"foo": "bar"}
+    with wsgiserver(set_cookie()): # lazy. I just want to see that we dont crash making the request
+        resp = UserAgent().urlopen('http://127.0.0.1:54323/', method='POST', payload=payload, headers=headers)
+        assert resp.status_code == 200
+
+        
 def test_redirect():
     with wsgiserver(check_redirect()):
         resp = UserAgent().urlopen('http://127.0.0.1:54323/')
