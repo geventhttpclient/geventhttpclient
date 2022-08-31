@@ -107,7 +107,7 @@ class URL(object):
 
         self.path = path or ''
         
-        self.query = query
+        self.query = query.replace(" ", "%20") # get a little closer to the behaviour of requests.utils.requote_uri
         self.params = params
 
     @property

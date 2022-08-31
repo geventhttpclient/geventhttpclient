@@ -35,6 +35,12 @@ def test_params_urlencoded():
     assert url.query_string == 'param=value&other=true&a%2Fb=c%2Fd'
     assert url.fragment == 'frag'    
 
+def test_query_string_urlencoded():
+    url = URL("http://getgauss.com/?foo=bar with spaces")
+    assert url.query_string == 'foo=bar%20with%20spaces'
+    assert url.host == 'getgauss.com'
+    assert url.port == 80
+
 def test_empty():
     url = URL()
     assert url.host == ''
