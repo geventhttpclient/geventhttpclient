@@ -50,7 +50,7 @@ if sys.hexversion < 0x02070900:
     ]
 
 setup(name='geventhttpclient',
-      version = '2.0.1',
+      version = '2.0.2',
       description = 'http client library for gevent',
       long_description = DESC,
       url="http://github.com/gwik/geventhttpclient",
