@@ -198,6 +198,11 @@ try:
         from gevent.ssl import match_hostname
     except ImportError:
         from backports.ssl_match_hostname import match_hostname
+
+    try:
+        from gevent.ssl import create_default_context
+    except ImportError:
+        create_default_context = None
 except ImportError:
     pass
 else:
@@ -217,17 +222,28 @@ else:
             'cert_reqs': gevent.ssl.CERT_REQUIRED
         }
 
-        ssl_context_factory = getattr(gevent.ssl, "create_default_context",
-                                      None)
-
         def __init__(self,
                      connection_host,
                      connection_port,
                      request_host,
-                     request_port, **kw):
-            self.ssl_options = kw.pop("ssl_options", {})
-            self.ssl_context_factory = kw.pop('ssl_context_factory', None)
-            self.insecure = kw.pop('insecure', False)
+                     request_port,
+                     insecure=False,
+                     ssl_context_factory=None,
+                     ssl_options=None,
+                     **kw):
+            self.insecure = insecure
+
+            self.ssl_options = self.default_options.copy()
+            self.ssl_options.update(ssl_options or {})
+
+            ssl_context_factory = ssl_context_factory or create_default_context
+            if ssl_context_factory is not None:
+                self.ssl_context = ssl_context_factory()
+                self.ssl_context.load_verify_locations(cafile=self.ssl_options['ca_certs'])
+                self.ssl_context.check_hostname = not self.insecure
+            else:
+                self.ssl_context = None
+
             super(SSLConnectionPool, self).__init__(connection_host,
                                                     connection_port,
                                                     request_host,
@@ -242,10 +258,8 @@ else:
         def _connect_socket(self, sock, address):
             sock = super(SSLConnectionPool, self)._connect_socket(sock, address)
 
-            if self.ssl_context_factory is None:
-                ssl_options = self.default_options.copy()
-                ssl_options.update(self.ssl_options)
-                return gevent.ssl.wrap_socket(sock, **ssl_options)
+            if self.ssl_context is None:
+                return gevent.ssl.wrap_socket(sock, **self.ssl_options)
             else:
-                return self.ssl_context_factory().wrap_socket(sock,
-                                                              **self.ssl_options)
+                server_hostname = self.ssl_options.get('server_hostname', self._request_host)
+                return self.ssl_context.wrap_socket(sock, server_hostname=server_hostname)
