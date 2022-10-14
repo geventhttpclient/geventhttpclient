@@ -1,7 +1,3 @@
-import gevent.monkey
-
-gevent.monkey.patch_ssl()
-
 try:
     import unittest.mock as mock
 except ImportError:
