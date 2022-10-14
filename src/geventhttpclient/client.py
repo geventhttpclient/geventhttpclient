@@ -310,3 +310,4 @@ class HTTPClientPool(object):
     def close(self):
         for client in self.clients.values():
             client.close()
+        self.clients.clear()
