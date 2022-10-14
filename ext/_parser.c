@@ -1,7 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 #include "Python_compat.h"
-#include "llhttp.h"
+#include <llhttp.h>
 #include <stdio.h>
 
 static PyObject * PyExc_HTTPParseError;
