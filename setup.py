@@ -31,9 +31,12 @@ httpparser = Extension(
     'geventhttpclient._parser',
     sources=[
         'ext/_parser.c',
-        'ext/api.c',
-        'ext/http.c',
-        'ext/llhttp.c',
+        'llhttp/src/api.c',
+        'llhttp/src/http.c',
+        'llhttp/src/llhttp.c',
+    ],
+    include_dirs=[
+        'llhttp/include',
     ],
 )
 

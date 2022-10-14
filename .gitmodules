@@ -1,0 +1,3 @@
+[submodule "llhttp"]
+	path = llhttp
+	url = https://github.com/nodejs/llhttp
