@@ -238,9 +238,7 @@ else:
 
             ssl_context_factory = ssl_context_factory or create_default_context
             if ssl_context_factory is not None:
-                self.ssl_context = ssl_context_factory()
-                self.ssl_context.load_verify_locations(cafile=self.ssl_options['ca_certs'])
-                self.ssl_context.check_hostname = not self.insecure
+                self.init_ssl_context(ssl_context_factory)
             else:
                 self.ssl_context = None
 
@@ -249,6 +247,15 @@ else:
                                                     request_host,
                                                     request_port,
                                                     **kw)
+
+        def init_ssl_context(self, ssl_context_factory):
+            ca_certs = self.ssl_options['ca_certs']
+            try:
+                self.ssl_context = ssl_context_factory(cafile=ca_certs)
+            except TypeError:
+                self.ssl_context = ssl_context_factory()
+                self.ssl_context.load_verify_locations(cafile=ca_certs)
+            self.ssl_context.check_hostname = not self.insecure
 
         def after_connect(self, sock):
             super(SSLConnectionPool, self).after_connect(sock)
