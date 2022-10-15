@@ -53,7 +53,7 @@ if sys.hexversion < 0x02070900:
     ]
 
 setup(name='geventhttpclient',
-      version = "2.0.7", # dont forget to update version in __init__.py as well
+      version = "2.0.8", # dont forget to update version in __init__.py as well
       description = 'http client library for gevent',
       long_description = DESC,
       url="http://github.com/gwik/geventhttpclient",
