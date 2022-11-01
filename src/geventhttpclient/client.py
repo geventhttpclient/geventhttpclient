@@ -175,6 +175,9 @@ class HTTPClient(object):
         header_fields.update(headers)
         if self.version == self.HTTP_11 and HEADER_HOST not in header_fields:
             host_port = self.host
+            # IPv6 addresses require square brackets in the Host header.
+            if ':' in self.host and self.host[0] != '[' and self.host[-1] != ']':
+                host_port = '[' + host_port + ']'
             if self.port not in (80, 443):
                 host_port += HOST_PORT_SEP + str(self.port)
             header_fields[HEADER_HOST] = host_port
