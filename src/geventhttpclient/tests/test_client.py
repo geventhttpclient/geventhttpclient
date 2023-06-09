@@ -278,26 +278,34 @@ def test_file_post():
         with wsgiserver(check_upload(b"123456789", 9)):
             client = HTTPClient(*listener)
             with open(name, 'rb') as body:
-                client.post('/', body)
+                resp = client.post('/', body)
     finally:
         os.remove(name)
+    assert resp is not None
+    assert resp.status_code == 200
 
 def test_bytes_post():
     with wsgiserver(check_upload(b"12345", 5)):
         client = HTTPClient(*listener)
-        client.post('/', b"12345")
+        resp = client.post('/', b"12345")
+    assert resp is not None
+    assert resp.status_code == 200
 
 def test_string_post():
     with wsgiserver(check_upload("12345", 5)):
         client = HTTPClient(*listener)
-        client.post('/', "12345")
+        resp = client.post('/', "12345")
+    assert resp is not None
+    assert resp.status_code == 200
 
 def test_unicode_post():
     byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
     unicode_string = byte_string.decode('utf-8')
     with wsgiserver(check_upload(byte_string, len(byte_string))):
         client = HTTPClient(*listener)
-        client.post('/', unicode_string)
+        resp = client.post('/', unicode_string)
+    assert resp is not None
+    assert resp.status_code == 200
 
 
 def check_src_ip(ip, port):
@@ -318,5 +326,5 @@ def test_source_address():
     with wsgiserver(check_src_ip(src_ip, src_port)):
         client = HTTPClient(*listener, source_host=src_ip, source_port=src_port)
         resp = client.get("/")
-        assert resp is not None
-        assert resp.status_code == 200
+    assert resp is not None
+    assert resp.status_code == 200
