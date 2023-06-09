@@ -50,12 +50,16 @@ class ConnectionPool(object):
                  size=5, disable_ipv6=False,
                  connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
                  network_timeout=DEFAULT_NETWORK_TIMEOUT,
-                 use_proxy=False):
+                 use_proxy=False,
+                 source_host=None,
+                 source_port=0):
         self._closed = False
         self._connection_host = connection_host
         self._connection_port = connection_port
         self._request_host = request_host
         self._request_port = request_port
+        self._source_host = source_host
+        self._source_port = source_port
         self._semaphore = lock.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
         self._use_proxy = use_proxy
@@ -111,6 +115,8 @@ class ConnectionPool(object):
 
             try:
                 sock.settimeout(self.connection_timeout)
+                if self._source_host is not None:
+                    sock.bind((self._source_host, self._source_port))
                 sock = self._connect_socket(sock, sock_info[-1])
                 self.after_connect(sock)
                 sock.settimeout(self.network_timeout)
