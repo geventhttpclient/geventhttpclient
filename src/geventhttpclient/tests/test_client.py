@@ -298,3 +298,25 @@ def test_unicode_post():
     with wsgiserver(check_upload(byte_string, len(byte_string))):
         client = HTTPClient(*listener)
         client.post('/', unicode_string)
+
+
+def check_src_ip(ip, port):
+    def wsgi_handler(env, start_response):
+        assert env["REMOTE_ADDR"] == ip
+        assert int(env["REMOTE_PORT"]) == port
+        start_response("200 OK", [])
+        return []
+
+    return wsgi_handler
+
+
+@pytest.mark.virtual_interface
+def test_source_address():
+    # requires virtual interface open on linux
+    src_ip = "127.0.0.2"
+    src_port = 5325
+    with wsgiserver(check_src_ip(src_ip, src_port)):
+        client = HTTPClient(*listener, source_host=src_ip, source_port=src_port)
+        resp = client.get("/")
+        assert resp is not None
+        assert resp.status_code == 200
