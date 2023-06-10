@@ -292,7 +292,7 @@ def test_bytes_post():
     assert resp.status_code == 200
 
 def test_string_post():
-    with wsgiserver(check_upload("12345", 5)):
+    with wsgiserver(check_upload(b"12345", 5)):
         client = HTTPClient(*listener)
         resp = client.post('/', "12345")
     assert resp is not None
