@@ -18,8 +18,9 @@ jobs:
           - {name: '3.9', python: '3.9', os: ubuntu-latest, tox: py39}
           - {name: '3.8', python: '3.8', os: ubuntu-latest, tox: py38}
           - {name: '3.7', python: '3.7', os: ubuntu-20.04, tox: py37}
-          - {name: '3.6', python: '3.6', os: ubuntu-20.04, tox: py36}
-          - {name: '2.7', python: '2.7', os: ubuntu-20.04, tox: py27}
+          - {name: '3.6', python: '3.6', os: ubuntu-20.04, tox: py36}  
+        #   Python 2.7 support has been dropped from Github
+        #   - {name: '2.7', python: '2.7', os: ubuntu-20.04, tox: py27}
 
     steps:
       - uses: actions/checkout@v2
