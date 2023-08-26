@@ -41,7 +41,7 @@ httpparser = Extension(
 )
 
 requirements = [
-    'gevent >= 0.13',
+    'gevent >= 0.13, <23.7.0',
     'certifi',
     'six',
     'brotli'
