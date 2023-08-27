@@ -4,8 +4,7 @@ import tempfile
 import pytest
 import json
 from contextlib import contextmanager
-from geventhttpclient.header import Headers
-from geventhttpclient.client import HTTPClient
+from geventhttpclient import HTTPClient
 from gevent.ssl import SSLError #@UnresolvedImport
 import gevent.pool
 
@@ -60,7 +59,6 @@ class HTTPBinClient(HTTPClient):
         proxy_host=None,
         proxy_port=None,
         version=HTTPClient.HTTP_11,
-        headers_type=Headers,
     ):
         super().__init__(
             host,
@@ -78,7 +76,6 @@ class HTTPBinClient(HTTPClient):
             proxy_host=proxy_host,
             proxy_port=proxy_port,
             version=version,
-            headers_type=headers_type,
         )
 
 @pytest.mark.online
