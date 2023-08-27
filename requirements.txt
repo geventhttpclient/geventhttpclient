@@ -1,5 +1,5 @@
 six
 certifi
-gevent<23.7.0
+gevent
 brotli
 urllib3
