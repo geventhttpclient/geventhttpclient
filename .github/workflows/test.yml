@@ -18,28 +18,28 @@ jobs:
           - {name: '3.9', python: '3.9', os: ubuntu-latest, tox: py39}
           - {name: '3.8', python: '3.8', os: ubuntu-latest, tox: py38}
           - {name: '3.7', python: '3.7', os: ubuntu-20.04, tox: py37}
-          - {name: '3.6', python: '3.6', os: ubuntu-20.04, tox: py36}
-          - {name: '2.7', python: '2.7', os: ubuntu-20.04, tox: py27}
+          - {name: '3.6', python: '3.6', os: ubuntu-20.04, tox: py36}  
+        #   Python 2.7 support has been dropped from Github
+        #   - {name: '2.7', python: '2.7', os: ubuntu-20.04, tox: py27}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           submodules: recursive
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v3
         with:
           python-version: ${{ matrix.python }}
       - name: Get pip cache dir
         id: pip-cache
         run: echo "::set-output name=dir::$(pip cache dir)"
       - name: Cache pip
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
           key: pip|${{ runner.os }}|${{ matrix.python }}|${{ hashFiles('setup.py') }}
       - name: set full Python version in PY env var
         # See https://pre-commit.com/#github-actions-example
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
-      - run: pip install -r requirements-dev.txt
-      - run: pip install .
-      - run: py.test src/geventhttpclient/tests
+      - run: python -m pip install tox
+      - run: python -m tox -e ${{ matrix.tox }}
         if:  ${{ matrix.os != 'windows-latest'}} # skip tests on windows because they are hanging

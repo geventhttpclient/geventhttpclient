@@ -34,9 +34,53 @@ def wsgiserver(handler):
     finally:
         server.stop()
 
+
+class HTTPBinClient(HTTPClient):
+    """Special HTTPClient with higher timeout values
+
+    Args:
+        HTTPClient (_type_): _description_
+    """
+
+    def __init__(
+        self,
+        host,
+        port=None,
+        headers=None,
+        block_size=HTTPClient.BLOCK_SIZE,
+        connection_timeout=30.0,
+        network_timeout=30.0,
+        disable_ipv6=True,
+        concurrency=1,
+        ssl=False,
+        ssl_options=None,
+        ssl_context_factory=None,
+        insecure=False,
+        proxy_host=None,
+        proxy_port=None,
+        version=HTTPClient.HTTP_11,
+    ):
+        super().__init__(
+            host,
+            port=port,
+            headers=headers,
+            block_size=block_size,
+            connection_timeout=connection_timeout,
+            network_timeout=network_timeout,
+            disable_ipv6=disable_ipv6,
+            concurrency=concurrency,
+            ssl=ssl,
+            ssl_options=ssl_options,
+            ssl_context_factory=ssl_context_factory,
+            insecure=insecure,
+            proxy_host=proxy_host,
+            proxy_port=proxy_port,
+            version=version,
+        )
+
 @pytest.mark.online
 def test_client_simple():
-    client = HTTPClient('httpbin.org')
+    client = HTTPBinClient('httpbin.org')
     assert client.port == 80
     response = client.get('/')
     assert response.status_code == 200
@@ -45,7 +89,7 @@ def test_client_simple():
 
 @pytest.mark.online
 def test_client_without_leading_slash():
-    client = HTTPClient('httpbin.org')
+    client = HTTPBinClient('httpbin.org')
     with client.get("") as response:
         assert response.status_code == 200
     with client.get("base64/test") as response:
@@ -54,11 +98,11 @@ def test_client_without_leading_slash():
 test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
 @pytest.mark.online
 def test_client_with_default_headers():
-    client = HTTPClient.from_url('httpbin.org/', headers=test_headers)
+    client = HTTPBinClient.from_url('httpbin.org/', headers=test_headers)
 
 @pytest.mark.online
 def test_request_with_headers():
-    client = HTTPClient('httpbin.org')
+    client = HTTPBinClient('httpbin.org')
     response = client.get('/', headers=test_headers)
     assert response.status_code == 200
 
@@ -124,7 +168,7 @@ def test_ssl_fail_invalid_certificate():
 
 @pytest.mark.online
 def test_multi_queries_greenlet_safe():
-    client = HTTPClient('httpbin.org', concurrency=3)
+    client = HTTPBinClient('httpbin.org', concurrency=3)
     group = gevent.pool.Group()
     event = gevent.event.Event()
 
@@ -134,13 +178,19 @@ def test_multi_queries_greenlet_safe():
         return response, response.read()
 
     count = 0
+    ok_count = 0
 
     gevent.spawn_later(0.2, event.set)
     for response, content in group.imap_unordered(run, xrange(5)):
-        assert response.status_code == 200
+        # occasionally httpbin.org will return 504 :-/
+        assert response.status_code in [200, 504]
+        if response.status_code == 200:
+            ok_count += 1
         assert len(content)
         count += 1
     assert count == 5
+    # ensure at least 3 of requests got 200
+    assert ok_count >= 3
 
 
 class StreamTestIterator(object):
