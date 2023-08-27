@@ -40,7 +40,5 @@ jobs:
       - name: set full Python version in PY env var
         # See https://pre-commit.com/#github-actions-example
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
-      - run: pip install -r requirements-dev.txt
-      - run: pip install .
-      - run: pytest src/geventhttpclient/tests
+      - run: tox -e ${{ matrix.tox }}
         if:  ${{ matrix.os != 'windows-latest'}} # skip tests on windows because they are hanging
