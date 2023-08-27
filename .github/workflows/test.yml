@@ -42,5 +42,5 @@ jobs:
         run: echo "PY=$(python -VV | sha256sum | cut -d' ' -f1)" >> $GITHUB_ENV
       - run: pip install -r requirements-dev.txt
       - run: pip install .
-      - run: py.test src/geventhttpclient/tests
+      - run: pytest src/geventhttpclient/tests
         if:  ${{ matrix.os != 'windows-latest'}} # skip tests on windows because they are hanging
