@@ -1,6 +1,7 @@
 import gevent.queue
 import gevent.socket
 import os
+import sys
 import six
 
 _CA_CERTS = None
@@ -195,7 +196,8 @@ try:
     import gevent.ssl
 
     try:
-        from gevent.ssl import match_hostname
+        if sys.version_info[:2] < (3, 7):
+            from gevent.ssl import match_hostname
     except ImportError:
         from backports.ssl_match_hostname import match_hostname
 
@@ -259,7 +261,7 @@ else:
 
         def after_connect(self, sock):
             super(SSLConnectionPool, self).after_connect(sock)
-            if not self.insecure:
+            if not self.insecure and sys.version_info[:2] < (3, 7):
                 match_hostname(sock.getpeercert(), self._request_host)
 
         def _connect_socket(self, sock, address):
