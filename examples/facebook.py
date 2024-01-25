@@ -34,10 +34,10 @@ if __name__ == "__main__":
         response = http.get(friend_url.request_uri)
         assert response.status_code == 200
         friend = json.load(response)
-        if friend.has_key('username'):
-            print '%s: %s' % (friend['username'], friend['name'])
+        if 'username' in friend:
+            print('%s: %s' % (friend['username'], friend['name']))
         else:
-            print '%s has no username.' % friend['name']
+            print('%s has no username.' % friend['name'])
 
     # allow to run 20 greenlet at a time, this is more than concurrency
     # of the http client but isn't a problem since the client has its own
