@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import socket
 import errno
 import six
@@ -8,7 +10,7 @@ import os
 import brotli
 from six.moves import xrange, cStringIO
 from six.moves.urllib.parse import urlencode
-from six import print_, reraise, string_types, text_type
+from six import reraise, string_types, text_type
 
 import gevent
 from urllib3 import encode_multipart_formdata
@@ -600,5 +602,5 @@ class XmlrpcCompatUserAgent(UserAgent):
         ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
         if debug_stream is not None:
             debug_stream.seek(0)
-            print_(debug_stream.read())
+            print(debug_stream.read())
         return ret

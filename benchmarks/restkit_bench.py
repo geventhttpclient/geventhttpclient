@@ -30,10 +30,10 @@ if __name__ == "__main__":
         for _ in xrange(N):
             group.spawn(run)
         group.join()
-    
+
         delta = time.time() - now
         req_per_sec = N / delta
-    
-        print "request count:%d, concurrenry:%d, %f req/s" % (
-            N, C, req_per_sec)
+
+        print("request count:%d, concurrenry:%d, %f req/s" % (
+            N, C, req_per_sec))
 

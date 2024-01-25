@@ -1,4 +1,3 @@
-import six
 from geventhttpclient.url import URL
 
 url_full = 'http://getgauss.com/subdir/file.py?param=value&other=true#frag'
