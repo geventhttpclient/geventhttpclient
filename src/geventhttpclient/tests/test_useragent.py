@@ -69,6 +69,12 @@ def set_cookie():
         return []
     return wsgi_handler
 
+def set_cookie_401():
+    def wsgi_handler(env, start_response):
+        start_response('401 Unauthorized', [('Set-Cookie', 'testcookie=testdata')])
+        return []
+    return wsgi_handler
+
 def return_brotli():
     def wsgi_handler(env, start_response):
         path_info = env.get('PATH_INFO')
@@ -196,6 +202,14 @@ def test_cookiejar():
     with wsgiserver(set_cookie()):
         useragent = UserAgent(cookiejar=CookieJar())
         assert b"" == useragent.urlopen('http://127.0.0.1:54323/').read()
+
+def test_cookiejar_response_error():
+    with wsgiserver(set_cookie_401()):
+        useragent = UserAgent(cookiejar=CookieJar())
+        with pytest.raises(BadStatusCode):
+            assert b"" == useragent.urlopen('http://127.0.0.1:54323')
+
+        assert next(cookie for cookie in useragent.cookiejar if cookie.name == 'testcookie').value == 'testdata'
 
 
 def test_brotli_response():
