@@ -465,6 +465,9 @@ class UserAgent(object):
                 if debug_stream is not None:
                     debug_stream.write(self._conversation_str(req.url, resp, payload=req.payload) + '\n\n')
 
+                if self.cookiejar is not None:
+                    self.cookiejar.extract_cookies(resp, req)
+
                 try:
                     self._verify_status(resp.status_code, url=req.url)
                 except Exception as e:
@@ -476,9 +479,6 @@ class UserAgent(object):
                     resp.release()
                     last_error = self._handle_error(e, url=req.url)
                     break  # Continue with next retry
-
-                if self.cookiejar is not None:
-                    self.cookiejar.extract_cookies(resp, req)
 
                 redirection = resp.headers.get('location')
                 if isinstance(redirection, six.binary_type):
