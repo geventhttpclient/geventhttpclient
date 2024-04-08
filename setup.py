@@ -1,7 +1,7 @@
-import sys
-from setuptools.extension import Extension
-from setuptools import find_packages
 from distutils.core import setup
+
+from setuptools import find_packages
+from setuptools.extension import Extension
 
 DESC = """
 A high performance, concurrent HTTP client library for python using gevent.

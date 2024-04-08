@@ -2,28 +2,21 @@ import gevent.monkey
 
 gevent.monkey.patch_ssl()
 
-try:
-    import unittest.mock as mock
-except ImportError:
-    import mock
-
-import dpkt.ssl
+import os
+import ssl
 import sys
 from contextlib import contextmanager
-import pytest
+from ssl import CertificateError
+from unittest import mock
+
+import dpkt.ssl
 import gevent.server
 import gevent.socket
 import gevent.ssl
-import os
-import ssl
-
+import pytest
 from gevent import joinall
 from gevent.socket import error as socket_error
-
 from geventhttpclient import HTTPClient
-
-from ssl import CertificateError
-
 
 LISTENER = "127.0.0.1", 54323
 

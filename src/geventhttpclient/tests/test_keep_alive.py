@@ -1,6 +1,6 @@
+import pytest
 from geventhttpclient._parser import HTTPParseError
 from geventhttpclient.response import HTTPResponse
-import pytest
 
 
 def test_simple():
@@ -80,7 +80,7 @@ def test_keep_alive_bodyless_10x_request_with_body():
 
 def test_close_connection_and_no_content_length():
     response = HTTPResponse()
-    response.feed("HTTP/1.1 200 Ok\r\n" "Connection: close\r\n\r\n" "Hello World!")
+    response.feed("HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\nHello World!")
     assert response._body_buffer == bytearray(b"Hello World!")
     assert not response.should_keep_alive()
     assert response.should_close()

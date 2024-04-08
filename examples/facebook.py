@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
-import gevent.pool
 import json
 
+import gevent.pool
 from geventhttpclient import HTTPClient
 from geventhttpclient.url import URL
-
 
 if __name__ == "__main__":
     # go to http://developers.facebook.com/tools/explorer and copy the access token

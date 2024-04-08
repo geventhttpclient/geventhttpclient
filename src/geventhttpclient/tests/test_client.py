@@ -1,16 +1,15 @@
+import json
 import os
 import sys
 import tempfile
-import pytest
-import json
 from contextlib import contextmanager
-from geventhttpclient import HTTPClient
-from gevent.ssl import SSLError  # @UnresolvedImport
+
 import gevent.pool
-
-import gevent.server
 import gevent.pywsgi
-
+import gevent.server
+import pytest
+from gevent.ssl import SSLError
+from geventhttpclient import HTTPClient
 
 LISTENER = "127.0.0.1", 54323
 
@@ -105,7 +104,9 @@ test_headers = {
 
 @pytest.mark.network
 def test_client_with_default_headers():
-    client = HTTPBinClient.from_url("httpbin.org/", headers=test_headers)
+    client = HTTPBinClient("httpbin.org", headers=test_headers)
+    response = client.get("/")
+    assert response.status_code == 200
 
 
 @pytest.mark.network
@@ -210,7 +211,7 @@ def test_multi_queries_greenlet_safe():
 
 class StreamTestIterator:
     def __init__(self, sep, count):
-        lines = [json.dumps({"index": i, "title": "this is line %d" % i}) for i in range(0, count)]
+        lines = [json.dumps({"index": i, "title": f"this is line {i}"}) for i in range(0, count)]
         self.buf = (sep.join(lines) + sep).encode()
 
     def __len__(self):

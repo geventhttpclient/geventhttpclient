@@ -1,11 +1,10 @@
-import six
-import pytest
+from contextlib import contextmanager
 from http.client import HTTPException
-from geventhttpclient import HTTPClient
+
 import gevent.server
 import gevent.socket
-from contextlib import contextmanager
-
+import pytest
+from geventhttpclient import HTTPClient
 
 CRLF = "\r\n"
 LISTENER = "127.0.0.1", 54323

@@ -1,9 +1,9 @@
 import errno
-from geventhttpclient._parser import HTTPResponseParser
-from geventhttpclient._parser import HTTPParseError
-from geventhttpclient.header import Headers
+
 import gevent.socket
 
+from geventhttpclient._parser import HTTPParseError, HTTPResponseParser
+from geventhttpclient.header import Headers
 
 HEADER_STATE_INIT = 0
 HEADER_STATE_FIELD = 1
@@ -25,7 +25,7 @@ class HTTPProtocolViolationError(HTTPParseError):
 
 class HTTPResponse(HTTPResponseParser):
     def __init__(self, method="GET", headers_type=Headers):
-        super(HTTPResponse, self).__init__()
+        super().__init__()
         self.method = method.upper()
         self.headers_complete = False
         self.message_begun = False
@@ -57,11 +57,7 @@ class HTTPResponse(HTTPResponseParser):
         It is not the opposite of should_keep_alive method. It also checks
         that the body as been consumed completely.
         """
-        return (
-            not self.message_complete
-            or self.parser_failed()
-            or not super(HTTPResponse, self).should_keep_alive()
-        )
+        return not self.message_complete or self.parser_failed() or not super().should_keep_alive()
 
     headers = property(items)
 
@@ -91,7 +87,7 @@ class HTTPResponse(HTTPResponseParser):
 
     def _on_message_begin(self):
         if self.message_begun:
-            raise HTTPProtocolViolationError("A new response began before end of %r." % self)
+            raise HTTPProtocolViolationError(f"A new response began before end of {self!r}.")
         self.message_begun = True
 
     def _on_message_complete(self):
@@ -142,7 +138,7 @@ class HTTPSocketResponse(HTTPResponse):
     DEFAULT_BLOCK_SIZE = 1024 * 4  # 4KB
 
     def __init__(self, sock, block_size=DEFAULT_BLOCK_SIZE, method="GET", **kw):
-        super(HTTPSocketResponse, self).__init__(method=method, **kw)
+        super().__init__(method=method, **kw)
         self._sock = sock
         self.block_size = block_size
         self._read_headers()
@@ -171,7 +167,7 @@ class HTTPSocketResponse(HTTPResponse):
                     if not len(data) and not self.headers_complete:
                         if start:
                             raise HTTPConnectionClosed("connection closed.")
-                        raise HTTPParseError("connection closed before" " end of the headers")
+                        raise HTTPParseError("connection closed before end of the headers")
                     start = False
                 except gevent.socket.error as e:
                     if e.errno == errno.ECONNRESET:
@@ -257,7 +253,7 @@ class HTTPSocketResponse(HTTPResponse):
         return bytes
 
     def _on_message_complete(self):
-        super(HTTPSocketResponse, self)._on_message_complete()
+        super()._on_message_complete()
         self.release()
 
     def __enter__(self):
@@ -270,7 +266,7 @@ class HTTPSocketResponse(HTTPResponse):
 class HTTPSocketPoolResponse(HTTPSocketResponse):
     def __init__(self, sock, pool, **kw):
         self._pool = pool
-        super(HTTPSocketPoolResponse, self).__init__(sock, **kw)
+        super().__init__(sock, **kw)
 
     def release(self):
         try:

@@ -1,18 +1,16 @@
-import gevent
 import gevent.monkey
 
 gevent.monkey.patch_all()
 
-import pytest
-
+import random
+import string
+import time
 from http.cookiejar import CookieJar
 from urllib.request import Request
-import string
-import random
-import time
 
-from geventhttpclient.response import HTTPResponse
+import pytest
 from geventhttpclient.header import Headers
+from geventhttpclient.response import HTTPResponse
 
 MULTI_COOKIE_RESPONSE = """
 HTTP/1.1 200 OK
@@ -126,7 +124,7 @@ def test_cookielib_compatibility():
     assert len(list(cj)) == 3
 
 
-def test_compatibility_with_previous_API_read():
+def test_compatibility_with_previous_api_read():
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
     for single_item in (
@@ -140,7 +138,7 @@ def test_compatibility_with_previous_API_read():
         assert isinstance(parser.get(single_item), str)
 
 
-def test_compatibility_with_previous_API_write():
+def test_compatibility_with_previous_api_write():
     h = Headers()
     h["asdf"] = "jklm"
     h["asdf"] = "dfdf"
@@ -149,7 +147,9 @@ def test_compatibility_with_previous_API_write():
 
 
 def test_copy():
-    rnd_txt = lambda length: "".join(random.choice(string.ascii_letters) for _ in range(length))
+    def rnd_txt(length):
+        return "".join(random.choice(string.ascii_letters) for _ in range(length))
+
     h = Headers((rnd_txt(10), rnd_txt(50)) for _ in range(100))
     c = h.copy()
     assert h is not c

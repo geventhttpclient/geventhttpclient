@@ -1,27 +1,19 @@
-import socket
 import errno
 import io
-import sys
-import ssl
-import zlib
 import os
-import brotli
+import socket
+import ssl
+import sys
+import zlib
 from urllib.parse import urlencode
 
+import brotli
 import gevent
 from urllib3 import encode_multipart_formdata
 from urllib3.fields import RequestField
 
-try:
-    from gevent.dns import DNSError
-except ImportError:
-
-    class DNSError(Exception):
-        pass
-
-
-from .url import URL, to_key_val_list
 from .client import HTTPClient, HTTPClientPool
+from .url import URL, to_key_val_list
 
 
 class ConnectionError(Exception):
@@ -29,10 +21,7 @@ class ConnectionError(Exception):
         self.url = url
         self.__dict__.update(kwargs)
         if args and isinstance(args[0], str):
-            try:
-                self.text = args[0] % args[1:]
-            except TypeError:
-                self.text = args[0] + ": " + str(args[1:]) if args else ""
+            self.text = args[0] + ": " + str(args[1:])
         else:
             self.text = str(args[0]) if len(args) == 1 else ""
         if kwargs:
@@ -413,7 +402,7 @@ class UserAgent:
         """
         if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
-        elif isinstance(e, (socket.error, DNSError)) and e.errno in set(
+        elif isinstance(e, socket.error) and e.errno in set(
             [errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]
         ):
             return e
@@ -572,7 +561,7 @@ class UserAgent:
 
         for _ in range(self.max_retries):
             if offset:
-                headers["Range"] = "bytes=%d-" % offset
+                headers["Range"] = f"bytes={offset}-"
                 resp = self.urlopen(url, headers=headers, **kwargs)
                 cr = resp.headers.get("Content-Range")
                 if (

@@ -3,9 +3,9 @@ if __name__ == "__main__":
 
     monkey.patch_all()
 
-    import gevent.pool
     import time
 
+    import gevent.pool
     from restkit import *
     from socketpool import ConnectionPool
 
@@ -32,4 +32,4 @@ if __name__ == "__main__":
         delta = time.time() - now
         req_per_sec = N / delta
 
-        print("request count:%d, concurrenry:%d, %f req/s" % (N, C, req_per_sec))
+        print(f"request count:{N}, concurrenry:{C}, {req_per_sec} req/s")

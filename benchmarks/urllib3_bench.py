@@ -1,11 +1,11 @@
 import time
-import gevent.pool
+
 import gevent.monkey
+import gevent.pool
 
 gevent.monkey.patch_all()
 
 import urllib3
-
 
 if __name__ == "__main__":
     N = 1000
@@ -29,4 +29,4 @@ if __name__ == "__main__":
         delta = time.time() - now
         req_per_sec = N / delta
 
-        print("request count:%d, concurrenry:%d, %f req/s" % (N, C, req_per_sec))
+        print(f"request count:{N}, concurrenry:{C}, {req_per_sec} req/s")

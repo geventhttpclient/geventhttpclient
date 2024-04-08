@@ -2,10 +2,10 @@
 # it's just that gevent got more picky.
 
 import sys
-import pytest
 
-import gevent
-import gevent.ssl
+import gevent  # noqa
+import gevent.ssl  # noqa
+import pytest
 
 
 class DisableSSL:
@@ -27,8 +27,7 @@ class DisableSSL:
 def test_import_with_nossl():
     return
     with DisableSSL():
-        from geventhttpclient import httplib
-        from geventhttpclient import HTTPClient
+        from geventhttpclient import HTTPClient, httplib
 
 
 def test_httpclient_raises_with_no_ssl():

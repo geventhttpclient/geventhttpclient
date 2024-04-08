@@ -1,9 +1,10 @@
-import time
 import json
+import time
 from pprint import pprint as pp
-from geventhttpclient.url import URL
-from geventhttpclient import HTTPClient
+
 import oauth2 as oauthlib
+from geventhttpclient import HTTPClient
+from geventhttpclient.url import URL
 
 if __name__ == "__main__":
     APP_ID = "<your app id>"

@@ -1,13 +1,11 @@
-import gevent.pywsgi
 import os
-import pytest
 import tempfile
-
+from contextlib import contextmanager
 from http.cookiejar import CookieJar
 
-from contextlib import contextmanager
-from geventhttpclient.useragent import UserAgent, BadStatusCode
-
+import gevent.pywsgi
+import pytest
+from geventhttpclient.useragent import BadStatusCode, UserAgent
 
 LISTENER = "127.0.0.1", 54323
 LISTENER_URL = f"http://{LISTENER[0]}:{LISTENER[1]}/"

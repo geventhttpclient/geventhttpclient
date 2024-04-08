@@ -44,4 +44,8 @@ fix = false
 line-length = 100
 target-version = "py311"
 lint.extend-select = ["UP"]
-lint.ignore = ["F821"]  # Undefined name, used to avoid dependency cycles
+lint.ignore = ["F821", "UP038", "E402"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"test_no_module_ssl.py" = ["F401"]

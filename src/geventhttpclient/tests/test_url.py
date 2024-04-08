@@ -16,7 +16,7 @@ def test_simple_url():
 def test_path_only():
     url = URL(url_path_only)
     assert url.host == ""
-    assert url.port == None
+    assert url.port is None
     assert url.path == "/path/to/something"
     assert url.query_string == "param=value&other=true"
 
@@ -100,7 +100,7 @@ def test_redirection_full_path():
     assert str(url_full2) == url_full2_plain
 
 
-def test_params():
+def test_query_string():
     assert URL("/some/url", params={"a": "b", "c": 2}).query_string == "a=b&c=2"
 
 
@@ -129,14 +129,14 @@ def test_ipv6():
     url = URL("http://[2001:db8:85a3:8d3:1319:8a2e:370:7348]/")
     assert url.host == "2001:db8:85a3:8d3:1319:8a2e:370:7348"
     assert url.port == 80
-    assert url.user == None
+    assert url.user is None
 
 
 def test_ipv6_with_port():
     url = URL("https://[2001:db8:85a3:8d3:1319:8a2e:370:7348]:8080/")
     assert url.host == "2001:db8:85a3:8d3:1319:8a2e:370:7348"
     assert url.port == 8080
-    assert url.user == None
+    assert url.user is None
 
 
 if __name__ == "__main__":

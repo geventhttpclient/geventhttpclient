@@ -1,7 +1,9 @@
-import gevent.queue
-import gevent.socket
 import os
 import sys
+
+import gevent.queue
+import gevent.socket
+from gevent import lock
 
 _CA_CERTS = None
 
@@ -24,11 +26,6 @@ _DEFAULT_CIPHERS = (
     "DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5"
 )
 
-try:
-    from gevent import lock
-except ImportError:
-    # gevent < 1.0b2
-    from gevent import coros as lock
 
 DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_NETWORK_TIMEOUT = 5.0
@@ -118,7 +115,7 @@ class ConnectionPool:
                 self.after_connect(sock)
                 sock.settimeout(self.network_timeout)
                 return sock
-            except IOError as e:
+            except OSError as e:
                 sock.close()
                 if not first_error:
                     first_error = e
@@ -143,7 +140,7 @@ class ConnectionPool:
         if self._use_proxy:
             sock.send(
                 bytes(
-                    f"CONNECT {self._request_host}:{self._request_port} " "HTTP/1.1\r\n\r\n",
+                    f"CONNECT {self._request_host}:{self._request_port} HTTP/1.1\r\n\r\n",
                     "utf8",
                 )
             )
@@ -190,12 +187,7 @@ class ConnectionPool:
 
 try:
     import gevent.ssl
-
-    try:
-        if sys.version_info[:2] < (3, 7):
-            from gevent.ssl import match_hostname
-    except ImportError:
-        from backports.ssl_match_hostname import match_hostname
+    from gevent.ssl import match_hostname
 
     try:
         from gevent.ssl import create_default_context
@@ -243,9 +235,7 @@ else:
             else:
                 self.ssl_context = None
 
-            super(SSLConnectionPool, self).__init__(
-                connection_host, connection_port, request_host, request_port, **kw
-            )
+            super().__init__(connection_host, connection_port, request_host, request_port, **kw)
 
         def init_ssl_context(self, ssl_context_factory):
             ca_certs = self.ssl_options["ca_certs"]
@@ -257,12 +247,12 @@ else:
             self.ssl_context.check_hostname = not self.insecure
 
         def after_connect(self, sock):
-            super(SSLConnectionPool, self).after_connect(sock)
+            super().after_connect(sock)
             if not self.insecure and sys.version_info[:2] < (3, 7):
                 match_hostname(sock.getpeercert(), self._request_host)
 
         def _connect_socket(self, sock, address):
-            sock = super(SSLConnectionPool, self)._connect_socket(sock, address)
+            sock = super()._connect_socket(sock, address)
 
             if self.ssl_context is None:
                 return gevent.ssl.wrap_socket(sock, **self.ssl_options)

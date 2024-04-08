@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from geventhttpclient import HTTPClient, URL
+from geventhttpclient import URL, HTTPClient
 
 if __name__ == "__main__":
     url = URL("http://127.0.0.1:80/100.dat")

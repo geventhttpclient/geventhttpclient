@@ -1,11 +1,10 @@
-from geventhttpclient.response import HTTPResponse
+import sys
+from functools import wraps
 from http.client import HTTPException
 from io import StringIO
+
 import pytest
-
-from functools import wraps
-import sys
-
+from geventhttpclient.response import HTTPResponse
 
 RESPONSE = (
     "HTTP/1.1 301 Moved Permanently\r\nLocation: http://www.google.fr/\r\n"
@@ -49,7 +48,7 @@ def wrap_refcount(method):
                 if deltas[-1] == 0:
                     break
             else:
-                raise AssertionError("refcount increased by %r" % (deltas,))
+                raise AssertionError(f"refcount increased by {deltas!r}")
         finally:
             gc.collect()
             gc.enable()

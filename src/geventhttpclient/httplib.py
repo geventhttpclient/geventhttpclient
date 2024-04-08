@@ -1,12 +1,13 @@
 import http.client as httplib
-from geventhttpclient import response
-from geventhttpclient import header
+
 import gevent.socket
+
+from geventhttpclient import header, response
 
 
 class HTTPLibHeaders(header.Headers):
     def __getitem__(self, key):
-        value = super(HTTPLibHeaders, self).__getitem__(key)
+        value = super().__getitem__(key)
         if isinstance(value, (list, tuple)):
             return ", ".join(value)
         else:
@@ -19,7 +20,7 @@ class HTTPResponse(response.HTTPSocketResponse):
             method = "GET"
         else:
             method = method.upper()
-        super(HTTPResponse, self).__init__(sock, method=method, **kw)
+        super().__init__(sock, method=method, **kw)
 
     @property
     def msg(self):
@@ -60,7 +61,7 @@ class HTTPResponse(response.HTTPSocketResponse):
         return self._sock is None
 
     def read(self, amt=None):
-        return super(HTTPResponse, self).read(amt)
+        return super().read(amt)
 
     def getheader(self, name, default=None):
         return self.get(name.lower(), default)

@@ -1,6 +1,6 @@
+from collections.abc import Mapping
 from urllib import parse as urlparse
 from urllib.parse import urlencode
-from collections.abc import Mapping
 
 DEFAULT_PORTS = {"http": 80, "https": 443}
 

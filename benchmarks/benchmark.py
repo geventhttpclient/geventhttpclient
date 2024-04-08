@@ -5,10 +5,10 @@ gevent.monkey.patch_all()
 import argparse
 import time
 
-import requests
-import requests.adapters
 import gevent.pool
 import geventhttpclient.useragent
+import requests
+import requests.adapters
 import urllib3
 
 

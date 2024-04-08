@@ -6,8 +6,7 @@ import gevent.socket
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.header import Headers
-from geventhttpclient.response import HTTPConnectionClosed
-from geventhttpclient.response import HTTPSocketPoolResponse
+from geventhttpclient.response import HTTPConnectionClosed, HTTPSocketPoolResponse
 from geventhttpclient.url import URL
 
 CRLF = "\r\n"

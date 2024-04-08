@@ -3,11 +3,12 @@ if __name__ == "__main__":
 
     httplib.patch()
 
-    import httplib2
     import time
-    import gevent.queue
-    import gevent.pool
     from contextlib import contextmanager
+
+    import gevent.pool
+    import gevent.queue
+    import httplib2
 
     class ConnectionPool:
         def __init__(self, factory, size=5):
@@ -49,4 +50,4 @@ if __name__ == "__main__":
         delta = time.time() - now
         req_per_sec = N / delta
 
-        print("request count:%d, concurrenry:%d, %f req/s" % (N, C, req_per_sec))
+        print(f"request count:{N}, concurrenry:{C}, {req_per_sec} req/s")

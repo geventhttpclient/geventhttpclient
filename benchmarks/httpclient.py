@@ -1,7 +1,7 @@
 import time
-import gevent.pool
-from geventhttpclient import HTTPClient, URL
 
+import gevent.pool
+from geventhttpclient import URL, HTTPClient
 
 if __name__ == "__main__":
     N = 1000
@@ -31,4 +31,4 @@ if __name__ == "__main__":
         delta = time.time() - now
         req_per_sec = N / delta
 
-        print("request count:%d, concurrenry:%d, %f req/s" % (N, C, req_per_sec))
+        print(f"request count:{N}, concurrenry:{C}, {req_per_sec} req/s")
