@@ -118,8 +118,8 @@ class URL(object):
         buf = ''
         if self.user and auth:
             buf += self.user
-            if self.passwort:
-                buf += ':' + self.passwort
+            if self.password:
+                buf += ':' + self.password
             buf += '@'
 
         if ':' in self.host:

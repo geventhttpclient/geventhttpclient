@@ -13,9 +13,13 @@ from contextlib import contextmanager
 from geventhttpclient.useragent import UserAgent, BadStatusCode
 
 
+LISTENER = "127.0.0.1", 54323
+LISTENER_URL = "http://%s:%s/" % LISTENER
+
+
 @contextmanager
 def wsgiserver(handler):
-    server = gevent.pywsgi.WSGIServer(('127.0.0.1', 54323), handler)
+    server = gevent.pywsgi.WSGIServer(LISTENER, handler)
     server.start()
     try:
         yield
@@ -48,7 +52,7 @@ def check_redirect():
     def wsgi_handler(env, start_response):
         path_info = env.get('PATH_INFO')
         if path_info == "/":
-            start_response('301 Moved Permanently', [('Location', 'http://127.0.0.1:54323/redirected')])
+            start_response('301 Moved Permanently', [('Location', LISTENER_URL + 'redirected')])
             return []
         else:
             assert path_info == "/redirected"
@@ -94,7 +98,7 @@ def test_file_post():
         with wsgiserver(check_upload(b"123456789", headers)):
             useragent = UserAgent()
             with open(name, 'rb') as body:
-                useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=body)
+                useragent.urlopen(LISTENER_URL, method='POST', payload=body)
     finally:
         os.remove(name)
 
@@ -121,7 +125,7 @@ def test_multipart_post():
                                       b'--custom_boundary--'
                                       b'\r\n'), headers)):
             useragent = UserAgent()
-            useragent.urlopen('http://127.0.0.1:54323/', method='POST', files=files)
+            useragent.urlopen(LISTENER_URL, method='POST', files=files)
     finally:
         body.close()
         os.remove(name)
@@ -133,39 +137,39 @@ def test_unicode_post():
     headers = {'CONTENT_LENGTH': str(len(byte_string)), 'CONTENT_TYPE': 'text/plain; charset=utf-8'}
     with wsgiserver(check_upload(byte_string, headers)):
         useragent = UserAgent()
-        useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=unicode_string)
+        useragent.urlopen(LISTENER_URL, method='POST', payload=unicode_string)
 
 
 def test_bytes_post():
     headers = {'CONTENT_LENGTH': '5', 'CONTENT_TYPE': 'application/octet-stream'}
     with wsgiserver(check_upload(b"12345", headers)):
         useragent = UserAgent()
-        useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=b"12345")
+        useragent.urlopen(LISTENER_URL, method='POST', payload=b"12345")
 
 
 def test_dict_post_with_content_type():
     headers = {'Content-Type': 'application/x-www-form-urlencoded'}
     payload = {"foo": "bar"}
     with wsgiserver(set_cookie()): # lazy. I just want to see that we dont crash making the request
-        resp = UserAgent().urlopen('http://127.0.0.1:54323/', method='POST', payload=payload, headers=headers)
+        resp = UserAgent().urlopen(LISTENER_URL, method='POST', payload=payload, headers=headers)
         assert resp.status_code == 200
 
         
 def test_redirect():
     with wsgiserver(check_redirect()):
-        resp = UserAgent().urlopen('http://127.0.0.1:54323/')
+        resp = UserAgent().urlopen(LISTENER_URL)
         assert resp.status_code == 200
         assert b"redirected" == resp.content
 
 def test_params():
     with wsgiserver(check_querystring()):
-        resp = UserAgent().urlopen('http://127.0.0.1:54323/?param1=b', params={"param2":"hello"})
+        resp = UserAgent().urlopen(LISTENER_URL + '?param1=b', params={"param2":"hello"})
         assert resp.status_code == 200
         assert resp.content == b"param1=b&param2=hello"
 
 def test_params_quoted():
     with wsgiserver(check_querystring()):
-        resp = UserAgent().urlopen('http://127.0.0.1:54323/?a/b', params={"path":"/"})
+        resp = UserAgent().urlopen(LISTENER_URL + '?a/b', params={"path":"/"})
         assert resp.status_code == 200
         assert resp.content == b"a/b&path=%2F"
 
@@ -173,14 +177,14 @@ def test_server_error_with_bytes():
     with wsgiserver(internal_server_error()):
         useragent = UserAgent()
         with pytest.raises(BadStatusCode):
-            useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=b"12345")
+            useragent.urlopen(LISTENER_URL, method='POST', payload=b"12345")
 
 
 def test_server_error_with_unicode():
     with wsgiserver(internal_server_error()):
         useragent = UserAgent()
         with pytest.raises(BadStatusCode):
-            useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=u"12345")
+            useragent.urlopen(LISTENER_URL, method='POST', payload=u"12345")
 
 
 def test_server_error_with_file():
@@ -193,7 +197,7 @@ def test_server_error_with_file():
             useragent = UserAgent()
             with pytest.raises(BadStatusCode):
                 with open(name, 'rb') as body:
-                    useragent.urlopen('http://127.0.0.1:54323/', method='POST', payload=body)
+                    useragent.urlopen(LISTENER_URL, method='POST', payload=body)
     finally:
         os.remove(name)
 
@@ -201,19 +205,19 @@ def test_server_error_with_file():
 def test_cookiejar():
     with wsgiserver(set_cookie()):
         useragent = UserAgent(cookiejar=CookieJar())
-        assert b"" == useragent.urlopen('http://127.0.0.1:54323/').read()
+        assert b"" == useragent.urlopen(LISTENER_URL).read()
 
 def test_cookiejar_response_error():
     with wsgiserver(set_cookie_401()):
         useragent = UserAgent(cookiejar=CookieJar())
         with pytest.raises(BadStatusCode):
-            assert b"" == useragent.urlopen('http://127.0.0.1:54323')
+            assert b"" == useragent.urlopen(LISTENER_URL)
 
         assert next(cookie for cookie in useragent.cookiejar if cookie.name == 'testcookie').value == 'testdata'
 
 
 def test_brotli_response():
     with wsgiserver(return_brotli()):
-        resp = UserAgent().urlopen('http://127.0.0.1:54323/', params={"path":"/"})
+        resp = UserAgent().urlopen(LISTENER_URL, params={"path":"/"})
         assert resp.status_code == 200
         assert resp.content == b"https://github.com/gwik/geventhttpclient"

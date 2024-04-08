@@ -12,12 +12,14 @@ import gevent.server
 import gevent.pywsgi
 from six.moves import xrange
 
-listener = ('127.0.0.1', 54323)
+
+LISTENER = "127.0.0.1", 54323
+
 
 @contextmanager
 def server(handler):
     server = gevent.server.StreamServer(
-        listener,
+        LISTENER,
         handle=handler)
     server.start()
     try:
@@ -27,7 +29,7 @@ def server(handler):
 
 @contextmanager
 def wsgiserver(handler):
-    server = gevent.pywsgi.WSGIServer(('127.0.0.1', 54323), handler)
+    server = gevent.pywsgi.WSGIServer(LISTENER, handler)
     server.start()
     try:
         yield
@@ -78,7 +80,7 @@ class HTTPBinClient(HTTPClient):
             version=version,
         )
 
-@pytest.mark.online
+@pytest.mark.network
 def test_client_simple():
     client = HTTPBinClient('httpbin.org')
     assert client.port == 80
@@ -87,7 +89,7 @@ def test_client_simple():
     body = response.read()
     assert len(body)
 
-@pytest.mark.online
+@pytest.mark.network
 def test_client_without_leading_slash():
     client = HTTPBinClient('httpbin.org')
     with client.get("") as response:
@@ -96,11 +98,11 @@ def test_client_without_leading_slash():
         assert(response.status_code in (200, 301, 302))
 
 test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
-@pytest.mark.online
+@pytest.mark.network
 def test_client_with_default_headers():
     client = HTTPBinClient.from_url('httpbin.org/', headers=test_headers)
 
-@pytest.mark.online
+@pytest.mark.network
 def test_request_with_headers():
     client = HTTPBinClient('httpbin.org')
     response = client.get('/', headers=test_headers)
@@ -109,27 +111,27 @@ def test_request_with_headers():
 client = HTTPClient('www.heise.de')
 raw_req_cmp = client._build_request('GET', '/tp/')
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_relative_uri():
     raw_req = client._build_request('GET', 'tp/')
     assert raw_req == raw_req_cmp
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_absolute_uri():
     raw_req = client._build_request('GET', '/tp/')
     assert raw_req == raw_req_cmp
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_full_url():
     raw_req = client._build_request('GET', 'http://www.heise.de/tp/')
     assert raw_req == raw_req_cmp
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_invalid_host():
     with pytest.raises(ValueError):
         client._build_request('GET', 'http://www.spiegel.de/')
 
-@pytest.mark.online
+@pytest.mark.network
 def test_response_context_manager():
     client = HTTPClient.from_url('http://httpbin.org/')
     r = None
@@ -142,7 +144,7 @@ def test_response_context_manager():
     os.environ.get("TRAVIS") == "true",
     reason="We have issues on travis with the SSL tests"
 )
-@pytest.mark.online
+@pytest.mark.network
 def test_client_ssl():
     client = HTTPClient('github.com', ssl=True)
     assert client.port == 443
@@ -156,7 +158,7 @@ def test_client_ssl():
     and os.environ.get("TRAVIS") == "true",
     reason="We have issues on travis with the SSL tests"
 )
-@pytest.mark.online
+@pytest.mark.network
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
@@ -166,7 +168,7 @@ def test_ssl_fail_invalid_certificate():
         client.get('/')
     assert e_info.value.reason == 'CERTIFICATE_VERIFY_FAILED'
 
-@pytest.mark.online
+@pytest.mark.network
 def test_multi_queries_greenlet_safe():
     client = HTTPBinClient('httpbin.org', concurrency=3)
     group = gevent.pool.Group()
@@ -233,7 +235,7 @@ def readline_iter(sock, addr):
 
 def test_readline():
     with server(readline_iter):
-        client = HTTPClient(*listener, block_size=1)
+        client = HTTPClient(*LISTENER, block_size=1)
         response = client.get('/')
         lines = []
         while True:
@@ -254,7 +256,7 @@ def readline_multibyte_sep(sock, addr):
 
 def test_readline_multibyte_sep():
     with server(readline_multibyte_sep):
-        client = HTTPClient(*listener, block_size=1)
+        client = HTTPClient(*LISTENER, block_size=1)
         response = client.get('/')
         lines = []
         while True:
@@ -275,7 +277,7 @@ def readline_multibyte_splitsep(sock, addr):
 
 def test_readline_multibyte_splitsep():
     with server(readline_multibyte_splitsep):
-        client = HTTPClient(*listener, block_size=1)
+        client = HTTPClient(*LISTENER, block_size=1)
         response = client.get('/')
         lines = []
         last_index = 0
@@ -304,7 +306,7 @@ def internal_server_error(sock, addr):
 
 def test_internal_server_error():
     with server(internal_server_error):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         response = client.get('/')
         assert not response.should_keep_alive()
         assert response.should_close()
@@ -326,7 +328,7 @@ def test_file_post():
         body.write(b"123456789")
         body.close()
         with wsgiserver(check_upload(b"123456789", 9)):
-            client = HTTPClient(*listener)
+            client = HTTPClient(*LISTENER)
             with open(name, 'rb') as body:
                 client.post('/', body)
     finally:
@@ -334,17 +336,17 @@ def test_file_post():
 
 def test_bytes_post():
     with wsgiserver(check_upload(b"12345", 5)):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         client.post('/', b"12345")
 
 def test_string_post():
     with wsgiserver(check_upload("12345", 5)):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         client.post('/', "12345")
 
 def test_unicode_post():
     byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
     unicode_string = byte_string.decode('utf-8')
     with wsgiserver(check_upload(byte_string, len(byte_string))):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         client.post('/', unicode_string)
