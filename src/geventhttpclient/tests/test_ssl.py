@@ -29,7 +29,7 @@ except ImportError:
     from backports.ssl_match_hostname import CertificateError
 
 
-from geventhttpclient.tests.test_client import LISTENER
+LISTENER = "127.0.0.1", 54323
 
 pytestmark = pytest.mark.skipif(
     sys.version_info < (2, 7)

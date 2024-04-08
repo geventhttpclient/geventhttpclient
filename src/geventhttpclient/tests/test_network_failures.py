@@ -7,11 +7,23 @@ else:
 from geventhttpclient import HTTPClient
 import gevent.server
 import gevent.socket
+from contextlib import contextmanager
 
-from geventhttpclient.tests.test_client import LISTENER, server
 
 CRLF = "\r\n"
+LISTENER = "127.0.0.1", 54323
 
+
+@contextmanager
+def server(handler):
+    server = gevent.server.StreamServer(
+        LISTENER,
+        handle=handler)
+    server.start()
+    try:
+        yield
+    finally:
+        server.stop()
 
 def wrong_response_status_line(sock, addr):
     sock.recv(4096)

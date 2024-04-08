@@ -12,8 +12,8 @@ else:
 from contextlib import contextmanager
 from geventhttpclient.useragent import UserAgent, BadStatusCode
 
-from geventhttpclient.tests.test_client import LISTENER
 
+LISTENER = "127.0.0.1", 54323
 LISTENER_URL = "http://%s:%s/" % LISTENER
 
 

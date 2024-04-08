@@ -12,9 +12,8 @@ import gevent.server
 import gevent.pywsgi
 from six.moves import xrange
 
-LOCAL_HOST = "127.0.0.1"
-LOCAL_PORT = 54323
-LISTENER = (LOCAL_HOST, LOCAL_PORT)
+
+LISTENER = "127.0.0.1", 54323
 
 
 @contextmanager
