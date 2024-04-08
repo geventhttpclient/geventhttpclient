@@ -5,32 +5,56 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geventhttpclient"
-version = "2.0.12"
-description = "http client library for gevent"
+version = "2.1.0"
+description = "HTTP client library for gevent"
 readme = "README.md"
-license = {file = "LICENSE.txt"}
-authors = [
-    {name = "Antonin Amand", email = "antonin.amand@gmail.com"},
-]
-urls = {"Homepage" = "http://github.com/gwik/geventhttpclient"}
 requires-python = ">=3.9"
+license = {file = "LICENSE.txt"}
+keywords = ["http", "gevent", "client"]
+authors = [{name = "Antonin Amand", email = "antonin.amand@gmail.com"}]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries",
+]
 dependencies = [
     "gevent",
     "certifi",
     "brotli",
-    "urllib3"
+    "urllib3",
 ]
 optional-dependencies.dev = [
     "pytest",
     "dpkt",
-    "mock",
     "requests",
 ]
 
+[project.urls]
+homepage = "http://github.com/geventhttpclient/geventhttpclient"
+issues = "http://github.com/geventhttpclient/geventhttpclient/issues"
+download = "https://pypi.org/project/geventhttpclient/#files"
+
 
 [tool.setuptools]
-package-dir = {"" = "src"}
-packages = {find = {where = ["src"]}}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+exclude = ["geventhttpclient.tests*"]
+
+[tool.setuptools.package-data]
+"*" = ["LICENSE.txt", "README.md", "release.md", "LICENSE-MIT"]
+
+[tool.setuptools.exclude-package-data]
+"*" = ["__pycache__", "*.pyc", "*.pyo"]
 
 
 [tool.pytest.ini_options]
