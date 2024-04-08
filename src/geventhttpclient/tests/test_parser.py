@@ -5,42 +5,57 @@ import pytest
 
 from functools import wraps
 import sys
-from six.moves import xrange
 
 
-RESPONSE = 'HTTP/1.1 301 Moved Permanently\r\nLocation: http://www.google.fr/\r\nContent-Type: text/html; charset=UTF-8\r\nDate: Thu, 13 Oct 2011 15:03:12 GMT\r\nExpires: Sat, 12 Nov 2011 15:03:12 GMT\r\nCache-Control: public, max-age=2592000\r\nServer: gws\r\nContent-Length: 218\r\nX-XSS-Protection: 1; mode=block\r\n\r\n<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">\n<TITLE>301 Moved</TITLE></HEAD><BODY>\n<H1>301 Moved</H1>\nThe document has moved\n<A HREF="http://www.google.fr/">here</A>.\r\n</BODY></HTML>\r\n'
+RESPONSE = (
+    "HTTP/1.1 301 Moved Permanently\r\nLocation: http://www.google.fr/\r\n"
+    "Content-Type: text/html; charset=UTF-8\r\n"
+    "Date: Thu, 13 Oct 2011 15:03:12 GMT\r\n"
+    "Expires: Sat, 12 Nov 2011 15:03:12 GMT\r\n"
+    "Cache-Control: public, max-age=2592000\r\n"
+    "Server: gws\r\nContent-Length: 218\r\n"
+    "X-XSS-Protection: 1; mode=block\r\n\r\n"
+    '<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">\n'
+    "<TITLE>301 Moved</TITLE></HEAD><BODY>\n"
+    '<H1>301 Moved</H1>\nThe document has moved\n<A HREF="http://www.google.fr/">here</A>.\r\n'
+    "</BODY></HTML>\r\n"
+)
 
 # borrowed from gevent
 # sys.gettotalrefcount is available only with python built with debug flag on
-gettotalrefcount = getattr(sys, 'gettotalrefcount', None)
+gettotalrefcount = getattr(sys, "gettotalrefcount", None)
 
 
 def wrap_refcount(method):
     if gettotalrefcount is None:
         return method
+
     @wraps(method)
     def wrapped(*args, **kwargs):
         import gc
+
         gc.disable()
         gc.collect()
         deltas = []
         d = None
         try:
-            for _ in xrange(4):
+            for _ in range(4):
                 d = gettotalrefcount()
                 method(*args, **kwargs)
-                if 'urlparse' in sys.modules:
-                    sys.modules['urlparse'].clear_cache()
+                if "urlparse" in sys.modules:
+                    sys.modules["urlparse"].clear_cache()
                 d = gettotalrefcount() - d
                 deltas.append(d)
                 if deltas[-1] == 0:
                     break
             else:
-                raise AssertionError('refcount increased by %r' % (deltas, ))
+                raise AssertionError("refcount increased by %r" % (deltas,))
         finally:
             gc.collect()
             gc.enable()
+
     return wrapped
+
 
 @wrap_refcount
 def test_parse():
@@ -49,6 +64,7 @@ def test_parse():
     assert parser.message_begun
     assert parser.headers_complete
     assert parser.message_complete
+
 
 @wrap_refcount
 def test_parse_small_blocks():
@@ -65,28 +81,30 @@ def test_parse_small_blocks():
     assert parser.should_keep_alive()
     assert parser.status_code == 301
     assert sorted(parser.items()) == [
-        ('cache-control', 'public, max-age=2592000'),
-        ('content-length', '218'),
-        ('content-type', 'text/html; charset=UTF-8'),
-        ('date', 'Thu, 13 Oct 2011 15:03:12 GMT'),
-        ('expires', 'Sat, 12 Nov 2011 15:03:12 GMT'),
-        ('location', 'http://www.google.fr/'),
-        ('server', 'gws'),
-        ('x-xss-protection', '1; mode=block'),
+        ("cache-control", "public, max-age=2592000"),
+        ("content-length", "218"),
+        ("content-type", "text/html; charset=UTF-8"),
+        ("date", "Thu, 13 Oct 2011 15:03:12 GMT"),
+        ("expires", "Sat, 12 Nov 2011 15:03:12 GMT"),
+        ("location", "http://www.google.fr/"),
+        ("server", "gws"),
+        ("x-xss-protection", "1; mode=block"),
     ]
+
 
 @wrap_refcount
 def test_parse_error():
-    response =  HTTPResponse()
+    response = HTTPResponse()
     try:
         response.feed("HTTP/1.1 asdf\r\n\r\n")
         response.feed("")
         assert response.status_code, 0
         assert response.message_begun
     except HTTPException as e:
-        assert 'Invalid response status' in str(e)
+        assert "Invalid response status" in str(e)
     else:
         assert False, "should have raised"
+
 
 @wrap_refcount
 def test_incomplete_response():
@@ -97,6 +115,7 @@ def test_incomplete_response():
     assert response.should_keep_alive()
     assert response.should_close()
 
+
 @wrap_refcount
 def test_response_too_long():
     response = HTTPResponse()
@@ -104,26 +123,26 @@ def test_response_too_long():
     with pytest.raises(HTTPException):
         response.feed(data)
 
+
 @wrap_refcount
 def test_on_body_raises():
     response = HTTPResponse()
 
     def on_body(buf):
-        raise RuntimeError('error')
+        raise RuntimeError("error")
 
     response._on_body = on_body
     with pytest.raises(RuntimeError):
         response.feed(RESPONSE)
+
 
 @wrap_refcount
 def test_on_message_begin():
     response = HTTPResponse()
 
     def on_message_begin():
-        raise RuntimeError('error')
+        raise RuntimeError("error")
 
     response._on_message_begin = on_message_begin
     with pytest.raises(RuntimeError):
         response.feed(RESPONSE)
-
-

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "geventhttpclient"
+version = "2.0.12"
+description = "http client library for gevent"
+readme = "README.md"
+license = {file = "LICENSE.txt"}
+authors = [
+    {name = "Antonin Amand", email = "antonin.amand@gmail.com"},
+]
+urls = {"Homepage" = "http://github.com/gwik/geventhttpclient"}
+requires-python = ">=3.9"
+dependencies = [
+    "gevent",
+    "certifi",
+    "brotli",
+    "urllib3"
+]
+optional-dependencies.dev = [
+    "pytest",
+    "dpkt",
+    "mock",
+    "requests",
+]
+
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = {find = {where = ["src"]}}
+
+
+[tool.pytest.ini_options]
+markers = [
+    "network: tests which require internet access"
+]
+
+
+[tool.ruff]
+fix = false
+line-length = 100
+target-version = "py311"
+lint.extend-select = ["UP"]
+lint.ignore = ["F821"]  # Undefined name, used to avoid dependency cycles

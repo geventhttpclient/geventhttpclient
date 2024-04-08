@@ -5,7 +5,6 @@ import gevent.socket
 
 
 class HTTPLibHeaders(header.Headers):
-
     def __getitem__(self, key):
         value = super(HTTPLibHeaders, self).__getitem__(key)
         if isinstance(value, (list, tuple)):
@@ -15,18 +14,16 @@ class HTTPLibHeaders(header.Headers):
 
 
 class HTTPResponse(response.HTTPSocketResponse):
-
-    def __init__(self, sock, method='GET', strict=0, debuglevel=0,
-            buffering=False, **kw):
+    def __init__(self, sock, method="GET", strict=0, debuglevel=0, buffering=False, **kw):
         if method is None:
-            method = 'GET'
+            method = "GET"
         else:
             method = method.upper()
         super(HTTPResponse, self).__init__(sock, method=method, **kw)
 
     @property
     def msg(self):
-        if hasattr(self, '_msg'):
+        if hasattr(self, "_msg"):
             return self._msg
         self._msg = HTTPLibHeaders(self._headers_index)
         return self._msg
@@ -38,7 +35,7 @@ class HTTPResponse(response.HTTPSocketResponse):
     @property
     def version(self):
         v = self.get_http_version()
-        if v == 'HTTP/1.1':
+        if v == "HTTP/1.1":
             return 11
         return 10
 
@@ -83,7 +80,6 @@ HTTPLibConnection = httplib.HTTPConnection
 
 
 class HTTPConnection(httplib.HTTPConnection):
-
     response_class = HTTPResponse
 
     def __init__(self, *args, **kw):
@@ -94,19 +90,20 @@ class HTTPConnection(httplib.HTTPConnection):
 
     def connect(self):
         self.sock = gevent.socket.create_connection(
-            (self.host,self.port),
-            self.timeout, self.source_address)
+            (self.host, self.port), self.timeout, self.source_address
+        )
 
         if self._tunnel_host:
             self._tunnel()
+
 
 try:
     import gevent.ssl
 except:
     pass
 else:
-    class HTTPSConnection(HTTPConnection):
 
+    class HTTPSConnection(HTTPConnection):
         default_port = 443
 
         def __init__(self, host, port=None, key_file=None, cert_file=None, **kw):
@@ -117,13 +114,13 @@ else:
         def connect(self):
             "Connect to a host on a given (SSL) port."
 
-            sock = gevent.socket.create_connection((self.host, self.port),
-                                            self.timeout, self.source_address)
+            sock = gevent.socket.create_connection(
+                (self.host, self.port), self.timeout, self.source_address
+            )
             if self._tunnel_host:
                 self.sock = sock
                 self._tunnel()
-            self.sock = gevent.ssl.wrap_socket(
-                sock, self.key_file, self.cert_file)
+            self.sock = gevent.ssl.wrap_socket(sock, self.key_file, self.cert_file)
 
 
 def patch():
@@ -133,4 +130,3 @@ def patch():
         httplib.HTTPSConnection = HTTPSConnection
     except NameError:
         pass
-
