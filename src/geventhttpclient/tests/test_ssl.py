@@ -28,6 +28,9 @@ try:
 except ImportError:
     from backports.ssl_match_hostname import CertificateError
 
+
+from geventhttpclient.tests.test_client import LISTENER
+
 pytestmark = pytest.mark.skipif(
     sys.version_info < (2, 7)
     and os.environ.get("TRAVIS") == "true",
@@ -42,7 +45,7 @@ CERT = os.path.join(BASEDIR, 'server.crt')
 @contextmanager
 def server(handler, backlog=1):
     server = gevent.server.StreamServer(
-        ("localhost", 0),
+        LISTENER,
         backlog=backlog,
         handle=handler,
         keyfile=KEY,

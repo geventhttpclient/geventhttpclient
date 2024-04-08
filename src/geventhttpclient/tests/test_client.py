@@ -12,12 +12,15 @@ import gevent.server
 import gevent.pywsgi
 from six.moves import xrange
 
-listener = ('127.0.0.1', 54323)
+LOCAL_HOST = "127.0.0.1"
+LOCAL_PORT = 54323
+LISTENER = (LOCAL_HOST, LOCAL_PORT)
+
 
 @contextmanager
 def server(handler):
     server = gevent.server.StreamServer(
-        listener,
+        LISTENER,
         handle=handler)
     server.start()
     try:
@@ -27,7 +30,7 @@ def server(handler):
 
 @contextmanager
 def wsgiserver(handler):
-    server = gevent.pywsgi.WSGIServer(('127.0.0.1', 54323), handler)
+    server = gevent.pywsgi.WSGIServer(LISTENER, handler)
     server.start()
     try:
         yield
@@ -233,7 +236,7 @@ def readline_iter(sock, addr):
 
 def test_readline():
     with server(readline_iter):
-        client = HTTPClient(*listener, block_size=1)
+        client = HTTPClient(*LISTENER, block_size=1)
         response = client.get('/')
         lines = []
         while True:
@@ -254,7 +257,7 @@ def readline_multibyte_sep(sock, addr):
 
 def test_readline_multibyte_sep():
     with server(readline_multibyte_sep):
-        client = HTTPClient(*listener, block_size=1)
+        client = HTTPClient(*LISTENER, block_size=1)
         response = client.get('/')
         lines = []
         while True:
@@ -275,7 +278,7 @@ def readline_multibyte_splitsep(sock, addr):
 
 def test_readline_multibyte_splitsep():
     with server(readline_multibyte_splitsep):
-        client = HTTPClient(*listener, block_size=1)
+        client = HTTPClient(*LISTENER, block_size=1)
         response = client.get('/')
         lines = []
         last_index = 0
@@ -304,7 +307,7 @@ def internal_server_error(sock, addr):
 
 def test_internal_server_error():
     with server(internal_server_error):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         response = client.get('/')
         assert not response.should_keep_alive()
         assert response.should_close()
@@ -326,7 +329,7 @@ def test_file_post():
         body.write(b"123456789")
         body.close()
         with wsgiserver(check_upload(b"123456789", 9)):
-            client = HTTPClient(*listener)
+            client = HTTPClient(*LISTENER)
             with open(name, 'rb') as body:
                 client.post('/', body)
     finally:
@@ -334,17 +337,17 @@ def test_file_post():
 
 def test_bytes_post():
     with wsgiserver(check_upload(b"12345", 5)):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         client.post('/', b"12345")
 
 def test_string_post():
     with wsgiserver(check_upload("12345", 5)):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         client.post('/', "12345")
 
 def test_unicode_post():
     byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
     unicode_string = byte_string.decode('utf-8')
     with wsgiserver(check_upload(byte_string, len(byte_string))):
-        client = HTTPClient(*listener)
+        client = HTTPClient(*LISTENER)
         client.post('/', unicode_string)

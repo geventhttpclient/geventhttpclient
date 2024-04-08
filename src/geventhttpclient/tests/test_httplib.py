@@ -6,21 +6,8 @@ else:
     from http.client import HTTPException
 
 from geventhttpclient.httplib import HTTPConnection
-import gevent.server
-from contextlib import contextmanager
+from geventhttpclient.tests.test_client import LISTENER, server
 
-listener = ('127.0.0.1', 54322)
-
-@contextmanager
-def server(handler):
-    server = gevent.server.StreamServer(
-        listener,
-        handle=handler)
-    server.start()
-    try:
-        yield
-    finally:
-        server.stop()
 
 def wrong_response_status_line(sock, addr):
     sock.recv(4096)
@@ -28,7 +15,7 @@ def wrong_response_status_line(sock, addr):
 
 def test_httplib_exception():
     with server(wrong_response_status_line):
-        connection = HTTPConnection(*listener)
+        connection = HTTPConnection(*LISTENER)
         connection.request("GET", '/')
         with pytest.raises(HTTPException):
             connection.getresponse()
@@ -44,7 +31,7 @@ def success_response(sock, addr):
 
 def test_success_response():
     with server(success_response):
-        connection = HTTPConnection(*listener)
+        connection = HTTPConnection(*LISTENER)
         connection.request("GET", "/")
         response = connection.getresponse()
         assert response.should_keep_alive()
@@ -55,7 +42,7 @@ def test_success_response():
 
 def test_msg():
     with server(success_response):
-        connection = HTTPConnection(*listener)
+        connection = HTTPConnection(*LISTENER)
         connection.request("GET", "/")
         response = connection.getresponse()
 
