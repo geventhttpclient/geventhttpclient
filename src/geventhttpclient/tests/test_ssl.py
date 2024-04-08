@@ -1,7 +1,3 @@
-import gevent.monkey
-
-gevent.monkey.patch_ssl()
-
 import os
 import ssl
 import sys

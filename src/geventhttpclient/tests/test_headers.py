@@ -1,7 +1,3 @@
-import gevent.monkey
-
-gevent.monkey.patch_all()
-
 import random
 import string
 import time
