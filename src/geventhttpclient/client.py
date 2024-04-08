@@ -2,7 +2,6 @@ import errno
 import os
 
 import gevent.socket
-import six
 
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool
@@ -217,7 +216,7 @@ class HTTPClient(object):
         :return:
         """
 
-        if isinstance(body, six.text_type):
+        if isinstance(body, str):
             body = body.encode('utf-8')
 
         request = self._build_request(
@@ -230,19 +229,12 @@ class HTTPClient(object):
             try:
                 _request = request.encode()
                 if body:
-                    if isinstance(body, six.binary_type):
+                    if isinstance(body, bytes):
                         sock.sendall(_request + body)
                     else:
                         sock.sendall(_request)
                         # TODO: Support non file-like iterables, e.g. `(u"string1", u"string2")`.
-                        if six.PY3:
-                            sock.sendfile(body)
-                        else:
-                            while True:
-                                chunk = body.read(65536)
-                                if not chunk:
-                                    break
-                                sock.sendall(chunk)
+                        sock.sendfile(body)
                 else:
                     sock.sendall(_request)
             except gevent.socket.error as e:

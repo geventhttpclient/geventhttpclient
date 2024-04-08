@@ -1,4 +1,3 @@
-import pytest
 from geventhttpclient import HTTPClient
 from geventhttpclient.client import METHOD_GET
 

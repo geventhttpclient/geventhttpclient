@@ -1,14 +1,6 @@
-import six
-if six.PY3:
-    from urllib import parse as urlparse
-    from urllib.parse import urlencode
-    from urllib.parse import quote_plus
-    from collections.abc import Mapping
-    basestring = (str, bytes)
-else:
-    import urlparse
-    from urllib import quote_plus, urlencode
-    from collections import Mapping
+from urllib import parse as urlparse
+from urllib.parse import urlencode
+from collections.abc import Mapping
 
 DEFAULT_PORTS = {
     'http': 80,
@@ -169,7 +161,7 @@ class URL(object):
         elif hasattr(data, '__iter__'):
             result = []
             for k, vs in to_key_val_list(data):
-                if isinstance(vs, basestring) or not hasattr(vs, '__iter__'):
+                if isinstance(vs, (str, bytes)) or not hasattr(vs, '__iter__'):
                     vs = [vs]
                 for v in vs:
                     if v is not None:

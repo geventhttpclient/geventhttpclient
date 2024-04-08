@@ -1,11 +1,6 @@
-import six
 from geventhttpclient.response import HTTPResponse
-if six.PY3:
-    from http.client import HTTPException
-    from io import StringIO
-else:
-    from httplib import HTTPException
-    from cStringIO import StringIO
+from http.client import HTTPException
+from io import StringIO
 import pytest
 
 from functools import wraps

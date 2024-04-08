@@ -1,13 +1,9 @@
 import gevent.pywsgi
 import os
 import pytest
-import six
 import tempfile
 
-if six.PY2:
-    from cookielib import CookieJar
-else:
-    from http.cookiejar import CookieJar
+from http.cookiejar import CookieJar
 
 from contextlib import contextmanager
 from geventhttpclient.useragent import UserAgent, BadStatusCode
@@ -31,10 +27,7 @@ def check_upload(body, headers=None):
     def wsgi_handler(env, start_response):
         if headers:
             # For Python 2.6 which does not have viewitems
-            if six.PY2:
-                env >= headers
-            else:
-                assert six.viewitems(env) >= six.viewitems(headers)
+            assert env.items() >= headers.items()
         assert body == env['wsgi.input'].read()
         start_response('200 OK', [])
         return []

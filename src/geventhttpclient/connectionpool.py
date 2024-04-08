@@ -2,7 +2,6 @@ import gevent.queue
 import gevent.socket
 import os
 import sys
-import six
 
 _CA_CERTS = None
 
@@ -141,9 +140,9 @@ class ConnectionPool(object):
     def _setup_proxy(self, sock):
         if self._use_proxy:
             sock.send(
-                six.binary_type(
-                    "CONNECT {self._request_host}:{self._request_port} "
-                    "HTTP/1.1\r\n\r\n".format(self=self),
+                bytes(
+                    f"CONNECT {self._request_host}:{self._request_port} "
+                    "HTTP/1.1\r\n\r\n",
                     'utf8'
                 )
             )
@@ -152,7 +151,7 @@ class ConnectionPool(object):
             parts = resp.split()
             if not parts or parts[1] != b"200":
                 raise RuntimeError(
-                    "Error response from Proxy server : %s" % resp)
+                    f"Error response from Proxy server : {resp}")
 
     def get_socket(self):
         """ get a socket from the pool. This blocks until one is available.

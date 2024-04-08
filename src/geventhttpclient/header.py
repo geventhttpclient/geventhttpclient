@@ -1,9 +1,4 @@
-import six
-
-if six.PY3:
-    from collections.abc import Mapping, MutableMapping
-else:
-    from collections import Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping
 
 _dict_setitem = dict.__setitem__
 _dict_getitem = dict.__getitem__
@@ -87,12 +82,7 @@ class Headers(dict):
     values = MutableMapping.values
     get = MutableMapping.get
     update = MutableMapping.update
-    if six.PY3:
-        keys = MutableMapping.keys
-    else:
-        iterkeys = MutableMapping.iterkeys
-    if six.PY2:
-        itervalues = MutableMapping.itervalues
+    keys = MutableMapping.keys
 
     __marker = object()
 
@@ -215,7 +205,7 @@ class Headers(dict):
         for key in self:
             val = _dict_getitem(self, key)
             # this should preserve either binary or string type
-            sep = u', ' if isinstance(val[1], six.string_types) else b', '
+            sep = u', ' if isinstance(val[1], str) else b', '
             yield val[0], sep.join(val[1:])
 
     # Extensions to urllib3, compatibility to previous implementation

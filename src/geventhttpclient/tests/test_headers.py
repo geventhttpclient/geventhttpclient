@@ -1,17 +1,11 @@
-import six
-from six.moves import xrange
 import gevent
 import gevent.monkey
 gevent.monkey.patch_all()
 
 import pytest
 
-if six.PY2:
-    from cookielib import CookieJar
-    from urllib2 import Request
-else:
-    from http.cookiejar import CookieJar
-    from urllib.request import Request
+from http.cookiejar import CookieJar
+from urllib.request import Request
 import string
 import random
 import time
@@ -128,8 +122,8 @@ def test_compatibility_with_previous_API_read():
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
     for single_item in ('content-encoding', 'content-type', 'content-length', 'cache-control', 'connection'):
-        assert isinstance(parser[single_item], six.string_types)
-        assert isinstance(parser.get(single_item), six.string_types)
+        assert isinstance(parser[single_item], str)
+        assert isinstance(parser.get(single_item), str)
 
 def test_compatibility_with_previous_API_write():
     h = Headers()
@@ -139,15 +133,15 @@ def test_compatibility_with_previous_API_write():
     assert h['asdf'] == 'dfdf'
 
 def test_copy():
-    rnd_txt = lambda length: ''.join(random.choice(string.ascii_letters) for _ in xrange(length))
-    h = Headers((rnd_txt(10), rnd_txt(50)) for _ in xrange(100))
+    rnd_txt = lambda length: ''.join(random.choice(string.ascii_letters) for _ in range(length))
+    h = Headers((rnd_txt(10), rnd_txt(50)) for _ in range(100))
     c = h.copy()
     assert h is not c
     assert len(h) == len(c)
     assert set(h.keys()) == set(c.keys())
     assert h == c
     assert type(h) is type(c)
-    for _ in xrange(100):
+    for _ in range(100):
         rnd_key = rnd_txt(9)
         c[rnd_key] = rnd_txt(10)
         assert rnd_key in c

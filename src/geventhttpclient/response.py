@@ -1,4 +1,3 @@
-import six
 import errno
 from geventhttpclient._parser import HTTPResponseParser
 from geventhttpclient._parser import HTTPParseError
@@ -13,10 +12,7 @@ HEADER_STATE_DONE = 3
 
 
 def copy(data):
-    if six.PY3:
-        return data[:]
-    else:
-        return str(data)
+    return data[:]
 
 
 class HTTPConnectionClosed(HTTPParseError):
@@ -82,10 +78,7 @@ class HTTPResponse(HTTPResponseParser):
     def content_length(self):
         length = self.get('content-length', None)
         if length is not None:
-            if six.PY3:
-                return int(length)
-            else:
-                return long(length)
+            return int(length)
 
     @property
     def length(self):

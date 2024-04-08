@@ -1,16 +1,12 @@
-from __future__ import print_function
-
 import socket
 import errno
-import six
+import io
 import sys
 import ssl
 import zlib
 import os
 import brotli
-from six.moves import xrange, cStringIO
-from six.moves.urllib.parse import urlencode
-from six import reraise, string_types, text_type
+from urllib.parse import urlencode
 
 import gevent
 from urllib3 import encode_multipart_formdata
@@ -31,7 +27,7 @@ class ConnectionError(Exception):
     def __init__(self, url, *args, **kwargs):
         self.url = url
         self.__dict__.update(kwargs)
-        if args and isinstance(args[0], string_types):
+        if args and isinstance(args[0], str):
             try:
                 self.text = args[0] % args[1:]
             except TypeError:
@@ -40,7 +36,7 @@ class ConnectionError(Exception):
             self.text = str(args[0]) if len(args) == 1 else ''
         if kwargs:
             self.text += ', ' if self.text else ''
-            self.kwargs_text = ', '.join('%s=%s' % (key, val) for key, val in six.iteritems(kwargs))
+            self.kwargs_text = ', '.join('%s=%s' % (key, val) for key, val in kwargs.items())
             self.text += self.kwargs_text
         else:
             self.text = ''
@@ -306,7 +302,7 @@ class UserAgent(object):
                 if not content_type:
                     req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
-            elif not content_type and isinstance(payload, text_type):
+            elif not content_type and isinstance(payload, str):
                 req_headers['content-type'] = 'text/plain; charset=utf-8'
             elif not content_type:
                 req_headers['content-type'] = 'application/octet-stream'
@@ -423,7 +419,7 @@ class UserAgent(object):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise reraise(type(e), e, sys.exc_info()[2])
+        raise e.with_traceback(sys.exc_info()[2])
 
     def _handle_retries_exceeded(self, url, last_error=None):
         """ Hook for subclassing
@@ -444,11 +440,11 @@ class UserAgent(object):
         else:
             files = None
         req = self._make_request(url, method=method, headers=headers, payload=payload, params=params, files=files)
-        for retry in xrange(self.max_retries):
+        for retry in range(self.max_retries):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified
                 gevent.sleep(self.retry_delay)
-            for _ in xrange(self.max_redirects):
+            for _ in range(self.max_redirects):
                 if self.cookiejar is not None:
                     self.cookiejar.add_cookie_header(req)
 
@@ -481,7 +477,7 @@ class UserAgent(object):
                     break  # Continue with next retry
 
                 redirection = resp.headers.get('location')
-                if isinstance(redirection, six.binary_type):
+                if isinstance(redirection, bytes):
                     redirection = redirection.decode('utf-8')
                 if resp.status_code in self.redirect_resonse_codes and redirection:
                     resp.release()
@@ -517,28 +513,19 @@ class UserAgent(object):
 
     @classmethod
     def _conversation_str(cls, url, resp, payload=None):
-        if six.PY2:
-            header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
-            ret = 'REQUEST: ' + url + '\n' + resp._sent_request
-            if payload and isinstance(payload, string_types):
+        header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
+        ret = 'REQUEST: ' + url + '\n' + resp._sent_request
+        if payload:
+            if isinstance(payload, bytes):
+                try:
+                    ret += payload.decode('utf-8') + '\n\n'
+                except UnicodeDecodeError:
+                    ret += 'UnicodeDecodeError' + '\n\n'
+            elif isinstance(payload, str):
                 ret += payload + '\n\n'
-            ret += 'RESPONSE: ' + resp._response.version + ' ' + \
-                   str(resp.status_code) + '\n' + \
-                   header_str + '\n\n' + resp.content
-        else:
-            header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
-            ret = 'REQUEST: ' + url + '\n' + resp._sent_request
-            if payload:
-                if isinstance(payload, six.binary_type):
-                    try:
-                        ret += payload.decode('utf-8') + '\n\n'
-                    except UnicodeDecodeError:
-                        ret += 'UnicodeDecodeError' + '\n\n'
-                elif isinstance(payload, six.text_type):
-                    ret += payload + '\n\n'
-            ret += 'RESPONSE: ' + resp._response.version + ' ' + \
-                   str(resp.status_code) + '\n' + \
-                   header_str + '\n\n' + resp.content[:].decode('utf-8')
+        ret += 'RESPONSE: ' + resp._response.version + ' ' + \
+               str(resp.status_code) + '\n' + \
+               header_str + '\n\n' + resp.content[:].decode('utf-8')
         return ret
 
     @classmethod
@@ -557,7 +544,7 @@ class UserAgent(object):
         else:
             offset = 0
 
-        for _ in xrange(self.max_retries):
+        for _ in range(self.max_retries):
             if offset:
                 headers['Range'] = 'bytes=%d-' % offset
                 resp = self.urlopen(url, headers=headers, **kwargs)
@@ -598,7 +585,7 @@ class RestkitCompatUserAgent(UserAgent):
 
 class XmlrpcCompatUserAgent(UserAgent):
     def request(self, host, handler, request, verbose=False):
-        debug_stream = None if not verbose else cStringIO.StringIO()
+        debug_stream = None if not verbose else io.StringIO()
         ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
         if debug_stream is not None:
             debug_stream.seek(0)

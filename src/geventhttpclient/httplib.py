@@ -1,12 +1,7 @@
-import six
-if six.PY3:
-    httplib = __import__('http.client').client
-else:
-    httplib = __import__('httplib')
+import http.client as httplib
 from geventhttpclient import response
 from geventhttpclient import header
 import gevent.socket
-
 
 
 class HTTPLibHeaders(header.Headers):

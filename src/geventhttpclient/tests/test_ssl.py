@@ -8,7 +8,6 @@ except ImportError:
     import mock
 
 import dpkt.ssl
-import six
 import sys
 from contextlib import contextmanager
 import pytest
@@ -23,10 +22,7 @@ from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
 
-try:
-    from ssl import CertificateError
-except ImportError:
-    from backports.ssl_match_hostname import CertificateError
+from ssl import CertificateError
 
 
 LISTENER = "127.0.0.1", 54323
@@ -256,14 +252,9 @@ def test_network_timeout():
     with server(network_timeout) as listener:
         http = HTTPClient(*listener, ssl=True, insecure=True,
             network_timeout=0.1, ssl_options={'ca_certs': CERT})
-        if six.PY3:
-            with pytest.raises(gevent.socket.timeout):
-                response = http.get('/')
-                assert response.status_code == 0, 'should have timed out.'
-        else:
-            with pytest.raises(gevent.ssl.SSLError):
-                response = http.get('/')
-                assert response.status_code == 0, 'should have timed out.'
+        with pytest.raises(gevent.socket.timeout):
+            response = http.get('/')
+            assert response.status_code == 0, 'should have timed out.'
 
 
 def test_verify_hostname():

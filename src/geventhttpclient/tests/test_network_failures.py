@@ -1,9 +1,6 @@
 import six
 import pytest
-if six.PY2:
-    from httplib import HTTPException
-else:
-    from http.client import HTTPException
+from http.client import HTTPException
 from geventhttpclient import HTTPClient
 import gevent.server
 import gevent.socket

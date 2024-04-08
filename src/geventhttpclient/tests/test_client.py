@@ -10,7 +10,6 @@ import gevent.pool
 
 import gevent.server
 import gevent.pywsgi
-from six.moves import xrange
 
 
 LISTENER = "127.0.0.1", 54323
@@ -183,7 +182,7 @@ def test_multi_queries_greenlet_safe():
     ok_count = 0
 
     gevent.spawn_later(0.2, event.set)
-    for response, content in group.imap_unordered(run, xrange(5)):
+    for response, content in group.imap_unordered(run, range(5)):
         # occasionally httpbin.org will return 504 :-/
         assert response.status_code in [200, 504]
         if response.status_code == 200:
@@ -201,7 +200,7 @@ class StreamTestIterator(object):
         lines = [json.dumps({
                  'index': i,
                  'title': 'this is line %d' % i})
-                 for i in xrange(0, count)]
+                 for i in range(0, count)]
         self.buf = (sep.join(lines) + sep).encode()
 
     def __len__(self):
