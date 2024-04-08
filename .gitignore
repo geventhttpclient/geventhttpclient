@@ -15,4 +15,5 @@ bin/
 dist/
 .tox
 .cache
+.venv
 wheelhouse
