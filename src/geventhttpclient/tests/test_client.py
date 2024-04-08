@@ -81,7 +81,7 @@ class HTTPBinClient(HTTPClient):
             version=version,
         )
 
-@pytest.mark.online
+@pytest.mark.network
 def test_client_simple():
     client = HTTPBinClient('httpbin.org')
     assert client.port == 80
@@ -90,7 +90,7 @@ def test_client_simple():
     body = response.read()
     assert len(body)
 
-@pytest.mark.online
+@pytest.mark.network
 def test_client_without_leading_slash():
     client = HTTPBinClient('httpbin.org')
     with client.get("") as response:
@@ -99,11 +99,11 @@ def test_client_without_leading_slash():
         assert(response.status_code in (200, 301, 302))
 
 test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
-@pytest.mark.online
+@pytest.mark.network
 def test_client_with_default_headers():
     client = HTTPBinClient.from_url('httpbin.org/', headers=test_headers)
 
-@pytest.mark.online
+@pytest.mark.network
 def test_request_with_headers():
     client = HTTPBinClient('httpbin.org')
     response = client.get('/', headers=test_headers)
@@ -112,27 +112,27 @@ def test_request_with_headers():
 client = HTTPClient('www.heise.de')
 raw_req_cmp = client._build_request('GET', '/tp/')
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_relative_uri():
     raw_req = client._build_request('GET', 'tp/')
     assert raw_req == raw_req_cmp
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_absolute_uri():
     raw_req = client._build_request('GET', '/tp/')
     assert raw_req == raw_req_cmp
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_full_url():
     raw_req = client._build_request('GET', 'http://www.heise.de/tp/')
     assert raw_req == raw_req_cmp
 
-@pytest.mark.online
+@pytest.mark.network
 def test_build_request_invalid_host():
     with pytest.raises(ValueError):
         client._build_request('GET', 'http://www.spiegel.de/')
 
-@pytest.mark.online
+@pytest.mark.network
 def test_response_context_manager():
     client = HTTPClient.from_url('http://httpbin.org/')
     r = None
@@ -145,7 +145,7 @@ def test_response_context_manager():
     os.environ.get("TRAVIS") == "true",
     reason="We have issues on travis with the SSL tests"
 )
-@pytest.mark.online
+@pytest.mark.network
 def test_client_ssl():
     client = HTTPClient('github.com', ssl=True)
     assert client.port == 443
@@ -159,7 +159,7 @@ def test_client_ssl():
     and os.environ.get("TRAVIS") == "true",
     reason="We have issues on travis with the SSL tests"
 )
-@pytest.mark.online
+@pytest.mark.network
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
@@ -169,7 +169,7 @@ def test_ssl_fail_invalid_certificate():
         client.get('/')
     assert e_info.value.reason == 'CERTIFICATE_VERIFY_FAILED'
 
-@pytest.mark.online
+@pytest.mark.network
 def test_multi_queries_greenlet_safe():
     client = HTTPBinClient('httpbin.org', concurrency=3)
     group = gevent.pool.Group()
