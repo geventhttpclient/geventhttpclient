@@ -187,8 +187,6 @@ class ConnectionPool:
 
 try:
     import gevent.ssl
-    from gevent.ssl import match_hostname
-
     try:
         from gevent.ssl import create_default_context
     except ImportError:
@@ -245,11 +243,6 @@ else:
                 self.ssl_context = ssl_context_factory()
                 self.ssl_context.load_verify_locations(cafile=ca_certs)
             self.ssl_context.check_hostname = not self.insecure
-
-        def after_connect(self, sock):
-            super().after_connect(sock)
-            if not self.insecure and sys.version_info[:2] < (3, 7):
-                match_hostname(sock.getpeercert(), self._request_host)
 
         def _connect_socket(self, sock, address):
             sock = super()._connect_socket(sock, address)
