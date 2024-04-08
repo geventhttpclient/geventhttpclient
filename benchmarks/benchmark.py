@@ -6,10 +6,11 @@ import argparse
 import time
 
 import gevent.pool
-import geventhttpclient.useragent
 import requests
 import requests.adapters
 import urllib3
+
+import geventhttpclient.useragent
 
 
 class Benchmark:

@@ -9,6 +9,7 @@ import gevent.pywsgi
 import gevent.server
 import pytest
 from gevent.ssl import SSLError
+
 from geventhttpclient import HTTPClient
 
 LISTENER = "127.0.0.1", 54323

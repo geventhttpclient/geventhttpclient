@@ -3,6 +3,7 @@ from http.client import HTTPException
 
 import gevent.server
 import pytest
+
 from geventhttpclient.httplib import HTTPConnection
 
 LISTENER = "127.0.0.1", 54323

@@ -4,6 +4,7 @@ from http.client import HTTPException
 from io import StringIO
 
 import pytest
+
 from geventhttpclient.response import HTTPResponse
 
 RESPONSE = (

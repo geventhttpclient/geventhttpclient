@@ -12,6 +12,7 @@ import gevent.ssl
 import pytest
 from gevent import joinall
 from gevent.socket import error as socket_error
+
 from geventhttpclient import HTTPClient
 
 LISTENER = "127.0.0.1", 54323

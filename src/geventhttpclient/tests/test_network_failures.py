@@ -4,6 +4,7 @@ from http.client import HTTPException
 import gevent.server
 import gevent.socket
 import pytest
+
 from geventhttpclient import HTTPClient
 
 CRLF = "\r\n"

@@ -5,6 +5,7 @@ from http.cookiejar import CookieJar
 
 import gevent.pywsgi
 import pytest
+
 from geventhttpclient.useragent import BadStatusCode, UserAgent
 
 LISTENER = "127.0.0.1", 54323

@@ -5,6 +5,7 @@ from http.cookiejar import CookieJar
 from urllib.request import Request
 
 import pytest
+
 from geventhttpclient.header import Headers
 from geventhttpclient.response import HTTPResponse
 

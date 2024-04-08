@@ -39,12 +39,34 @@ markers = [
 ]
 
 
+[tool.tox]
+envlist = "py{39,310,311,312}"
+
+[tool.tox.testenv]
+allowlist_externals = [
+    "rm",
+    "find",
+    "pytest"
+]
+commands = [
+    "rm -rf build",
+    "find . -name '*.pyc' -delete",
+    "python setup.py clean",
+    "python setup.py build_ext --inplace",
+    "pip install -r requirements-dev.txt",
+    "pytest --fulltrace src/geventhttpclient/tests"
+]
+
+
 [tool.ruff]
 fix = false
 line-length = 100
 target-version = "py311"
 lint.extend-select = ["UP"]
 lint.ignore = ["F821", "UP038", "E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["geventhttpclient"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

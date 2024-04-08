@@ -3,6 +3,7 @@
 import json
 
 import gevent.pool
+
 from geventhttpclient import HTTPClient
 from geventhttpclient.url import URL
 
