@@ -1,45 +1,30 @@
-import gevent.monkey
-
-gevent.monkey.patch_ssl()
-
-try:
-    import unittest.mock as mock
-except ImportError:
-    import mock
-
-import dpkt.ssl
-import six
+import os
+import ssl
 import sys
 from contextlib import contextmanager
-import pytest
+from ssl import CertificateError
+from unittest import mock
+
+import dpkt.ssl
 import gevent.server
 import gevent.socket
 import gevent.ssl
-import os
-import ssl
-
+import pytest
 from gevent import joinall
 from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
 
-try:
-    from ssl import CertificateError
-except ImportError:
-    from backports.ssl_match_hostname import CertificateError
-
-
 LISTENER = "127.0.0.1", 54323
 
 pytestmark = pytest.mark.skipif(
-    sys.version_info < (2, 7)
-    and os.environ.get("TRAVIS") == "true",
-    reason="We have issues on travis with the SSL tests"
+    sys.version_info < (2, 7) and os.environ.get("TRAVIS") == "true",
+    reason="We have issues on travis with the SSL tests",
 )
 
 BASEDIR = os.path.dirname(__file__)
-KEY = os.path.join(BASEDIR, 'server.key')
-CERT = os.path.join(BASEDIR, 'server.crt')
+KEY = os.path.join(BASEDIR, "server.key")
+CERT = os.path.join(BASEDIR, "server.crt")
 
 
 @contextmanager
@@ -50,18 +35,21 @@ def server(handler, backlog=1):
         handle=handler,
         keyfile=KEY,
         certfile=CERT,
-        ssl_version=ssl.PROTOCOL_TLS_SERVER)
+        ssl_version=ssl.PROTOCOL_TLS_SERVER,
+    )
     server.start()
     try:
         yield (server.server_host, server.server_port)
     finally:
         server.stop()
 
+
 @contextmanager
 def timeout_connect_server():
-    sock = gevent.socket.socket(gevent.socket.AF_INET,
-        gevent.socket.SOCK_STREAM, 0)
-    sock = gevent.ssl.wrap_socket(sock, keyfile=KEY, certfile=CERT, ssl_version=ssl.PROTOCOL_TLS_SERVER)
+    sock = gevent.socket.socket(gevent.socket.AF_INET, gevent.socket.SOCK_STREAM, 0)
+    sock = gevent.ssl.wrap_socket(
+        sock, keyfile=KEY, certfile=CERT, ssl_version=ssl.PROTOCOL_TLS_SERVER
+    )
     sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1)
     sock.bind(("localhost", 0))
     sock.listen(1)
@@ -81,38 +69,44 @@ def timeout_connect_server():
     finally:
         job.kill()
 
+
 def simple_ssl_response(sock, addr):
     sock.recv(1024)
-    sock.sendall(b'HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n')
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
     sock.close()
+
 
 def test_simple_ssl():
     with server(simple_ssl_response) as listener:
-        http = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={'ca_certs': CERT})
-        response = http.get('/')
+        http = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
+        response = http.get("/")
         assert response.status_code == 200
         response.read()
 
+
 def timeout_on_connect(sock, addr):
     sock.recv(1024)
-    sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n")
+
 
 def test_implicit_sni_from_host_in_ssl():
     server_host, server_port, sent_sni = _get_sni_sent_from_client()
     assert sent_sni == server_host
 
+
 def test_implicit_sni_from_header_in_ssl():
     server_host, server_port, sent_sni = _get_sni_sent_from_client(
-        headers={'host': 'ololo_special_host'},
+        headers={"host": "ololo_special_host"},
     )
-    assert sent_sni == 'ololo_special_host'
+    assert sent_sni == "ololo_special_host"
+
 
 def test_explicit_sni_in_ssl():
     server_host, server_port, sent_sni = _get_sni_sent_from_client(
-        ssl_options={'server_hostname': 'test_sni'},
-        headers={'host': 'ololo_special_host'},
+        ssl_options={"server_hostname": "test_sni"},
+        headers={"host": "ololo_special_host"},
     )
-    assert sent_sni == 'test_sni'
+    assert sent_sni == "test_sni"
 
 
 def _get_sni_sent_from_client(**additional_client_args):
@@ -124,28 +118,24 @@ def _get_sni_sent_from_client(**additional_client_args):
             gevent.socket.AF_INET,
             gevent.socket.SOCK_STREAM,
             gevent.socket.IPPROTO_TCP,
-            'localhost',
-            ('127.0.0.1', server_port)
+            "localhost",
+            ("127.0.0.1", server_port),
         )
-        with mock.patch(
-            'gevent.socket.getaddrinfo', mock.Mock(return_value=[mock_addrinfo])
-        ):
-
-            server_host = 'some_foo'
+        with mock.patch("gevent.socket.getaddrinfo", mock.Mock(return_value=[mock_addrinfo])):
+            server_host = "some_foo"
             http = HTTPClient(
                 server_host,
                 server_port,
                 insecure=True,
                 ssl=True,
-                connection_timeout=.1,
+                connection_timeout=0.1,
                 ssl_context_factory=gevent.ssl.create_default_context,
-
-                **additional_client_args
+                **additional_client_args,
             )
 
             def run(http):
                 try:
-                    http.get('/')
+                    http.get("/")
                 except socket_error:
                     pass  # handshake will not be completed
 
@@ -157,14 +147,13 @@ def _get_sni_sent_from_client(**additional_client_args):
 
 @contextmanager
 def sni_checker_server():
-    sock = gevent.socket.socket(gevent.socket.AF_INET,
-        gevent.socket.SOCK_STREAM, 0)
+    sock = gevent.socket.socket(gevent.socket.AF_INET, gevent.socket.SOCK_STREAM, 0)
     sock.setsockopt(gevent.socket.SOL_SOCKET, gevent.socket.SO_REUSEADDR, 1)
     sock.bind(("localhost", 0))
     sock.listen(1)
 
     # @cyberw 2021-07-10: seems this doesnt exist any more, hope it doesnt make any difference
-    # sock.last_seen_sni = None 
+    # sock.last_seen_sni = None
 
     def run(sock):
         while True:
@@ -173,7 +162,6 @@ def sni_checker_server():
             return extract_sni_from_client_hello(client_hello)
 
     def extract_sni_from_client_hello(hello_packet):
-
         records, bytes_used = dpkt.ssl.tls_multi_factory(hello_packet)
 
         for record in records:
@@ -193,8 +181,8 @@ def sni_checker_server():
 
             SNI_extension = [
                 ext_data
-                for (ext_type, ext_data)
-                in ch.extensions if ext_type == 0x0  # server_name
+                for (ext_type, ext_data) in ch.extensions
+                if ext_type == 0x0  # server_name
             ]
             if SNI_extension:
                 SNI_extension = SNI_extension[0]
@@ -204,7 +192,6 @@ def sni_checker_server():
 
                 return first_entry.decode()
 
-
     job = gevent.spawn(run, sock)
     try:
         yield sock, job
@@ -212,14 +199,14 @@ def sni_checker_server():
     finally:
         job.kill()
 
+
 def test_timeout_on_connect():
     with timeout_connect_server() as listener:
-        http = HTTPClient(*listener,
-            insecure=True, ssl=True, ssl_options={'ca_certs': CERT})
+        http = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
 
         def run(http, wait_time=100):
             try:
-                response = http.get('/')
+                response = http.get("/")
                 gevent.sleep(wait_time)
                 response.read()
             except Exception:
@@ -230,12 +217,14 @@ def test_timeout_on_connect():
 
         e = None
         try:
-            http2 = HTTPClient(*listener,
+            http2 = HTTPClient(
+                *listener,
                 insecure=True,
                 ssl=True,
                 connection_timeout=0.1,
-                ssl_options={'ca_certs': CERT})
-            http2.get('/')
+                ssl_options={"ca_certs": CERT},
+            )
+            http2.get("/")
         except gevent.ssl.SSLError as error:
             e = error
         except gevent.socket.timeout as error:
@@ -243,31 +232,33 @@ def test_timeout_on_connect():
         except:
             raise
 
-        assert e is not None, 'should have raised'
+        assert e is not None, "should have raised"
         if isinstance(e, gevent.ssl.SSLError):
             assert "operation timed out" in str(e)
+
 
 def network_timeout(sock, addr):
     sock.recv(1024)
     gevent.sleep(10)
-    sock.sendall(b'HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n')
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 0\r\n\r\n")
+
 
 def test_network_timeout():
     with server(network_timeout) as listener:
-        http = HTTPClient(*listener, ssl=True, insecure=True,
-            network_timeout=0.1, ssl_options={'ca_certs': CERT})
-        if six.PY3:
-            with pytest.raises(gevent.socket.timeout):
-                response = http.get('/')
-                assert response.status_code == 0, 'should have timed out.'
-        else:
-            with pytest.raises(gevent.ssl.SSLError):
-                response = http.get('/')
-                assert response.status_code == 0, 'should have timed out.'
+        http = HTTPClient(
+            *listener,
+            ssl=True,
+            insecure=True,
+            network_timeout=0.1,
+            ssl_options={"ca_certs": CERT},
+        )
+        with pytest.raises(gevent.socket.timeout):
+            response = http.get("/")
+            assert response.status_code == 0, "should have timed out."
 
 
 def test_verify_hostname():
     with server(simple_ssl_response) as listener:
-        http = HTTPClient(*listener, ssl=True, ssl_options={'ca_certs': CERT})
+        http = HTTPClient(*listener, ssl=True, ssl_options={"ca_certs": CERT})
         with pytest.raises(CertificateError):
-            http.get('/')
+            http.get("/")

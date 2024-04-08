@@ -1,3 +1,8 @@
+[![GitHub Workflow CI Status](https://img.shields.io/github/actions/workflow/status/geventhttpclient/geventhttpclient/test.yml?branch=master&logo=github&style=flat)](https://github.com/geventhttpclient/geventhttpclient/actions)
+[![PyPI](https://img.shields.io/pypi/v/geventhttpclient.svg?style=flat)](https://pypi.org/project/geventhttpclient/)
+![Python Version from PEP 621 TOML](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fgeventhttpclient%2Fgeventhttpclient%2Fmaster%2Fpyproject.toml)
+![PyPI - Downloads](https://img.shields.io/pypi/dm/geventhttpclient)
+
 # geventhttpclient
 
 A high performance, concurrent HTTP client library for python using 
@@ -18,10 +23,7 @@ Safe SSL support is provided by default. **geventhttpclient** depends on
 the certifi CA Bundle. This is the same CA Bundle which ships with the
 Requests codebase, and is derived from Mozilla Firefox's canonical set.
 
-As of version 1.5, only Python 3.6+ is fully supported (with prebuilt wheels), 
-but Python 2.7 and 3.5 *should* work too.
-
-Use of SSL/TLS with python 2.7.9 is not recommended and may be broken.
+As of version 2.1, only Python 3.9+ is fully supported (with prebuilt wheels).
 
 A simple example:
 

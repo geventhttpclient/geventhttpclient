@@ -1,23 +1,13 @@
-import six
-from six.moves import xrange
-import gevent
-import gevent.monkey
-gevent.monkey.patch_all()
+import random
+import string
+import time
+from http.cookiejar import CookieJar
+from urllib.request import Request
 
 import pytest
 
-if six.PY2:
-    from cookielib import CookieJar
-    from urllib2 import Request
-else:
-    from http.cookiejar import CookieJar
-    from urllib.request import Request
-import string
-import random
-import time
-
-from geventhttpclient.response import HTTPResponse
 from geventhttpclient.header import Headers
+from geventhttpclient.response import HTTPResponse
 
 MULTI_COOKIE_RESPONSE = """
 HTTP/1.1 200 OK
@@ -62,36 +52,40 @@ Set-Cookie: bb_fbprofilepicurl=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; p
 Content-Encoding: gzip
 Content-Length: 26186
 
-""".lstrip().replace('\n', '\r\n')
+""".lstrip().replace("\n", "\r\n")
 # Do not remove the final empty line!
 
 
 def test_create_from_kwargs():
     h = Headers(ab=1, cd=2, ef=3, gh=4)
     assert len(h) == 4
-    assert 'ab' in h
+    assert "ab" in h
+
 
 def test_create_from_iterator():
-    h = Headers((x, x*5) for x in string.ascii_lowercase)
+    h = Headers((x, x * 5) for x in string.ascii_lowercase)
     assert len(h) == len(string.ascii_lowercase)
+
 
 def test_create_from_dict():
     h = Headers(dict(ab=1, cd=2, ef=3, gh=4))
     assert len(h) == 4
-    assert 'ab' in h
+    assert "ab" in h
+
 
 def test_create_from_list():
-    h = Headers([('ab', 'A'), ('cd', 'B'), ('cookie', 'C'), ('cookie', 'D'), ('cookie', 'E')])
+    h = Headers([("ab", "A"), ("cd", "B"), ("cookie", "C"), ("cookie", "D"), ("cookie", "E")])
     assert len(h) == 5
-    assert 'ab' in h
-    assert len(h['cookie']) == 3
-    assert h['cookie'][0] == 'C'
-    assert h['cookie'][-1] == 'E'
+    assert "ab" in h
+    assert len(h["cookie"]) == 3
+    assert h["cookie"][0] == "C"
+    assert h["cookie"][-1] == "E"
+
 
 def test_case_insensitivity():
-    h = Headers({'Content-Type': 'text/plain'})
-    h.add('Content-Encoding', 'utf8')
-    for val in ('content-type', 'content-encoding'):
+    h = Headers({"Content-Type": "text/plain"})
+    h.add("Content-Encoding", "utf8")
+    for val in ("content-type", "content-encoding"):
         assert val.upper() in h
         assert val.lower() in h
         assert val.capitalize() in h
@@ -99,13 +93,15 @@ def test_case_insensitivity():
         del h[val.upper()]
         assert val.lower() not in h
 
+
 def test_read_multiple_header():
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
     headers = parser._headers_index
-    assert len(headers['set-cookie']) == MULTI_COOKIE_RESPONSE.count('Set-Cookie')
-    assert headers['set-cookie'][0].startswith('bb_lastvisit')
-    assert headers['set-cookie'][-1].startswith('bb_fbprofilepicurl')
+    assert len(headers["set-cookie"]) == MULTI_COOKIE_RESPONSE.count("Set-Cookie")
+    assert headers["set-cookie"][0].startswith("bb_lastvisit")
+    assert headers["set-cookie"][-1].startswith("bb_fbprofilepicurl")
+
 
 @pytest.mark.skip(reason="remote site behavior changed")
 def test_cookielib_compatibility():
@@ -113,7 +109,7 @@ def test_cookielib_compatibility():
     # Set time in order to be still valid in some years, when cookie strings expire
     cj._now = cj._policy._now = time.mktime((2012, 1, 1, 0, 0, 0, 0, 0, 0))
 
-    request = Request('http://test.com')
+    request = Request("http://test.com")
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
     cookies = cj.make_cookies(parser, request)
@@ -124,34 +120,46 @@ def test_cookielib_compatibility():
     # Three valid, not expired cookies placed
     assert len(list(cj)) == 3
 
-def test_compatibility_with_previous_API_read():
+
+def test_compatibility_with_previous_api_read():
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
-    for single_item in ('content-encoding', 'content-type', 'content-length', 'cache-control', 'connection'):
-        assert isinstance(parser[single_item], six.string_types)
-        assert isinstance(parser.get(single_item), six.string_types)
+    for single_item in (
+        "content-encoding",
+        "content-type",
+        "content-length",
+        "cache-control",
+        "connection",
+    ):
+        assert isinstance(parser[single_item], str)
+        assert isinstance(parser.get(single_item), str)
 
-def test_compatibility_with_previous_API_write():
+
+def test_compatibility_with_previous_api_write():
     h = Headers()
-    h['asdf'] = 'jklm'
-    h['asdf'] = 'dfdf'
+    h["asdf"] = "jklm"
+    h["asdf"] = "dfdf"
     # Lists only if necessary
-    assert h['asdf'] == 'dfdf'
+    assert h["asdf"] == "dfdf"
+
 
 def test_copy():
-    rnd_txt = lambda length: ''.join(random.choice(string.ascii_letters) for _ in xrange(length))
-    h = Headers((rnd_txt(10), rnd_txt(50)) for _ in xrange(100))
+    def rnd_txt(length):
+        return "".join(random.choice(string.ascii_letters) for _ in range(length))
+
+    h = Headers((rnd_txt(10), rnd_txt(50)) for _ in range(100))
     c = h.copy()
     assert h is not c
     assert len(h) == len(c)
     assert set(h.keys()) == set(c.keys())
     assert h == c
     assert type(h) is type(c)
-    for _ in xrange(100):
+    for _ in range(100):
         rnd_key = rnd_txt(9)
         c[rnd_key] = rnd_txt(10)
         assert rnd_key in c
         assert rnd_key not in h
+
 
 def test_fieldname_string_enforcement():
     with pytest.raises(Exception):
@@ -164,28 +172,31 @@ def test_fieldname_string_enforcement():
     with pytest.raises(Exception):
         del h[3]
 
+
 def test_header_replace():
     d = Headers()
-    d['Content-Type'] = "text/plain"
-    d['content-type'] = "text/html"
-    assert d['content-type'] == "text/html"
+    d["Content-Type"] = "text/plain"
+    d["content-type"] = "text/html"
+    assert d["content-type"] == "text/html"
+
 
 def test_compat_dict():
-    h = Headers(D='asdf')
-    h.add('E', 'd')
-    h.add('E', 'f')
-    h.add('Cookie', 'd')
-    h.add('Cookie', 'e')
-    h.add('Cookie', 'f')
+    h = Headers(D="asdf")
+    h.add("E", "d")
+    h.add("E", "f")
+    h.add("Cookie", "d")
+    h.add("Cookie", "e")
+    h.add("Cookie", "f")
     d = h.compatible_dict()
 
-    for x in ('Cookie', 'D', 'E'):
+    for x in ("Cookie", "D", "E"):
         assert x in d
-    assert d['D'] == 'asdf'
-    assert d['E'] == 'd, f'
-    assert d['Cookie'] == 'd, e, f'
+    assert d["D"] == "asdf"
+    assert d["E"] == "d, f"
+    assert d["Cookie"] == "d, e, f"
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_copy()
     test_compat_dict()
     test_cookielib_compatibility()

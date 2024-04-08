@@ -1,60 +1,46 @@
-from __future__ import print_function
-
-import socket
 import errno
-import six
-import sys
-import ssl
-import zlib
+import io
 import os
-import brotli
-from six.moves import xrange, cStringIO
-from six.moves.urllib.parse import urlencode
-from six import reraise, string_types, text_type
+import socket
+import ssl
+import sys
+import zlib
+from urllib.parse import urlencode
 
+import brotli
 import gevent
 from urllib3 import encode_multipart_formdata
 from urllib3.fields import RequestField
 
-try:
-    from gevent.dns import DNSError
-except ImportError:
-    class DNSError(Exception): pass
-
-from .url import URL, to_key_val_list
 from .client import HTTPClient, HTTPClientPool
-
-basestring = (str, bytes)
+from .url import URL, to_key_val_list
 
 
 class ConnectionError(Exception):
     def __init__(self, url, *args, **kwargs):
         self.url = url
         self.__dict__.update(kwargs)
-        if args and isinstance(args[0], string_types):
-            try:
-                self.text = args[0] % args[1:]
-            except TypeError:
-                self.text = args[0] + ': ' + str(args[1:]) if args else ''
+        if args and isinstance(args[0], str):
+            self.text = args[0] + ": " + str(args[1:])
         else:
-            self.text = str(args[0]) if len(args) == 1 else ''
+            self.text = str(args[0]) if len(args) == 1 else ""
         if kwargs:
-            self.text += ', ' if self.text else ''
-            self.kwargs_text = ', '.join('%s=%s' % (key, val) for key, val in six.iteritems(kwargs))
+            self.text += ", " if self.text else ""
+            self.kwargs_text = ", ".join(f"{key}={val}" for key, val in kwargs.items())
             self.text += self.kwargs_text
         else:
-            self.text = ''
+            self.text = ""
 
     def __str__(self):
         if self.text:
-            return "URL %s: %s" % (self.url, self.text)
+            return f"URL {self.url}: {self.text}"
         else:
-            return "URL %s" % self.url
+            return f"URL {self.url}"
 
     def __repr__(self):
         repr_str = super().__repr__()
         if self.kwargs_text:
-            return repr_str.replace(')', ''.join([', ', self.kwargs_text, ')']))
+            return repr_str.replace(")", "".join([", ", self.kwargs_text, ")"]))
         return repr_str
 
 
@@ -70,12 +56,12 @@ class EmptyResponse(ConnectionError):
     pass
 
 
-class CompatRequest(object):
-    """ urllib / cookielib compatible request class.
-        See also: http://docs.python.org/library/cookielib.html
+class CompatRequest:
+    """urllib / cookielib compatible request class.
+    See also: http://docs.python.org/library/cookielib.html
     """
 
-    def __init__(self, url, method='GET', headers=None, payload=None, params=None):
+    def __init__(self, url, method="GET", headers=None, payload=None, params=None):
         self.params = params
         self.set_url(url)
         self.original_host = self.url_split.host
@@ -104,8 +90,7 @@ class CompatRequest(object):
         return self.original_host
 
     def is_unverifiable(self):
-        """ See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!
-        """
+        """See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!"""
         return False
 
     @property
@@ -125,27 +110,27 @@ class CompatRequest(object):
         self.headers.add(key, val)
 
     def _drop_payload(self):
-        self.method = 'GET'
+        self.method = "GET"
         self.payload = None
-        for item in ('content-length', 'content-type', 'content-encoding'):
+        for item in ("content-length", "content-type", "content-encoding"):
             self.headers.discard(item)
 
     def _drop_cookies(self):
-        for item in ('cookie', 'cookie2'):
+        for item in ("cookie", "cookie2"):
             self.headers.discard(item)
 
     def redirect(self, code, location):
-        """ Modify the request inplace to point to the new location """
+        """Modify the request inplace to point to the new location"""
         self.set_url(self.url_split.redirect(location))
         if code in (302, 303):
             self._drop_payload()
         self._drop_cookies()
 
 
-class CompatResponse(object):
-    """ Adapter for urllib responses with some extensions
-    """
-    __slots__ = 'headers', '_response', '_request', '_sent_request', '_cached_content'
+class CompatResponse:
+    """Adapter for urllib responses with some extensions"""
+
+    __slots__ = "headers", "_response", "_request", "_sent_request", "_cached_content"
 
     def __init__(self, ghc_response, request=None, sent_request=None):
         self._response = ghc_response
@@ -155,15 +140,13 @@ class CompatResponse(object):
 
     @property
     def status(self):
-        """ The returned http status
-        """
+        """The returned http status"""
         # TODO: Should be a readable string
         return str(self.status_code)
 
     @property
     def status_code(self):
-        """ The http status code as plain integer
-        """
+        """The http status code as plain integer"""
         return self._response.get_code()
 
     @property
@@ -171,8 +154,7 @@ class CompatResponse(object):
         return self._response
 
     def read(self, n=None):
-        """ Read n bytes from the response body
-        """
+        """Read n bytes from the response body"""
         return self._response.read(n)
 
     def readline(self):
@@ -197,8 +179,7 @@ class CompatResponse(object):
 
     @property
     def content(self):
-        """ Unzips if necessary and buffers the received body. Careful with large files!
-        """
+        """Unzips if necessary and buffers the received body. Careful with large files!"""
         try:
             return self._cached_content
         except AttributeError:
@@ -207,43 +188,40 @@ class CompatResponse(object):
 
     def _content(self):
         try:
-            content_type = self.headers.getheaders('content-encoding')[0].lower()
+            content_type = self.headers.getheaders("content-encoding")[0].lower()
         except IndexError:
             # No content-encoding header set
-            content_type = 'identity'
+            content_type = "identity"
 
-        if content_type == 'gzip':
+        if content_type == "gzip":
             ret = self.unzipped(gzip=True)
-        elif content_type == 'deflate':
+        elif content_type == "deflate":
             ret = self.unzipped(gzip=False)
-        elif content_type == 'identity':
+        elif content_type == "identity":
             ret = self._response.read()
-        elif content_type == 'br':
+        elif content_type == "br":
             ret = self.unzipped(gzip=False, br=True)
-        elif content_type == 'compress':
-            raise ValueError("Compression type not supported: %s" % content_type)
+        elif content_type == "compress":
+            raise ValueError(f"Compression type not supported: {content_type}")
         else:
-            raise ValueError("Unknown content encoding: %s" % content_type)
+            raise ValueError(f"Unknown content encoding: {content_type}")
 
         self.release()
         return ret
 
     def __len__(self):
-        """ The content lengths as should be returned from the headers
-        """
+        """The content lengths as should be returned from the headers"""
         try:
-            return int(self.headers.getheaders('content-length')[0])
+            return int(self.headers.getheaders("content-length")[0])
         except (IndexError, ValueError):
             return len(self.content)
 
     def __nonzero__(self):
-        """ If we have an empty response body, we still don't want to evaluate as false
-        """
+        """If we have an empty response body, we still don't want to evaluate as false"""
         return True
 
     def info(self):
-        """ Adaption to cookielib: Alias for headers
-        """
+        """Adaption to cookielib: Alias for headers"""
         return self.headers
 
     def __enter__(self):
@@ -254,8 +232,7 @@ class CompatResponse(object):
 
 
 class RestkitCompatResponse(CompatResponse):
-    """ Some extra lines to also serve as a drop in replacement for restkit
-    """
+    """Some extra lines to also serve as a drop in replacement for restkit"""
 
     def body_string(self):
         return self.content
@@ -268,14 +245,21 @@ class RestkitCompatResponse(CompatResponse):
         return self.status_code
 
 
-class UserAgent(object):
+class UserAgent:
     response_type = CompatResponse
     request_type = CompatRequest
     valid_response_codes = frozenset([200, 206, 301, 302, 303, 307])
     redirect_resonse_codes = frozenset([301, 302, 303, 307])
 
-    def __init__(self, max_redirects=3, max_retries=3, retry_delay=0,
-                 cookiejar=None, headers=None, **kwargs):
+    def __init__(
+        self,
+        max_redirects=3,
+        max_retries=3,
+        retry_delay=0,
+        cookiejar=None,
+        headers=None,
+        **kwargs,
+    ):
         self.max_redirects = int(max_redirects)
         self.max_retries = int(max_retries)
         self.retry_delay = retry_delay
@@ -291,36 +275,41 @@ class UserAgent(object):
     def __del__(self):
         self.close()
 
-    def _make_request(self, url, method='GET', headers=None, payload=None, params=None, files=None):
+    def _make_request(self, url, method="GET", headers=None, payload=None, params=None, files=None):
         req_headers = self.default_headers.copy()
         if headers:
             req_headers.update(headers)
         if payload or files:
             # Adjust headers depending on payload content
-            content_type = req_headers.get('content-type', None)
+            content_type = req_headers.get("content-type", None)
             if files:
                 (body, content_type) = self._encode_files(files, payload)
                 payload = body
-                req_headers['content-type'] = content_type
+                req_headers["content-type"] = content_type
             if isinstance(payload, dict):
                 if not content_type:
-                    req_headers['content-type'] = "application/x-www-form-urlencoded; charset=utf-8"
+                    req_headers["content-type"] = "application/x-www-form-urlencoded; charset=utf-8"
                 payload = urlencode(payload)
-            elif not content_type and isinstance(payload, text_type):
-                req_headers['content-type'] = 'text/plain; charset=utf-8'
+            elif not content_type and isinstance(payload, str):
+                req_headers["content-type"] = "text/plain; charset=utf-8"
             elif not content_type:
-                req_headers['content-type'] = 'application/octet-stream'
-        return self.request_type(url, method=method, headers=req_headers, payload=payload, params=params)
+                req_headers["content-type"] = "application/octet-stream"
+        return self.request_type(
+            url, method=method, headers=req_headers, payload=payload, params=params
+        )
 
     def _urlopen(self, request):
         client = self.clientpool.get_client(request.url_split)
-        resp = client.request(request.method, request.url_split.request_uri,
-                              body=request.payload, headers=request.headers)
+        resp = client.request(
+            request.method,
+            request.url_split.request_uri,
+            body=request.payload,
+            headers=request.headers,
+        )
         return self.response_type(resp, request=request, sent_request=resp._sent_request)
 
     def _verify_status(self, status_code, url=None):
-        """ Hook for subclassing
-        """
+        """Hook for subclassing"""
         if status_code not in self.valid_response_codes:
             raise BadStatusCode(url, code=status_code)
 
@@ -348,7 +337,7 @@ class UserAgent(object):
 
         if not files:
             raise ValueError("Files must be provided.")
-        elif isinstance(data, basestring):
+        elif isinstance(data, (str, bytes)):
             raise ValueError("Data must not be a string.")
 
         new_fields = []
@@ -356,24 +345,21 @@ class UserAgent(object):
         files = to_key_val_list(files or {})
 
         for field, val in fields:
-            if isinstance(val, basestring) or not hasattr(val, "__iter__"):
+            if isinstance(val, (str, bytes)) or not hasattr(val, "__iter__"):
                 val = [val]
             for v in val:
                 if v is not None:
-                    # Don't call str() on bytestrings: in Py3 it all goes wrong.
                     if not isinstance(v, bytes):
                         v = str(v)
 
                     new_fields.append(
                         (
-                            field.decode("utf-8")
-                            if isinstance(field, bytes)
-                            else field,
+                            field.decode("utf-8") if isinstance(field, bytes) else field,
                             v.encode("utf-8") if isinstance(v, str) else v,
                         )
                     )
 
-        for (k, v) in files:
+        for k, v in files:
             # support for explicit filename
             ft = None
             fh = None
@@ -409,31 +395,40 @@ class UserAgent(object):
         return body, content_type
 
     def _handle_error(self, e, url=None):
-        """ Hook for subclassing. Raise the error to interrupt further retrying,
-            return it to continue retries and save the error, when retries
-            exceed the limit.
-            Temporary errors should be swallowed here for automatic retries.
+        """Hook for subclassing. Raise the error to interrupt further retrying,
+        return it to continue retries and save the error, when retries
+        exceed the limit.
+        Temporary errors should be swallowed here for automatic retries.
         """
         if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
-        elif isinstance(e, (socket.error, DNSError)) and \
-                e.errno in set([errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]):
+        elif isinstance(e, socket.error) and e.errno in set(
+            [errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]
+        ):
             return e
-        elif isinstance(e, ssl.SSLError) and 'read operation timed out' in str(e):
+        elif isinstance(e, ssl.SSLError) and "read operation timed out" in str(e):
             return e
         elif isinstance(e, EmptyResponse):
             return e
-        raise reraise(type(e), e, sys.exc_info()[2])
+        raise e.with_traceback(sys.exc_info()[2])
 
     def _handle_retries_exceeded(self, url, last_error=None):
-        """ Hook for subclassing
-        """
+        """Hook for subclassing"""
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
-    def urlopen(self, url, method='GET', response_codes=valid_response_codes,
-                headers=None, payload=None, to_string=False, debug_stream=None, params=None, **kwargs):
-        """ Open an URL, do retries and redirects and verify the status code
-        """
+    def urlopen(
+        self,
+        url,
+        method="GET",
+        response_codes=valid_response_codes,
+        headers=None,
+        payload=None,
+        to_string=False,
+        debug_stream=None,
+        params=None,
+        **kwargs,
+    ):
+        """Open an URL, do retries and redirects and verify the status code"""
         # POST or GET parameters can be passed in **kwargs
         if kwargs:
             if not payload:
@@ -443,12 +438,19 @@ class UserAgent(object):
             files = kwargs.get("files", None)
         else:
             files = None
-        req = self._make_request(url, method=method, headers=headers, payload=payload, params=params, files=files)
-        for retry in xrange(self.max_retries):
+        req = self._make_request(
+            url,
+            method=method,
+            headers=headers,
+            payload=payload,
+            params=params,
+            files=files,
+        )
+        for retry in range(self.max_retries):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified
                 gevent.sleep(self.retry_delay)
-            for _ in xrange(self.max_redirects):
+            for _ in range(self.max_redirects):
                 if self.cookiejar is not None:
                     self.cookiejar.add_cookie_header(req)
 
@@ -463,7 +465,9 @@ class UserAgent(object):
 
                 # We received a response
                 if debug_stream is not None:
-                    debug_stream.write(self._conversation_str(req.url, resp, payload=req.payload) + '\n\n')
+                    debug_stream.write(
+                        self._conversation_str(req.url, resp, payload=req.payload) + "\n\n"
+                    )
 
                 if self.cookiejar is not None:
                     self.cookiejar.extract_cookies(resp, req)
@@ -480,9 +484,9 @@ class UserAgent(object):
                     last_error = self._handle_error(e, url=req.url)
                     break  # Continue with next retry
 
-                redirection = resp.headers.get('location')
-                if isinstance(redirection, six.binary_type):
-                    redirection = redirection.decode('utf-8')
+                redirection = resp.headers.get("location")
+                if isinstance(redirection, bytes):
+                    redirection = redirection.decode("utf-8")
                 if resp.status_code in self.redirect_resonse_codes and redirection:
                     resp.release()
                     try:
@@ -510,67 +514,69 @@ class UserAgent(object):
                         else:
                             return ret
             else:
-                e = RetriesExceeded(url, "Redirection limit reached (%s)" % self.max_redirects)
+                e = RetriesExceeded(url, f"Redirection limit reached ({self.max_redirects})")
                 last_error = self._handle_error(e, url=url)
         else:
             return self._handle_retries_exceeded(url, last_error=last_error)
 
     @classmethod
     def _conversation_str(cls, url, resp, payload=None):
-        if six.PY2:
-            header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
-            ret = 'REQUEST: ' + url + '\n' + resp._sent_request
-            if payload and isinstance(payload, string_types):
-                ret += payload + '\n\n'
-            ret += 'RESPONSE: ' + resp._response.version + ' ' + \
-                   str(resp.status_code) + '\n' + \
-                   header_str + '\n\n' + resp.content
-        else:
-            header_str = '\n'.join('%s: %s' % item for item in resp.headers.iteroriginal())
-            ret = 'REQUEST: ' + url + '\n' + resp._sent_request
-            if payload:
-                if isinstance(payload, six.binary_type):
-                    try:
-                        ret += payload.decode('utf-8') + '\n\n'
-                    except UnicodeDecodeError:
-                        ret += 'UnicodeDecodeError' + '\n\n'
-                elif isinstance(payload, six.text_type):
-                    ret += payload + '\n\n'
-            ret += 'RESPONSE: ' + resp._response.version + ' ' + \
-                   str(resp.status_code) + '\n' + \
-                   header_str + '\n\n' + resp.content[:].decode('utf-8')
+        header_str = "\n".join(f"{key}: {val}" for key, val in resp.headers.iteroriginal())
+        ret = "REQUEST: " + url + "\n" + resp._sent_request
+        if payload:
+            if isinstance(payload, bytes):
+                try:
+                    ret += payload.decode("utf-8") + "\n\n"
+                except UnicodeDecodeError:
+                    ret += "UnicodeDecodeError" + "\n\n"
+            elif isinstance(payload, str):
+                ret += payload + "\n\n"
+        ret += (
+            "RESPONSE: "
+            + resp._response.version
+            + " "
+            + str(resp.status_code)
+            + "\n"
+            + header_str
+            + "\n\n"
+            + resp.content[:].decode("utf-8")
+        )
         return ret
 
     @classmethod
     def guess_filename(cls, file):
         """Tries to guess the filename of the given object."""
         name = getattr(file, "name", None)
-        if name and isinstance(name, basestring) and name[0] != "<" and name[-1] != ">":
+        if name and isinstance(name, (str, bytes)) and name[0] != "<" and name[-1] != ">":
             return os.path.basename(name)
 
     def download(self, url, fpath, chunk_size=16 * 1024, resume=False, **kwargs):
-        kwargs.pop('to_string', None)
-        headers = kwargs.pop('headers', {})
-        headers['Connection'] = 'Keep-Alive'
+        kwargs.pop("to_string", None)
+        headers = kwargs.pop("headers", {})
+        headers["Connection"] = "Keep-Alive"
         if resume and os.path.isfile(fpath):
             offset = os.path.getsize(fpath)
         else:
             offset = 0
 
-        for _ in xrange(self.max_retries):
+        for _ in range(self.max_retries):
             if offset:
-                headers['Range'] = 'bytes=%d-' % offset
+                headers["Range"] = f"bytes={offset}-"
                 resp = self.urlopen(url, headers=headers, **kwargs)
-                cr = resp.headers.get('Content-Range')
-                if resp.status_code != 206 or not cr or not cr.startswith('bytes') or \
-                        not cr.split(None, 1)[1].startswith(str(offset)):
+                cr = resp.headers.get("Content-Range")
+                if (
+                    resp.status_code != 206
+                    or not cr
+                    or not cr.startswith("bytes")
+                    or not cr.split(None, 1)[1].startswith(str(offset))
+                ):
                     resp.release()
                     offset = 0
             if not offset:
-                headers.pop('Range', None)
+                headers.pop("Range", None)
                 resp = self.urlopen(url, headers=headers, **kwargs)
 
-            with open(fpath, 'ab' if offset else 'wb') as f:
+            with open(fpath, "ab" if offset else "wb") as f:
                 if offset:
                     f.seek(offset, os.SEEK_SET)
                 try:
@@ -581,7 +587,7 @@ class UserAgent(object):
                             data = resp.read(chunk_size)
                 except BaseException as e:
                     self._handle_error(e, url=url)
-                    if resp.headers.get('accept-ranges') == 'bytes':
+                    if resp.headers.get("accept-ranges") == "bytes":
                         # Only if this header is set, we can fall back to partial download
                         offset = f.tell()
                     continue
@@ -598,8 +604,14 @@ class RestkitCompatUserAgent(UserAgent):
 
 class XmlrpcCompatUserAgent(UserAgent):
     def request(self, host, handler, request, verbose=False):
-        debug_stream = None if not verbose else cStringIO.StringIO()
-        ret = self.urlopen(host + handler, 'POST', payload=request, to_string=True, debug_stream=debug_stream)
+        debug_stream = None if not verbose else io.StringIO()
+        ret = self.urlopen(
+            host + handler,
+            "POST",
+            payload=request,
+            to_string=True,
+            debug_stream=debug_stream,
+        )
         if debug_stream is not None:
             debug_stream.seek(0)
             print(debug_stream.read())

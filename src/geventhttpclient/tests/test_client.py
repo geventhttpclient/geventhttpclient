@@ -1,31 +1,29 @@
+import json
 import os
 import sys
 import tempfile
-import pytest
-import json
 from contextlib import contextmanager
-from geventhttpclient import HTTPClient
-from gevent.ssl import SSLError #@UnresolvedImport
+
 import gevent.pool
-
-import gevent.server
 import gevent.pywsgi
-from six.moves import xrange
+import gevent.server
+import pytest
+from gevent.ssl import SSLError
 
+from geventhttpclient import HTTPClient
 
 LISTENER = "127.0.0.1", 54323
 
 
 @contextmanager
 def server(handler):
-    server = gevent.server.StreamServer(
-        LISTENER,
-        handle=handler)
+    server = gevent.server.StreamServer(LISTENER, handle=handler)
     server.start()
     try:
         yield
     finally:
         server.stop()
+
 
 @contextmanager
 def wsgiserver(handler):
@@ -80,110 +78,127 @@ class HTTPBinClient(HTTPClient):
             version=version,
         )
 
+
 @pytest.mark.network
 def test_client_simple():
-    client = HTTPBinClient('httpbin.org')
+    client = HTTPBinClient("httpbin.org")
     assert client.port == 80
-    response = client.get('/')
+    response = client.get("/")
     assert response.status_code == 200
     body = response.read()
     assert len(body)
 
+
 @pytest.mark.network
 def test_client_without_leading_slash():
-    client = HTTPBinClient('httpbin.org')
+    client = HTTPBinClient("httpbin.org")
     with client.get("") as response:
         assert response.status_code == 200
     with client.get("base64/test") as response:
-        assert(response.status_code in (200, 301, 302))
+        assert response.status_code in (200, 301, 302)
 
-test_headers = {'User-Agent': 'Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17'}
+
+test_headers = {
+    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17"
+}
+
+
 @pytest.mark.network
 def test_client_with_default_headers():
-    client = HTTPBinClient.from_url('httpbin.org/', headers=test_headers)
+    client = HTTPBinClient("httpbin.org", headers=test_headers)
+    response = client.get("/")
+    assert response.status_code == 200
+
 
 @pytest.mark.network
 def test_request_with_headers():
-    client = HTTPBinClient('httpbin.org')
-    response = client.get('/', headers=test_headers)
+    client = HTTPBinClient("httpbin.org")
+    response = client.get("/", headers=test_headers)
     assert response.status_code == 200
 
-client = HTTPClient('www.heise.de')
-raw_req_cmp = client._build_request('GET', '/tp/')
+
+client = HTTPClient("www.heise.de")
+raw_req_cmp = client._build_request("GET", "/tp/")
+
 
 @pytest.mark.network
 def test_build_request_relative_uri():
-    raw_req = client._build_request('GET', 'tp/')
+    raw_req = client._build_request("GET", "tp/")
     assert raw_req == raw_req_cmp
+
 
 @pytest.mark.network
 def test_build_request_absolute_uri():
-    raw_req = client._build_request('GET', '/tp/')
+    raw_req = client._build_request("GET", "/tp/")
     assert raw_req == raw_req_cmp
+
 
 @pytest.mark.network
 def test_build_request_full_url():
-    raw_req = client._build_request('GET', 'http://www.heise.de/tp/')
+    raw_req = client._build_request("GET", "http://www.heise.de/tp/")
     assert raw_req == raw_req_cmp
+
 
 @pytest.mark.network
 def test_build_request_invalid_host():
     with pytest.raises(ValueError):
-        client._build_request('GET', 'http://www.spiegel.de/')
+        client._build_request("GET", "http://www.spiegel.de/")
+
 
 @pytest.mark.network
 def test_response_context_manager():
-    client = HTTPClient.from_url('http://httpbin.org/')
+    client = HTTPClient.from_url("http://httpbin.org/")
     r = None
-    with client.get('/') as response:
+    with client.get("/") as response:
         assert response.status_code == 200
         r = response
-    assert r._sock is None # released
+    assert r._sock is None  # released
+
 
 @pytest.mark.skipif(
     os.environ.get("TRAVIS") == "true",
-    reason="We have issues on travis with the SSL tests"
+    reason="We have issues on travis with the SSL tests",
 )
 @pytest.mark.network
 def test_client_ssl():
-    client = HTTPClient('github.com', ssl=True)
+    client = HTTPClient("github.com", ssl=True)
     assert client.port == 443
-    response = client.get('/')
+    response = client.get("/")
     assert response.status_code == 200
     body = response.read()
     assert len(body)
 
+
 @pytest.mark.skipif(
-    sys.version_info < (2, 7)
-    and os.environ.get("TRAVIS") == "true",
-    reason="We have issues on travis with the SSL tests"
+    sys.version_info < (2, 7) and os.environ.get("TRAVIS") == "true",
+    reason="We have issues on travis with the SSL tests",
 )
 @pytest.mark.network
 def test_ssl_fail_invalid_certificate():
-    certs = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
-    client = HTTPClient('github.com', ssl_options={'ca_certs': certs})
+    certs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
+    client = HTTPClient("github.com", ssl_options={"ca_certs": certs})
     assert client.port == 443
     with pytest.raises(SSLError) as e_info:
-        client.get('/')
-    assert e_info.value.reason == 'CERTIFICATE_VERIFY_FAILED'
+        client.get("/")
+    assert e_info.value.reason == "CERTIFICATE_VERIFY_FAILED"
+
 
 @pytest.mark.network
 def test_multi_queries_greenlet_safe():
-    client = HTTPBinClient('httpbin.org', concurrency=3)
+    client = HTTPBinClient("httpbin.org", concurrency=3)
     group = gevent.pool.Group()
     event = gevent.event.Event()
 
     def run(i):
         event.wait()
-        response = client.get('/')
+        response = client.get("/")
         return response, response.read()
 
     count = 0
     ok_count = 0
 
     gevent.spawn_later(0.2, event.set)
-    for response, content in group.imap_unordered(run, xrange(5)):
+    for response, content in group.imap_unordered(run, range(5)):
         # occasionally httpbin.org will return 504 :-/
         assert response.status_code in [200, 504]
         if response.status_code == 200:
@@ -195,13 +210,9 @@ def test_multi_queries_greenlet_safe():
     assert ok_count >= 3
 
 
-class StreamTestIterator(object):
-
+class StreamTestIterator:
     def __init__(self, sep, count):
-        lines = [json.dumps({
-                 'index': i,
-                 'title': 'this is line %d' % i})
-                 for i in xrange(0, count)]
+        lines = [json.dumps({"index": i, "title": f"this is line {i}"}) for i in range(0, count)]
         self.buf = (sep.join(lines) + sep).encode()
 
     def __len__(self):
@@ -217,7 +228,7 @@ class StreamTestIterator(object):
 
         gevent.sleep(0)
         pos = self.cursor + 10
-        data = self.buf[self.cursor:pos]
+        data = self.buf[self.cursor : pos]
         self.cursor = pos
 
         return data
@@ -233,10 +244,11 @@ def readline_iter(sock, addr):
     for block in iterator:
         sock.sendall(block)
 
+
 def test_readline():
     with server(readline_iter):
         client = HTTPClient(*LISTENER, block_size=1)
-        response = client.get('/')
+        response = client.get("/")
         lines = []
         while True:
             line = response.readline(b"\n")
@@ -245,7 +257,8 @@ def test_readline():
             data = json.loads(line[:-1].decode())
             lines.append(data)
         assert len(lines) == 100
-        assert [x['index'] for x in lines] == [x for x in range(0, 100)]
+        assert [x["index"] for x in lines] == [x for x in range(0, 100)]
+
 
 def readline_multibyte_sep(sock, addr):
     sock.recv(1024)
@@ -254,10 +267,11 @@ def readline_multibyte_sep(sock, addr):
     for block in iterator:
         sock.sendall(block)
 
+
 def test_readline_multibyte_sep():
     with server(readline_multibyte_sep):
         client = HTTPClient(*LISTENER, block_size=1)
-        response = client.get('/')
+        response = client.get("/")
         lines = []
         while True:
             line = response.readline(b"\r\n")
@@ -266,7 +280,8 @@ def test_readline_multibyte_sep():
             data = json.loads(line[:-1].decode())
             lines.append(data)
         assert len(lines) == 100
-        assert [x['index'] for x in lines] == [x for x in range(0, 100)]
+        assert [x["index"] for x in lines] == [x for x in range(0, 100)]
+
 
 def readline_multibyte_splitsep(sock, addr):
     sock.recv(1024)
@@ -275,10 +290,11 @@ def readline_multibyte_splitsep(sock, addr):
     gevent.sleep(0)
     sock.sendall(b'\n{"a": 2}\r\n{"a": 3}\r\n')
 
+
 def test_readline_multibyte_splitsep():
     with server(readline_multibyte_splitsep):
         client = HTTPClient(*LISTENER, block_size=1)
-        response = client.get('/')
+        response = client.get("/")
         lines = []
         last_index = 0
         while True:
@@ -286,40 +302,49 @@ def test_readline_multibyte_splitsep():
             if not line:
                 break
             data = json.loads(line[:-2].decode())
-            assert data['a'] == last_index + 1
-            last_index = data['a']
+            assert data["a"] == last_index + 1
+            last_index = data["a"]
         len(lines) == 3
+
 
 def internal_server_error(sock, addr):
     sock.recv(1024)
-    head = 'HTTP/1.1 500 Internal Server Error\r\n' \
-           'Connection: close\r\n' \
-           'Content-Type: text/html\r\n' \
-           'Content-Length: 135\r\n\r\n'
+    head = (
+        "HTTP/1.1 500 Internal Server Error\r\n"
+        "Connection: close\r\n"
+        "Content-Type: text/html\r\n"
+        "Content-Length: 135\r\n\r\n"
+    )
 
-    body = '<html>\n  <head>\n    <title>Internal Server Error</title>\n  ' \
-           '</head>\n  <body>\n    <h1>Internal Server Error</h1>\n    \n  ' \
-           '</body>\n</html>\n\n'
+    body = (
+        "<html>\n  <head>\n    <title>Internal Server Error</title>\n  "
+        "</head>\n  <body>\n    <h1>Internal Server Error</h1>\n    \n  "
+        "</body>\n</html>\n\n"
+    )
 
     sock.sendall((head + body).encode())
     sock.close()
 
+
 def test_internal_server_error():
     with server(internal_server_error):
         client = HTTPClient(*LISTENER)
-        response = client.get('/')
+        response = client.get("/")
         assert not response.should_keep_alive()
         assert response.should_close()
         body = response.read()
         assert len(body) == response.content_length
 
+
 def check_upload(body, body_length):
     def wsgi_handler(env, start_response):
-        assert int(env.get('CONTENT_LENGTH')) == body_length
-        assert body == env['wsgi.input'].read()
-        start_response('200 OK', [])
+        assert int(env.get("CONTENT_LENGTH")) == body_length
+        assert body == env["wsgi.input"].read()
+        start_response("200 OK", [])
         return []
+
     return wsgi_handler
+
 
 def test_file_post():
     body = tempfile.NamedTemporaryFile("a+b", delete=False)
@@ -329,24 +354,27 @@ def test_file_post():
         body.close()
         with wsgiserver(check_upload(b"123456789", 9)):
             client = HTTPClient(*LISTENER)
-            with open(name, 'rb') as body:
-                client.post('/', body)
+            with open(name, "rb") as body:
+                client.post("/", body)
     finally:
         os.remove(name)
+
 
 def test_bytes_post():
     with wsgiserver(check_upload(b"12345", 5)):
         client = HTTPClient(*LISTENER)
-        client.post('/', b"12345")
+        client.post("/", b"12345")
+
 
 def test_string_post():
     with wsgiserver(check_upload("12345", 5)):
         client = HTTPClient(*LISTENER)
-        client.post('/', "12345")
+        client.post("/", "12345")
+
 
 def test_unicode_post():
-    byte_string = b'\xc8\xb9\xc8\xbc\xc9\x85'
-    unicode_string = byte_string.decode('utf-8')
+    byte_string = b"\xc8\xb9\xc8\xbc\xc9\x85"
+    unicode_string = byte_string.decode("utf-8")
     with wsgiserver(check_upload(byte_string, len(byte_string))):
         client = HTTPClient(*LISTENER)
-        client.post('/', unicode_string)
+        client.post("/", unicode_string)

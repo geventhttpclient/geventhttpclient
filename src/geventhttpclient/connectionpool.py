@@ -1,8 +1,9 @@
-import gevent.queue
-import gevent.socket
 import os
 import sys
-import six
+
+import gevent.queue
+import gevent.socket
+from gevent import lock
 
 _CA_CERTS = None
 
@@ -16,22 +17,15 @@ else:
 
 if not _CA_CERTS or os.path.isdir(_CA_CERTS):
     import certifi
+
     _CA_CERTS = certifi.where()
 
-try:
-    from ssl import _DEFAULT_CIPHERS
-except ImportError:
-    # ssl._DEFAULT_CIPHERS in python2.7 branch.
-    _DEFAULT_CIPHERS = (
-        'ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:'
-        'DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:ECDH+RC4:'
-        'DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5')
+_DEFAULT_CIPHERS = (
+    "ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:"
+    "DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:ECDH+RC4:"
+    "DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5"
+)
 
-try:
-    from gevent import lock
-except ImportError:
-    # gevent < 1.0b2
-    from gevent import coros as lock
 
 DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_NETWORK_TIMEOUT = 5.0
@@ -39,19 +33,22 @@ DEFAULT_NETWORK_TIMEOUT = 5.0
 IGNORED = object()
 
 
-class ConnectionPool(object):
+class ConnectionPool:
     DEFAULT_CONNECTION_TIMEOUT = 5.0
     DEFAULT_NETWORK_TIMEOUT = 5.0
 
-    def __init__(self,
-                 connection_host,
-                 connection_port,
-                 request_host,
-                 request_port,
-                 size=5, disable_ipv6=False,
-                 connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
-                 network_timeout=DEFAULT_NETWORK_TIMEOUT,
-                 use_proxy=False):
+    def __init__(
+        self,
+        connection_host,
+        connection_port,
+        request_host,
+        request_port,
+        size=5,
+        disable_ipv6=False,
+        connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
+        network_timeout=DEFAULT_NETWORK_TIMEOUT,
+        use_proxy=False,
+    ):
         self._closed = False
         self._connection_host = connection_host
         self._connection_port = connection_port
@@ -67,14 +64,17 @@ class ConnectionPool(object):
         self.disable_ipv6 = disable_ipv6
 
     def _resolve(self):
-        """ resolve (dns) socket informations needed to connect it.
-        """
+        """resolve (dns) socket informations needed to connect it."""
         family = 0
         if self.disable_ipv6:
             family = gevent.socket.AF_INET
-        info = gevent.socket.getaddrinfo(self._connection_host,
-                                         self._connection_port,
-                                         family, 0, gevent.socket.SOL_TCP)
+        info = gevent.socket.getaddrinfo(
+            self._connection_host,
+            self._connection_port,
+            family,
+            0,
+            gevent.socket.SOL_TCP,
+        )
         # family, socktype, proto, canonname, sockaddr = info[0]
         return info
 
@@ -91,14 +91,13 @@ class ConnectionPool(object):
                 pass
 
     def _create_tcp_socket(self, family, socktype, protocol):
-        """ tcp socket factory.
-        """
+        """tcp socket factory."""
         sock = gevent.socket.socket(family, socktype, protocol)
         return sock
 
     def _create_socket(self):
-        """ might be overridden and super for wrapping into a ssl socket
-            or set tcp/socket options
+        """might be overridden and super for wrapping into a ssl socket
+        or set tcp/socket options
         """
         sock_infos = self._resolve()
         first_error = None
@@ -116,7 +115,7 @@ class ConnectionPool(object):
                 self.after_connect(sock)
                 sock.settimeout(self.network_timeout)
                 return sock
-            except IOError as e:
+            except OSError as e:
                 sock.close()
                 if not first_error:
                     first_error = e
@@ -127,8 +126,7 @@ class ConnectionPool(object):
         if first_error:
             raise first_error
         else:
-            raise RuntimeError(
-                "Cannot resolve %s:%s" % (self._host, self._port))
+            raise RuntimeError(f"Cannot resolve {self._host}:{self._port}")
 
     def after_connect(self, sock):
         pass
@@ -141,25 +139,22 @@ class ConnectionPool(object):
     def _setup_proxy(self, sock):
         if self._use_proxy:
             sock.send(
-                six.binary_type(
-                    "CONNECT {self._request_host}:{self._request_port} "
-                    "HTTP/1.1\r\n\r\n".format(self=self),
-                    'utf8'
+                bytes(
+                    f"CONNECT {self._request_host}:{self._request_port} HTTP/1.1\r\n\r\n",
+                    "utf8",
                 )
             )
 
             resp = sock.recv(4096)
             parts = resp.split()
             if not parts or parts[1] != b"200":
-                raise RuntimeError(
-                    "Error response from Proxy server : %s" % resp)
+                raise RuntimeError(f"Error response from Proxy server : {resp}")
 
     def get_socket(self):
-        """ get a socket from the pool. This blocks until one is available.
-        """
+        """get a socket from the pool. This blocks until one is available."""
         self._semaphore.acquire()
         if self._closed:
-            raise RuntimeError('connection pool closed')
+            raise RuntimeError("connection pool closed")
         try:
             return self._socket_queue.get(block=False)
         except gevent.queue.Empty:
@@ -170,8 +165,7 @@ class ConnectionPool(object):
                 raise
 
     def return_socket(self, sock):
-        """ return a socket to the pool.
-        """
+        """return a socket to the pool."""
         if self._closed:
             try:
                 sock.close()
@@ -182,8 +176,7 @@ class ConnectionPool(object):
         self._semaphore.release()
 
     def release_socket(self, sock):
-        """ call when the socket is no more usable.
-        """
+        """call when the socket is no more usable."""
         try:
             sock.close()
         except:
@@ -194,13 +187,6 @@ class ConnectionPool(object):
 
 try:
     import gevent.ssl
-
-    try:
-        if sys.version_info[:2] < (3, 7):
-            from gevent.ssl import match_hostname
-    except ImportError:
-        from backports.ssl_match_hostname import match_hostname
-
     try:
         from gevent.ssl import create_default_context
     except ImportError:
@@ -208,8 +194,9 @@ try:
 except ImportError:
     pass
 else:
+
     class SSLConnectionPool(ConnectionPool):
-        """ SSLConnectionPool creates connections wrapped with SSL/TLS.
+        """SSLConnectionPool creates connections wrapped with SSL/TLS.
 
         :param host: hostname
         :param port: port
@@ -219,20 +206,22 @@ else:
         """
 
         default_options = {
-            'ciphers': _DEFAULT_CIPHERS,
-            'ca_certs': _CA_CERTS,
-            'cert_reqs': gevent.ssl.CERT_REQUIRED
+            "ciphers": _DEFAULT_CIPHERS,
+            "ca_certs": _CA_CERTS,
+            "cert_reqs": gevent.ssl.CERT_REQUIRED,
         }
 
-        def __init__(self,
-                     connection_host,
-                     connection_port,
-                     request_host,
-                     request_port,
-                     insecure=False,
-                     ssl_context_factory=None,
-                     ssl_options=None,
-                     **kw):
+        def __init__(
+            self,
+            connection_host,
+            connection_port,
+            request_host,
+            request_port,
+            insecure=False,
+            ssl_context_factory=None,
+            ssl_options=None,
+            **kw,
+        ):
             self.insecure = insecure
 
             self.ssl_options = self.default_options.copy()
@@ -244,14 +233,10 @@ else:
             else:
                 self.ssl_context = None
 
-            super(SSLConnectionPool, self).__init__(connection_host,
-                                                    connection_port,
-                                                    request_host,
-                                                    request_port,
-                                                    **kw)
+            super().__init__(connection_host, connection_port, request_host, request_port, **kw)
 
         def init_ssl_context(self, ssl_context_factory):
-            ca_certs = self.ssl_options['ca_certs']
+            ca_certs = self.ssl_options["ca_certs"]
             try:
                 self.ssl_context = ssl_context_factory(cafile=ca_certs)
             except TypeError:
@@ -259,16 +244,11 @@ else:
                 self.ssl_context.load_verify_locations(cafile=ca_certs)
             self.ssl_context.check_hostname = not self.insecure
 
-        def after_connect(self, sock):
-            super(SSLConnectionPool, self).after_connect(sock)
-            if not self.insecure and sys.version_info[:2] < (3, 7):
-                match_hostname(sock.getpeercert(), self._request_host)
-
         def _connect_socket(self, sock, address):
-            sock = super(SSLConnectionPool, self)._connect_socket(sock, address)
+            sock = super()._connect_socket(sock, address)
 
             if self.ssl_context is None:
                 return gevent.ssl.wrap_socket(sock, **self.ssl_options)
             else:
-                server_hostname = self.ssl_options.get('server_hostname', self._request_host)
+                server_hostname = self.ssl_options.get("server_hostname", self._request_host)
                 return self.ssl_context.wrap_socket(sock, server_hostname=server_hostname)

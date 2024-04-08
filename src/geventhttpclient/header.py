@@ -1,9 +1,4 @@
-import six
-
-if six.PY3:
-    from collections.abc import Mapping, MutableMapping
-else:
-    from collections import Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping
 
 _dict_setitem = dict.__setitem__
 _dict_getitem = dict.__getitem__
@@ -75,7 +70,7 @@ class Headers(dict):
         return _dict_contains(self, key.lower())
 
     def __eq__(self, other):
-        if not isinstance(other, Mapping) and not hasattr(other, 'keys'):
+        if not isinstance(other, Mapping) and not hasattr(other, "keys"):
             return False
         if not isinstance(other, type(self)):
             other = type(self)(other)
@@ -87,19 +82,14 @@ class Headers(dict):
     values = MutableMapping.values
     get = MutableMapping.get
     update = MutableMapping.update
-    if six.PY3:
-        keys = MutableMapping.keys
-    else:
-        iterkeys = MutableMapping.iterkeys
-    if six.PY2:
-        itervalues = MutableMapping.itervalues
+    keys = MutableMapping.keys
 
     __marker = object()
 
     def pop(self, key, default=__marker):
-        '''D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
-          If key is not found, d is returned if given, otherwise KeyError is raised.
-        '''
+        """D.pop(k[,d]) -> v, remove specified key and return the corresponding value.
+        If key is not found, d is returned if given, otherwise KeyError is raised.
+        """
         # Using the MutableMapping function directly fails due to the private marker.
         # Using ordinary dict.pop would expose the internal structures.
         # So let's reinvent the wheel.
@@ -148,12 +138,11 @@ class Headers(dict):
         with self.add instead of self.__setitem__
         """
         if len(args) > 1:
-            raise TypeError("extend() takes at most 1 positional "
-                            "arguments ({} given)".format(len(args)))
+            raise TypeError(f"extend() takes at most 1 positional argument ({len(args)} given)")
         other = args[0] if len(args) >= 1 else ()
 
         if isinstance(other, Headers):
-            for key, val in other.iteritems():
+            for key, val in other.items():
                 self.add(key, val)
         elif isinstance(other, Mapping):
             for key in other:
@@ -193,9 +182,8 @@ class Headers(dict):
             return failobj
         return vals
 
-
     def __repr__(self):
-        return "%s(%s)" % (type(self).__name__, dict(self.itermerged()))
+        return f"{type(self).__name__}({dict(self.itermerged())})"
 
     def _copy_from(self, other):
         for key in other:
@@ -215,7 +203,7 @@ class Headers(dict):
         for key in self:
             val = _dict_getitem(self, key)
             # this should preserve either binary or string type
-            sep = u', ' if isinstance(val[1], six.string_types) else b', '
+            sep = ", " if isinstance(val[1], str) else b", "
             yield val[0], sep.join(val[1:])
 
     # Extensions to urllib3, compatibility to previous implementation

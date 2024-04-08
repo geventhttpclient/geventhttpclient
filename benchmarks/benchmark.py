@@ -5,11 +5,12 @@ gevent.monkey.patch_all()
 import argparse
 import time
 
+import gevent.pool
 import requests
 import requests.adapters
-import gevent.pool
-import geventhttpclient.useragent
 import urllib3
+
+import geventhttpclient.useragent
 
 
 class Benchmark:
@@ -43,7 +44,7 @@ class Benchmark:
             rps = self.round_size / delta
             results.append(rps)
 
-            print("round: {}, rps: {}".format(round, rps))
+            print(f"round: {round}, rps: {rps}")
         print("total rps:", sum(results) / len(results))
 
 
@@ -104,7 +105,7 @@ if __name__ == "__main__":
     benchmark_classes = (available_benchmarks[x] for x in args.pop("benchmark"))
 
     for benchmark_class in benchmark_classes:
-        print("Running {}".format(benchmark_class.__name__))
+        print(f"Running {benchmark_class.__name__}")
         benchmark = benchmark_class(**args)
         benchmark.start()
         print()

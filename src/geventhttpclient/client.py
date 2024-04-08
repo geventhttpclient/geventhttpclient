@@ -2,13 +2,11 @@ import errno
 import os
 
 import gevent.socket
-import six
 
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.header import Headers
-from geventhttpclient.response import HTTPConnectionClosed
-from geventhttpclient.response import HTTPSocketPoolResponse
+from geventhttpclient.response import HTTPConnectionClosed, HTTPSocketPoolResponse
 from geventhttpclient.url import URL
 
 CRLF = "\r\n"
@@ -48,15 +46,13 @@ def _get_body_length(body):
             return None
 
 
-class HTTPClient(object):
-    HTTP_11 = 'HTTP/1.1'
-    HTTP_10 = 'HTTP/1.0'
+class HTTPClient:
+    HTTP_11 = "HTTP/1.1"
+    HTTP_10 = "HTTP/1.0"
 
     BLOCK_SIZE = 1024 * 4  # 4KB
 
-    DEFAULT_HEADERS = Headers({
-        'User-Agent': 'python/gevent-http-client-' + __version__
-    })
+    DEFAULT_HEADERS = Headers({"User-Agent": "python/gevent-http-client-" + __version__})
 
     @classmethod
     def from_url(cls, url, **kw):
@@ -64,19 +60,28 @@ class HTTPClient(object):
             url = URL(url)
         enable_ssl = url.scheme == PROTO_HTTPS
         if not enable_ssl:
-            kw.pop('ssl_options', None)
+            kw.pop("ssl_options", None)
         return cls(url.host, port=url.port, ssl=enable_ssl, **kw)
 
-    def __init__(self, host, port=None, headers=None,
-                 block_size=BLOCK_SIZE,
-                 connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
-                 network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
-                 disable_ipv6=False,
-                 concurrency=1,
-                 ssl=False, ssl_options=None, ssl_context_factory=None,
-                 insecure=False,
-                 proxy_host=None, proxy_port=None, version=HTTP_11,
-                 headers_type=Headers):
+    def __init__(
+        self,
+        host,
+        port=None,
+        headers=None,
+        block_size=BLOCK_SIZE,
+        connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
+        network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
+        disable_ipv6=False,
+        concurrency=1,
+        ssl=False,
+        ssl_options=None,
+        ssl_context_factory=None,
+        insecure=False,
+        proxy_host=None,
+        proxy_port=None,
+        version=HTTP_11,
+        headers_type=Headers,
+    ):
         if headers is None:
             headers = {}
         self.host = host
@@ -84,8 +89,7 @@ class HTTPClient(object):
         connection_host = self.host
         connection_port = self.port
         if proxy_host is not None:
-            assert proxy_port is not None, \
-                'you have to provide proxy_port if you set proxy_host'
+            assert proxy_port is not None, "you have to provide proxy_port if you set proxy_host"
             self.use_proxy = True
             connection_host = proxy_host
             connection_port = proxy_port
@@ -95,8 +99,8 @@ class HTTPClient(object):
             ssl_options = ssl_options.copy() if ssl_options else {}
         if ssl_options is not None:
             if ssl_context_factory is not None:
-                requested_hostname = headers.get('host', self.host)
-                ssl_options.setdefault('server_hostname', requested_hostname)
+                requested_hostname = headers.get("host", self.host)
+                ssl_options.setdefault("server_hostname", requested_hostname)
             self.ssl = True
             if not self.port:
                 self.port = 443
@@ -104,9 +108,12 @@ class HTTPClient(object):
                 connection_port = self.port
             # Import SSL as late as possible, fail hard with Import Error
             from geventhttpclient.connectionpool import SSLConnectionPool
+
             self._connection_pool = SSLConnectionPool(
-                connection_host, connection_port,
-                self.host, self.port,
+                connection_host,
+                connection_port,
+                self.host,
+                self.port,
                 size=concurrency,
                 ssl_options=ssl_options,
                 ssl_context_factory=ssl_context_factory,
@@ -114,7 +121,7 @@ class HTTPClient(object):
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
-                use_proxy=self.use_proxy
+                use_proxy=self.use_proxy,
             )
         else:
             self.ssl = False
@@ -123,13 +130,15 @@ class HTTPClient(object):
             if not connection_port:
                 connection_port = self.port
             self._connection_pool = ConnectionPool(
-                connection_host, connection_port,
-                self.host, self.port,
+                connection_host,
+                connection_port,
+                self.host,
+                self.port,
                 size=concurrency,
                 network_timeout=network_timeout,
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
-                use_proxy=self.use_proxy
+                use_proxy=self.use_proxy,
             )
         self.version = version
         self.headers_type = headers_type
@@ -156,15 +165,15 @@ class HTTPClient(object):
         """
 
         :param method:
-        :type method: basestring
+        :type method: str or bytes
         :param request_uri:
-        :type request_uri: basestring
+        :type request_uri: str or bytes
         :param body:
-        :type body: basestring or file
+        :type body: str or bytes or file
         :param headers:
         :type headers: dict
         :return:
-        :rtype: basestring
+        :rtype: str or bytes
         """
 
         if headers is None:
@@ -176,8 +185,8 @@ class HTTPClient(object):
         if self.version == self.HTTP_11 and HEADER_HOST not in header_fields:
             host_port = self.host
             # IPv6 addresses require square brackets in the Host header.
-            if ':' in self.host and self.host[0] != '[' and self.host[-1] != ']':
-                host_port = '[' + host_port + ']'
+            if ":" in self.host and self.host[0] != "[" and self.host[-1] != "]":
+                host_port = "[" + host_port + "]"
             if self.port not in (80, 443):
                 host_port += HOST_PORT_SEP + str(self.port)
             header_fields[HEADER_HOST] = host_port
@@ -196,7 +205,7 @@ class HTTPClient(object):
             request_url = SLASH + request_url
         elif request_url.startswith(PROTO_HTTP):
             if request_url.startswith(self._base_url_string):
-                request_url = request_url[len(self._base_url_string) - 1:]
+                request_url = request_url[len(self._base_url_string) - 1 :]
             else:
                 raise ValueError("Invalid host in URL")
 
@@ -217,11 +226,10 @@ class HTTPClient(object):
         :return:
         """
 
-        if isinstance(body, six.text_type):
-            body = body.encode('utf-8')
+        if isinstance(body, str):
+            body = body.encode("utf-8")
 
-        request = self._build_request(
-            method.upper(), request_uri, body=body, headers=headers)
+        request = self._build_request(method.upper(), request_uri, body=body, headers=headers)
 
         attempts_left = self._connection_pool.size + 1
 
@@ -230,19 +238,12 @@ class HTTPClient(object):
             try:
                 _request = request.encode()
                 if body:
-                    if isinstance(body, six.binary_type):
+                    if isinstance(body, bytes):
                         sock.sendall(_request + body)
                     else:
                         sock.sendall(_request)
                         # TODO: Support non file-like iterables, e.g. `(u"string1", u"string2")`.
-                        if six.PY3:
-                            sock.sendfile(body)
-                        else:
-                            while True:
-                                chunk = body.read(65536)
-                                if not chunk:
-                                    break
-                                sock.sendall(chunk)
+                        sock.sendfile(body)
                 else:
                     sock.sendall(_request)
             except gevent.socket.error as e:
@@ -253,8 +254,13 @@ class HTTPClient(object):
                 raise e
 
             try:
-                response = HTTPSocketPoolResponse(sock, self._connection_pool,
-                                                  block_size=self.block_size, method=method.upper(), headers_type=self.headers_type)
+                response = HTTPSocketPoolResponse(
+                    sock,
+                    self._connection_pool,
+                    block_size=self.block_size,
+                    method=method.upper(),
+                    headers_type=self.headers_type,
+                )
             except HTTPConnectionClosed as e:
                 # connection is released by the response itself
                 if attempts_left > 0:
@@ -271,27 +277,27 @@ class HTTPClient(object):
     def head(self, request_uri, headers=None):
         return self.request(METHOD_HEAD, request_uri, headers=headers)
 
-    def post(self, request_uri, body=u'', headers=None):
+    def post(self, request_uri, body="", headers=None):
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
-    def put(self, request_uri, body=u'', headers=None):
+    def put(self, request_uri, body="", headers=None):
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
-    def delete(self, request_uri, body=u'', headers=None):
+    def delete(self, request_uri, body="", headers=None):
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
 
-    def patch(self, request_uri, body=u'', headers=None):
+    def patch(self, request_uri, body="", headers=None):
         return self.request(METHOD_PATCH, request_uri, body=body, headers=headers)
 
-    def trace(self, request_uri, body=u'', headers=None):
+    def trace(self, request_uri, body="", headers=None):
         return self.request(METHOD_TRACE, request_uri, body=body, headers=headers)
 
     def options(self, request_uri, headers=None):
         return self.request(METHOD_OPTIONS, request_uri, headers=headers)
 
 
-class HTTPClientPool(object):
-    """ Factory for maintaining a bunch of clients, one per host:port """
+class HTTPClientPool:
+    """Factory for maintaining a bunch of clients, one per host:port"""
 
     # TODO: Add some housekeeping and cleanup logic
 

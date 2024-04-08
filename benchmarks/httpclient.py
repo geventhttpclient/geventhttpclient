@@ -1,15 +1,14 @@
 import time
-import gevent.pool
-from geventhttpclient import HTTPClient, URL
-from geventhttpclient.header import Headers
 
+import gevent.pool
+
+from geventhttpclient import URL, HTTPClient
 
 if __name__ == "__main__":
-
     N = 1000
     C = 10
 
-    url = URL('http://127.0.0.1/index.html')
+    url = URL("http://127.0.0.1/index.html")
     qs = url.request_uri
 
     def run(client):
@@ -24,16 +23,13 @@ if __name__ == "__main__":
     client = HTTPClient.from_url(url, concurrency=C, headers_type=dict)
     group = gevent.pool.Pool(size=C)
 
-    for i in xrange(5):
+    for i in range(5):
         now = time.time()
-        for _ in xrange(N):
+        for _ in range(N):
             group.spawn(run, client)
         group.join()
 
         delta = time.time() - now
         req_per_sec = N / delta
 
-        print("request count:%d, concurrenry:%d, %f req/s" % (
-        N, C, req_per_sec))
-
-
+        print(f"request count:{N}, concurrenry:{C}, {req_per_sec} req/s")
