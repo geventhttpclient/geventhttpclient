@@ -1,6 +1,6 @@
 import random
 import string
-import time
+from datetime import datetime
 from http.cookiejar import CookieJar
 from urllib.request import Request
 
@@ -9,46 +9,49 @@ import pytest
 from geventhttpclient.header import Headers
 from geventhttpclient.response import HTTPResponse
 
-MULTI_COOKIE_RESPONSE = """
+CUR_YEAR = datetime.now().year
+LAST_YEAR = CUR_YEAR - 1
+NEXT_YEAR = CUR_YEAR + 1
+MULTI_COOKIE_RESPONSE = f"""
 HTTP/1.1 200 OK
 Server: nginx
-Date: Fri, 21 Sep 2012 18:49:35 GMT
+Date: Fri, 21 Sep {CUR_YEAR} 18:49:35 GMT
 Content-Type: text/html; charset=windows-1251
 Connection: keep-alive
 X-Powered-By: PHP/5.2.17
-Set-Cookie: bb_lastvisit=1348253375; expires=Sat, 21-Sep-2013 18:49:35 GMT; path=/
-Set-Cookie: bb_lastactivity=0; expires=Sat, 21-Sep-2013 18:49:35 GMT; path=/
+Set-Cookie: bb_lastvisit=1348253375; expires=Sat, 21-Sep-{NEXT_YEAR} 18:49:35 GMT; path=/
+Set-Cookie: bb_lastactivity=0; expires=Sat, 21-Sep-{NEXT_YEAR} 18:49:35 GMT; path=/
 Cache-Control: private
 Pragma: private
-Set-Cookie: bb_sessionhash=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_referrerid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_userid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_password=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_lastvisit=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_lastactivity=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_threadedmode=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_userstyleid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_languageid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_fbaccesstoken=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
-Set-Cookie: bb_fbprofilepicurl=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=/
+Set-Cookie: bb_sessionhash=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_referrerid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_userid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_password=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_lastvisit=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_lastactivity=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_threadedmode=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_userstyleid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_languageid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_fbaccesstoken=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
+Set-Cookie: bb_fbprofilepicurl=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=/
 Set-Cookie: bb_sessionhash=abcabcabcabcabcabcabcabcabcabcab; path=/; HttpOnly
-Set-Cookie: tapatalk_redirect3=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_sessionhash=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: __utma=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: __utmb=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: __utmc=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: __utmz=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: vbulletin_collapse=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_referrerid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_userid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_password=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_lastvisit=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_lastactivity=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_threadedmode=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_userstyleid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_languageid=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_fbaccesstoken=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
-Set-Cookie: bb_fbprofilepicurl=deleted; expires=Thu, 22-Sep-2011 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: tapatalk_redirect3=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_sessionhash=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: __utma=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: __utmb=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: __utmc=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: __utmz=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: vbulletin_collapse=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_referrerid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_userid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_password=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_lastvisit=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_lastactivity=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_threadedmode=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_userstyleid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_languageid=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_fbaccesstoken=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
+Set-Cookie: bb_fbprofilepicurl=deleted; expires=Thu, 22-Sep-{LAST_YEAR} 18:49:34 GMT; path=1; domain=forum.somewhere.com
 Content-Encoding: gzip
 Content-Length: 26186
 
@@ -103,22 +106,20 @@ def test_read_multiple_header():
     assert headers["set-cookie"][-1].startswith("bb_fbprofilepicurl")
 
 
-@pytest.mark.skip(reason="remote site behavior changed")
 def test_cookielib_compatibility():
     cj = CookieJar()
-    # Set time in order to be still valid in some years, when cookie strings expire
-    cj._now = cj._policy._now = time.mktime((2012, 1, 1, 0, 0, 0, 0, 0, 0))
-
-    request = Request("http://test.com")
+    request = Request("https://forum.somewhere.com")
     parser = HTTPResponse()
     parser.feed(MULTI_COOKIE_RESPONSE)
-    cookies = cj.make_cookies(parser, request)
-    # Don't use extract_cookies directly, as time can not be set there manually for testing
-    for cookie in cookies:
-        if cj._policy.set_ok(cookie, request):
-            cj.set_cookie(cookie)
-    # Three valid, not expired cookies placed
-    assert len(list(cj)) == 3
+    valid_cookie_count = sum(
+        1
+        for line in MULTI_COOKIE_RESPONSE.splitlines()
+        if line.startswith("Set-Cookie") and str(LAST_YEAR) not in line
+    )
+    valid_cookies = cj.make_cookies(parser, request)
+    assert len(valid_cookies) == valid_cookie_count
+    cj.extract_cookies(parser, request)
+    assert len(list(cj)) == valid_cookie_count
 
 
 def test_compatibility_with_previous_api_read():
