@@ -239,3 +239,11 @@ def test_brotli_response():
         resp = UserAgent().urlopen(LISTENER_URL, params={"path": "/"})
         assert resp.status_code == 200
         assert resp.content == b"https://github.com/gwik/geventhttpclient"
+
+
+@pytest.mark.network
+def test_download(tmp_path):
+    url = "https://proof.ovh.net/files/1Mb.dat"
+    fpath = tmp_path / url.rsplit("/", 1)[-1]
+    UserAgent().download(url, fpath)
+    assert fpath.stat().st_size == 2**20  # 1 MB

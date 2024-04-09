@@ -1,16 +1,20 @@
 #!/usr/bin/env python
 
-from geventhttpclient import URL, HTTPClient
+import tempfile
+from pathlib import Path
 
-if __name__ == "__main__":
-    url = URL("http://127.0.0.1:80/100.dat")
-    http = HTTPClient.from_url(url)
-    response = http.get(url.request_uri)
-    assert response.status_code == 200
+from geventhttpclient import UserAgent
 
-    CHUNK_SIZE = 1024 * 16  # 16KB
-    with open("/tmp/100.dat", "w") as f:
-        data = response.read(CHUNK_SIZE)
-        while data:
-            f.write(data)
-            data = response.read(CHUNK_SIZE)
+DL_1MB = "https://proof.ovh.net/files/1Mb.dat"
+DL_10MB = "https://proof.ovh.net/files/10Mb.dat"
+
+url = DL_10MB
+agent = UserAgent()
+
+
+with tempfile.TemporaryDirectory() as tmp_dir:
+    fpath = Path(tmp_dir) / url.rsplit("/", 1)[-1]
+    print(f"Writing to {fpath}")
+    agent.download(url, fpath)
+    print(f"{fpath.stat().st_size} bytes downloaded")
+    assert fpath.stat().st_size == 10 * 2**20  # 10 MB
