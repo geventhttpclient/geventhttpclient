@@ -3,9 +3,12 @@ import gevent.monkey
 gevent.monkey.patch_all()
 
 import argparse
+import platform
+import sys
 import time
 
 import gevent.pool
+import httpx
 import requests
 import requests.adapters
 import urllib3
@@ -30,7 +33,7 @@ class Benchmark:
 
     def start(self):
         results = []
-        for round in range(self.rounds):
+        for round in range(1, self.rounds + 1):
             self.init_client()
 
             now = time.time()
@@ -44,8 +47,8 @@ class Benchmark:
             rps = self.round_size / delta
             results.append(rps)
 
-            print(f"round: {round}, rps: {rps}")
-        print("total rps:", sum(results) / len(results))
+            print(f"round: {round}, rps: {rps:.1f}")
+        print(f"total rps: {sum(results) / len(results):.1f}")
 
 
 class GeventHTTPClientBenchmark(Benchmark):
@@ -55,7 +58,7 @@ class GeventHTTPClientBenchmark(Benchmark):
         self.client = geventhttpclient.useragent.UserAgent(concurrency=self.concurrency)
 
     def request(self):
-        self.client.urlopen(self.url).content
+        assert self.client.urlopen(self.url).content
 
 
 class RequestsBenchmark(Benchmark):
@@ -68,30 +71,42 @@ class RequestsBenchmark(Benchmark):
         self.client.mount("http://", adapter)
 
     def request(self):
-        self.client.get(self.url)
+        assert self.client.get(self.url).content
 
 
-class UrllibBenchmark(Benchmark):
+class HttpxBenchmark(Benchmark):
+    client: httpx.Client
+
+    def init_client(self):
+        self.client = httpx.Client()
+
+    def request(self):
+        assert self.client.get(self.url).content
+
+
+class Urllib3Benchmark(Benchmark):
     client: urllib3.PoolManager
 
     def init_client(self):
         self.client = urllib3.PoolManager(maxsize=self.concurrency, block=True)
 
     def request(self):
-        self.client.request("GET", self.url)
+        assert self.client.request("GET", self.url).data
 
 
-if __name__ == "__main__":
-    available_benchmarks = {
-        "gevent": GeventHTTPClientBenchmark,
-        "requests": RequestsBenchmark,
-        "urllib": UrllibBenchmark,
-    }
+available_benchmarks = {
+    "gevent": GeventHTTPClientBenchmark,
+    "httpx": HttpxBenchmark,
+    "requests": RequestsBenchmark,
+    "urllib": Urllib3Benchmark,
+}
 
+
+def arg_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument(dest="url")
+    parser.add_argument("--url", default="http://127.0.0.1/")
     parser.add_argument("--concurrency", type=int, default=10)
-    parser.add_argument("--rounds", type=int, default=10)
+    parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--round-size", type=int, default=10000)
     parser.add_argument(
         "-b",
@@ -100,12 +115,22 @@ if __name__ == "__main__":
         choices=available_benchmarks.keys(),
         default=available_benchmarks.keys(),
     )
+    return parser
+
+
+def main():
+    parser = arg_parser()
     args = dict(**parser.parse_args().__dict__)
 
     benchmark_classes = (available_benchmarks[x] for x in args.pop("benchmark"))
 
     for benchmark_class in benchmark_classes:
-        print(f"Running {benchmark_class.__name__}")
+        print(f"Running {benchmark_class.__name__}".removesuffix("Benchmark"))
         benchmark = benchmark_class(**args)
         benchmark.start()
         print()
+    print(f"{platform.system()}({platform.machine()}), Python {sys.version.split()[0]}")
+
+
+if __name__ == "__main__":
+    main()

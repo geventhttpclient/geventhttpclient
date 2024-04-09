@@ -36,6 +36,12 @@ optional-dependencies.dev = [
     "dpkt",
     "requests",
 ]
+optional-dependencies.benchmarks = [
+    "requests",
+    "httpx",
+    "urllib3",
+    "httplib2"
+]
 
 [project.urls]
 homepage = "http://github.com/geventhttpclient/geventhttpclient"
