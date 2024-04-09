@@ -1,5 +1,4 @@
 import errno
-import io
 import os
 import socket
 import ssl
@@ -231,20 +230,6 @@ class CompatResponse:
         self.release()
 
 
-class RestkitCompatResponse(CompatResponse):
-    """Some extra lines to also serve as a drop in replacement for restkit"""
-
-    def body_string(self):
-        return self.content
-
-    def body_stream(self):
-        return self._response
-
-    @property
-    def status_int(self):
-        return self.status_code
-
-
 class UserAgent:
     response_type = CompatResponse
     request_type = CompatRequest
@@ -403,7 +388,10 @@ class UserAgent:
         if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
         elif isinstance(e, socket.error) and e.errno in {
-            errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE
+            errno.ETIMEDOUT,
+            errno.ENOLINK,
+            errno.ENOENT,
+            errno.EPIPE,
         }:
             return e
         elif isinstance(e, ssl.SSLError) and "read operation timed out" in str(e):
@@ -596,23 +584,3 @@ class UserAgent:
         else:
             self._handle_retries_exceeded(url, last_error=e)
         return resp
-
-
-class RestkitCompatUserAgent(UserAgent):
-    response_type = RestkitCompatResponse
-
-
-class XmlrpcCompatUserAgent(UserAgent):
-    def request(self, host, handler, request, verbose=False):
-        debug_stream = None if not verbose else io.StringIO()
-        ret = self.urlopen(
-            host + handler,
-            "POST",
-            payload=request,
-            to_string=True,
-            debug_stream=debug_stream,
-        )
-        if debug_stream is not None:
-            debug_stream.seek(0)
-            print(debug_stream.read())
-        return ret
