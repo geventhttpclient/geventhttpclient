@@ -1,3 +1,5 @@
+import pytest
+
 from geventhttpclient.url import URL
 
 url_full = "http://getgauss.com/subdir/file.py?param=value&other=true#frag"
@@ -78,16 +80,16 @@ def test_redirection_abs_path():
     assert updated.fragment == ""
 
 
-def test_redirection_rel_path():
+@pytest.mark.parametrize("redirection", ("test.html?key=val", "folder/test.html?key=val"))
+def test_redirection_rel_path(redirection):
     url = URL(url_full)
-    for redir in ("test.html?key=val", "folder/test.html?key=val"):
-        updated = url.redirect(redir)
-        assert updated.host == url.host
-        assert updated.port == url.port
-        assert updated.path.startswith("/subdir/")
-        assert updated.path.endswith(redir.split("?", 1)[0])
-        assert updated.query_string == "key=val"
-        assert updated.fragment == ""
+    updated = url.redirect(redirection)
+    assert updated.host == url.host
+    assert updated.port == url.port
+    assert updated.path.startswith("/subdir/")
+    assert updated.path.endswith(redirection.split("?", 1)[0])
+    assert updated.query_string == "key=val"
+    assert updated.fragment == ""
 
 
 def test_redirection_full_path():
@@ -137,10 +139,3 @@ def test_ipv6_with_port():
     assert url.host == "2001:db8:85a3:8d3:1319:8a2e:370:7348"
     assert url.port == 8080
     assert url.user is None
-
-
-if __name__ == "__main__":
-    test_redirection_abs_path()
-    test_redirection_rel_path()
-    test_redirection_full_path()
-    test_ipv6_with_port()

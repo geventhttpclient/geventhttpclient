@@ -1,6 +1,5 @@
 import os
 import ssl
-import sys
 from contextlib import contextmanager
 from ssl import CertificateError
 from unittest import mock
