@@ -1,4 +1,3 @@
-six
 certifi
 gevent
 brotli

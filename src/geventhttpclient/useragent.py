@@ -402,9 +402,9 @@ class UserAgent:
         """
         if isinstance(e, (socket.timeout, gevent.Timeout)):
             return e
-        elif isinstance(e, socket.error) and e.errno in set(
-            [errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE]
-        ):
+        elif isinstance(e, socket.error) and e.errno in {
+            errno.ETIMEDOUT, errno.ENOLINK, errno.ENOENT, errno.EPIPE
+        }:
             return e
         elif isinstance(e, ssl.SSLError) and "read operation timed out" in str(e):
             return e

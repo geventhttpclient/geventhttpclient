@@ -1,5 +1,4 @@
 -rrequirements.txt
 pytest
 dpkt
-mock
 requests

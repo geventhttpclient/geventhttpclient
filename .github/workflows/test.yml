@@ -11,25 +11,31 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: Windows, python: '3.9', os: windows-latest, tox: py38}
-          - {name: Mac, python: '3.9', os: macos-latest, tox: py39}
+          - {name: Windows, python: '3.11', os: windows-latest, tox: py311}
+          - {name: Mac, python: '3.11', os: macos-latest, tox: py311}
           - {name: '3.12', python: '3.12', os: ubuntu-latest, tox: py312}
           - {name: '3.11', python: '3.11', os: ubuntu-latest, tox: py311}
           - {name: '3.10', python: '3.10', os: ubuntu-latest, tox: py310}
           - {name: '3.9', python: '3.9', os: ubuntu-latest, tox: py39}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: actions/setup-python@v3
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
       - name: Get pip cache dir
         id: pip-cache
-        run: echo "::set-output name=dir::$(pip cache dir)"
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            echo "::set-output name=dir::$(pip cache dir | sed 's|\\\\|/|g')"  # deprecated way for windows
+          else
+            echo "dir=$(pip cache dir)" >> $GITHUB_OUTPUT   # non-deprecated way of setting variables
+          fi
       - name: Cache pip
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ${{ steps.pip-cache.outputs.dir }}
           key: pip|${{ runner.os }}|${{ matrix.python }}|${{ hashFiles('setup.py') }}

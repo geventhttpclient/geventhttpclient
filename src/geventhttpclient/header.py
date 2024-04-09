@@ -74,7 +74,7 @@ class Headers(dict):
             return False
         if not isinstance(other, type(self)):
             other = type(self)(other)
-        return dict((k1, self[k1]) for k1 in self) == dict((k2, other[k2]) for k2 in other)
+        return {k1: self[k1] for k1 in self} == {k2: other[k2] for k2 in other}
 
     def __ne__(self, other):
         return not self.__eq__(other)

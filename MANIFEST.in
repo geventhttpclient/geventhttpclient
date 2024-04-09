@@ -5,7 +5,6 @@ recursive-include llhttp *.h *.c LICENSE-MIT
 recursive-include src/geventhttpclient/tests *
 global-exclude __pycache__
 global-exclude *.py[co]
-include LICENSE-MIT
-include README.mdown
-include CHANGELOG
-include pytest.ini
+include pyproject.toml
+include LICENSE.txt
+include README.md
