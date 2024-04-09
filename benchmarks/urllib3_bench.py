@@ -1,10 +1,6 @@
 import time
 
-import gevent.monkey
 import gevent.pool
-
-gevent.monkey.patch_all()
-
 import urllib3
 
 N = 1000
