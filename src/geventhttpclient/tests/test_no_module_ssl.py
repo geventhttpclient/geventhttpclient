@@ -1,6 +1,3 @@
-# These tests are broken since gevent 23.7.0. I'm optimistic this is not a real issue,
-# it's just that gevent got more picky.
-
 import sys
 
 import gevent  # noqa
@@ -37,8 +34,3 @@ def test_httpclient_raises_with_no_ssl():
 
         with pytest.raises(Exception):
             HTTPClient.from_url("https://httpbin.org/")
-
-
-if __name__ == "__main__":
-    test_import_with_nossl()
-    test_httpclient_raises_with_no_ssl()

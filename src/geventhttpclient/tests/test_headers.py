@@ -195,9 +195,3 @@ def test_compat_dict():
     assert d["D"] == "asdf"
     assert d["E"] == "d, f"
     assert d["Cookie"] == "d, e, f"
-
-
-if __name__ == "__main__":
-    test_copy()
-    test_compat_dict()
-    test_cookielib_compatibility()
