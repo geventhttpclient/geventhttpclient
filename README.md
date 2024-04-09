@@ -163,11 +163,11 @@ The benchmark does 10000 get requests against a local nginx server in the defaul
 configuration with a concurrency of 10. See `benchmarks` folder. The requests per
 second for a couple of popular clients is given in the table below.
 
-| HTTP Client       | RPS    |
-|-------------------|--------|
-| GeventHTTPClient  | 7110.3 |
-| Urllib3           | 2276.1 |
-| Requests          | 1020.5 |
-| Httpx             | 737.7  |
+| HTTP Client          | RPS    |
+|----------------------|--------|
+| GeventHTTPClient     | 7181.2 |
+| Urllib3              | 2847.5 |
+| Httpx                | 1682.9 |
+| Requests             | 1186.4 |
 
 *Linux(x86_64), Python 3.11.6 @ Intel i7-7560U*

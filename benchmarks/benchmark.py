@@ -1,7 +1,3 @@
-import gevent.monkey
-
-gevent.monkey.patch_all()
-
 import argparse
 import platform
 import sys
