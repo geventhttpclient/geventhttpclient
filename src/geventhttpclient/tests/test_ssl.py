@@ -17,11 +17,6 @@ from geventhttpclient import HTTPClient
 
 LISTENER = "127.0.0.1", 54323
 
-pytestmark = pytest.mark.skipif(
-    sys.version_info < (2, 7) and os.environ.get("TRAVIS") == "true",
-    reason="We have issues on travis with the SSL tests",
-)
-
 BASEDIR = os.path.dirname(__file__)
 KEY = os.path.join(BASEDIR, "server.key")
 CERT = os.path.join(BASEDIR, "server.crt")
