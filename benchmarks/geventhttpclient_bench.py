@@ -1,25 +1,25 @@
 import time
 
-import gevent.monkey
 import gevent.pool
 
-gevent.monkey.patch_all()
-
-import requests
+from geventhttpclient import URL, HTTPClient
 
 N = 1000
 C = 10
 
-url = "http://127.0.0.1/"
+url = URL("http://127.0.0.1/")
+qs = url.request_uri
 
 
 def run(client):
-    response = client.get(url)
-    assert response.status_code == requests.codes.ok
+    response = client.get(qs)
+    response.read()
+    assert response.status_code == 200
 
 
-client = requests.Session()
+client = HTTPClient.from_url(url, concurrency=C)
 group = gevent.pool.Pool(size=C)
+run(client)
 
 for i in range(5):
     now = time.time()

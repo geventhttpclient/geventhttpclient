@@ -5,7 +5,7 @@ import gevent.pool
 
 gevent.monkey.patch_all()
 
-import requests
+import httpx
 
 N = 1000
 C = 10
@@ -15,10 +15,10 @@ url = "http://127.0.0.1/"
 
 def run(client):
     response = client.get(url)
-    assert response.status_code == requests.codes.ok
+    assert response.status_code == 200
 
 
-client = requests.Session()
+client = httpx.Client()
 group = gevent.pool.Pool(size=C)
 
 for i in range(5):
