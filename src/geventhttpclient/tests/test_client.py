@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 import tempfile
 from contextlib import contextmanager
 
@@ -169,10 +168,6 @@ def test_client_ssl():
     assert len(body)
 
 
-@pytest.mark.skipif(
-    sys.version_info < (2, 7) and os.environ.get("TRAVIS") == "true",
-    reason="We have issues on travis with the SSL tests",
-)
 @pytest.mark.network
 def test_ssl_fail_invalid_certificate():
     certs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
