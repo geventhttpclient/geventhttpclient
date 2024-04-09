@@ -1,5 +1,3 @@
-import os
-import tempfile
 from contextlib import contextmanager
 from http.cookiejar import CookieJar
 
@@ -10,6 +8,14 @@ from geventhttpclient.useragent import BadStatusCode, UserAgent
 
 LISTENER = "127.0.0.1", 54323
 LISTENER_URL = f"http://{LISTENER[0]}:{LISTENER[1]}/"
+
+
+@pytest.fixture
+def tmp_file(tmp_path):
+    fpath = tmp_path / "tmp.bin"
+    with open(fpath, "wb") as f:
+        f.write(b"123456789")
+    return fpath
 
 
 @contextmanager
@@ -93,26 +99,16 @@ def return_brotli():
     return wsgi_handler
 
 
-def test_file_post():
-    body = tempfile.NamedTemporaryFile("a+b", delete=False)
-    name = body.name
-    try:
-        body.write(b"123456789")
-        body.close()
-        headers = {"CONTENT_LENGTH": "9", "CONTENT_TYPE": "application/octet-stream"}
-        with wsgiserver(check_upload(b"123456789", headers)):
-            useragent = UserAgent()
-            with open(name, "rb") as body:
-                useragent.urlopen(LISTENER_URL, method="POST", payload=body)
-    finally:
-        os.remove(name)
+def test_file_post(tmp_file):
+    headers = {"CONTENT_LENGTH": "9", "CONTENT_TYPE": "application/octet-stream"}
+    with wsgiserver(check_upload(b"123456789", headers)):
+        useragent = UserAgent()
+        with open(tmp_file, "rb") as body:
+            useragent.urlopen(LISTENER_URL, method="POST", payload=body)
 
 
-def test_multipart_post():
-    body = tempfile.NamedTemporaryFile("a+b", delete=False)
-    name = body.name
-    try:
-        body.write(b"123456789")
+def test_multipart_post(tmp_file):
+    with open(tmp_file, "a+b") as f:
         headers = {
             "CONTENT_LENGTH": "237",
             "CONTENT_TYPE": "multipart/form-data; boundary=custom_boundary",
@@ -120,7 +116,7 @@ def test_multipart_post():
         files = {
             "file": (
                 "report.xls",
-                body,
+                f,
                 "application/vnd.ms-excel",
                 {"Expires": "0"},
                 "custom_boundary",
@@ -148,9 +144,6 @@ def test_multipart_post():
         ):
             useragent = UserAgent()
             useragent.urlopen(LISTENER_URL, method="POST", files=files)
-    finally:
-        body.close()
-        os.remove(name)
 
 
 def test_unicode_post():
@@ -215,19 +208,12 @@ def test_server_error_with_unicode():
             useragent.urlopen(LISTENER_URL, method="POST", payload="12345")
 
 
-def test_server_error_with_file():
-    body = tempfile.NamedTemporaryFile("a+b", delete=False)
-    name = body.name
-    try:
-        body.write(b"123456789")
-        body.close()
-        with wsgiserver(internal_server_error()):
-            useragent = UserAgent()
-            with pytest.raises(BadStatusCode):
-                with open(name, "rb") as body:
-                    useragent.urlopen(LISTENER_URL, method="POST", payload=body)
-    finally:
-        os.remove(name)
+def test_server_error_with_file(tmp_file):
+    with wsgiserver(internal_server_error()):
+        useragent = UserAgent()
+        with pytest.raises(BadStatusCode):
+            with open(tmp_file, "rb") as body:
+                useragent.urlopen(LISTENER_URL, method="POST", payload=body)
 
 
 def test_cookiejar():

@@ -1,6 +1,5 @@
 import json
 import os
-import tempfile
 from contextlib import contextmanager
 
 import gevent.pool
@@ -341,18 +340,14 @@ def check_upload(body, body_length):
     return wsgi_handler
 
 
-def test_file_post():
-    body = tempfile.NamedTemporaryFile("a+b", delete=False)
-    name = body.name
-    try:
+def test_file_post(tmp_path):
+    fpath = tmp_path / "tmp_body.txt"
+    with open(fpath, "wb") as body:
         body.write(b"123456789")
-        body.close()
-        with wsgiserver(check_upload(b"123456789", 9)):
-            client = HTTPClient(*LISTENER)
-            with open(name, "rb") as body:
-                client.post("/", body)
-    finally:
-        os.remove(name)
+    with wsgiserver(check_upload(b"123456789", 9)):
+        client = HTTPClient(*LISTENER)
+        with open(fpath, "rb") as body:
+            client.post("/", body)
 
 
 def test_bytes_post():
