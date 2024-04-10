@@ -47,9 +47,13 @@ class HTTPResponse(HTTPResponseParser):
     def items(self):
         return self._headers_index.items()
 
+    headers = property(items)
+
     def info(self):
-        """Basic cookielib compatibility"""
         return self._headers_index
+
+    def __contains__(self, key):
+        return key in self._headers_index
 
     def should_close(self):
         """return if we should close the connection.
@@ -58,11 +62,6 @@ class HTTPResponse(HTTPResponseParser):
         that the body as been consumed completely.
         """
         return not self.message_complete or self.parser_failed() or not super().should_keep_alive()
-
-    headers = property(items)
-
-    def __contains__(self, key):
-        return key in self._headers_index
 
     @property
     def status_code(self):
@@ -137,8 +136,10 @@ class HTTPResponse(HTTPResponseParser):
 class HTTPSocketResponse(HTTPResponse):
     DEFAULT_BLOCK_SIZE = 1024 * 4  # 4KB
 
-    def __init__(self, sock, block_size=DEFAULT_BLOCK_SIZE, method="GET", **kw):
-        super().__init__(method=method, **kw)
+    def __init__(
+        self, sock, block_size=DEFAULT_BLOCK_SIZE, method="GET", headers_type=Headers, **kw
+    ):
+        super().__init__(method=method, headers_type=headers_type)
         self._sock = sock
         self.block_size = block_size
         self._read_headers()
@@ -225,9 +226,7 @@ class HTTPSocketResponse(HTTPResponse):
             return read
 
         try:
-            while not (self.message_complete) and (
-                length is None or len(self._body_buffer) < length
-            ):
+            while not self.message_complete and (length is None or len(self._body_buffer) < length):
                 data = self._sock.recv(length or self.block_size)
                 self.feed(data)
         except:

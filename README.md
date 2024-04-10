@@ -161,13 +161,16 @@ with open('/tmp/100.dat', 'w') as f:
 
 The benchmark does 10000 get requests against a local nginx server in the default 
 configuration with a concurrency of 10. See `benchmarks` folder. The requests per
-second for a couple of popular clients is given in the table below.
+second for a couple of popular clients is given in the table below. Please read
+[benchmarks/README.md](https://github.com/geventhttpclient/geventhttpclient/blob/master/benchmarks/benchmark.py)
+for mor details.
 
-| HTTP Client          | RPS    |
-|----------------------|--------|
-| GeventHTTPClient     | 7181.2 |
-| Urllib3              | 2847.5 |
-| Httpx                | 1682.9 |
-| Requests             | 1186.4 |
+| HTTP Client        | RPS    |
+|--------------------|--------|
+| GeventHTTPClient   | 7268.9 |
+| Httplib2 (patched) | 2323.9 |
+| Urllib3            | 2242.5 |
+| Requests           | 1046.1 |
+| Httpx              | 770.3  |
 
 *Linux(x86_64), Python 3.11.6 @ Intel i7-7560U*

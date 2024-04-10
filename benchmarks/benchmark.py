@@ -1,3 +1,11 @@
+import gevent.monkey
+
+gevent.monkey.patch_all()
+
+import geventhttpclient.httplib
+
+geventhttpclient.httplib.patch()
+
 import argparse
 import platform
 import sys
@@ -9,7 +17,7 @@ import requests
 import requests.adapters
 import urllib3
 
-import geventhttpclient.useragent
+from geventhttpclient import httplib2, useragent
 
 
 class Benchmark:
@@ -27,6 +35,11 @@ class Benchmark:
     def request(self):
         pass
 
+    def request_with_check(self):
+        content = self.request()
+        assert content
+        assert b"html" in content
+
     def start(self):
         results = []
         for round in range(1, self.rounds + 1):
@@ -36,7 +49,7 @@ class Benchmark:
 
             pool = gevent.pool.Pool(size=self.concurrency)
             for _ in range(self.round_size):
-                pool.spawn(self.request)
+                pool.spawn(self.request_with_check)
             pool.join()
 
             delta = time.time() - now
@@ -44,17 +57,17 @@ class Benchmark:
             results.append(rps)
 
             print(f"round: {round}, rps: {rps:.1f}")
-        print(f"total rps: {sum(results) / len(results):.1f}")
+        print(f"total rps:     {sum(results) / len(results):.1f}")
 
 
 class GeventHTTPClientBenchmark(Benchmark):
-    client: geventhttpclient.useragent.UserAgent
+    client: useragent.UserAgent
 
     def init_client(self):
-        self.client = geventhttpclient.useragent.UserAgent(concurrency=self.concurrency)
+        self.client = useragent.UserAgent(concurrency=self.concurrency)
 
     def request(self):
-        assert self.client.urlopen(self.url).content
+        return self.client.urlopen(self.url).content
 
 
 class RequestsBenchmark(Benchmark):
@@ -67,17 +80,29 @@ class RequestsBenchmark(Benchmark):
         self.client.mount("http://", adapter)
 
     def request(self):
-        assert self.client.get(self.url).content
+        return self.client.get(self.url).content
 
 
 class HttpxBenchmark(Benchmark):
     client: httpx.Client
 
     def init_client(self):
+        # TODO: This should run async
         self.client = httpx.Client()
 
     def request(self):
-        assert self.client.get(self.url).content
+        return self.client.get(self.url).content
+
+
+class Httplib2Benchmark(Benchmark):
+    client: httplib2.Http
+
+    def init_client(self):
+        self.client = httplib2.Http(concurrency=self.concurrency)
+
+    def request(self):
+        response, content = self.client.request(self.url)
+        return content
 
 
 class Urllib3Benchmark(Benchmark):
@@ -87,7 +112,7 @@ class Urllib3Benchmark(Benchmark):
         self.client = urllib3.PoolManager(maxsize=self.concurrency, block=True)
 
     def request(self):
-        assert self.client.request("GET", self.url).data
+        return self.client.request("GET", self.url).data
 
 
 available_benchmarks = {
@@ -95,6 +120,7 @@ available_benchmarks = {
     "httpx": HttpxBenchmark,
     "requests": RequestsBenchmark,
     "urllib": Urllib3Benchmark,
+    "httplib2": Httplib2Benchmark,
 }
 
 
@@ -115,11 +141,8 @@ def arg_parser():
 
 
 def main():
-    parser = arg_parser()
-    args = dict(**parser.parse_args().__dict__)
-
+    args = arg_parser().parse_args().__dict__
     benchmark_classes = (available_benchmarks[x] for x in args.pop("benchmark"))
-
     for benchmark_class in benchmark_classes:
         print(f"Running {benchmark_class.__name__}".removesuffix("Benchmark"))
         benchmark = benchmark_class(**args)

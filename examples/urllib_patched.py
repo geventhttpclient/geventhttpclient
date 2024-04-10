@@ -1,7 +1,12 @@
+import gevent.monkey
+
+gevent.monkey.patch_all()
+
 from geventhttpclient import httplib
 
 httplib.patch()
 
-from urllib2 import urlopen
+from urllib.request import urlopen
 
-print(urlopen("https://www.google.fr/").read())
+print(urlopen("http://gevent.org").read()[:1000])
+print(urlopen("https://google.com").read()[:1000])
