@@ -8,9 +8,10 @@ import gevent.server
 import pytest
 from gevent.ssl import SSLError
 
-from geventhttpclient import HTTPClient
+from geventhttpclient import HTTPClient, __version__
 
 LISTENER = "127.0.0.1", 54323
+HTTPBIN_HOST = "httpbin.org"  # this might be exchanged with a self-hosted version
 
 
 @contextmanager
@@ -33,175 +34,72 @@ def wsgiserver(handler):
         server.stop()
 
 
-class HTTPBinClient(HTTPClient):
-    """Special HTTPClient with higher timeout values
+def httpbin_client(
+    host=HTTPBIN_HOST,
+    port=None,
+    headers=None,
+    block_size=HTTPClient.BLOCK_SIZE,
+    connection_timeout=30.0,
+    network_timeout=30.0,
+    disable_ipv6=True,
+    concurrency=1,
+    ssl=False,
+    ssl_options=None,
+    ssl_context_factory=None,
+    insecure=False,
+    proxy_host=None,
+    proxy_port=None,
+    version=HTTPClient.HTTP_11,
+):
+    """Client factory for httpbin with higher timeout values"""
 
-    Args:
-        HTTPClient (_type_): _description_
-    """
-
-    def __init__(
-        self,
+    return HTTPClient(
         host,
-        port=None,
-        headers=None,
-        block_size=HTTPClient.BLOCK_SIZE,
-        connection_timeout=30.0,
-        network_timeout=30.0,
-        disable_ipv6=True,
-        concurrency=1,
-        ssl=False,
-        ssl_options=None,
-        ssl_context_factory=None,
-        insecure=False,
-        proxy_host=None,
-        proxy_port=None,
-        version=HTTPClient.HTTP_11,
-    ):
-        super().__init__(
-            host,
-            port=port,
-            headers=headers,
-            block_size=block_size,
-            connection_timeout=connection_timeout,
-            network_timeout=network_timeout,
-            disable_ipv6=disable_ipv6,
-            concurrency=concurrency,
-            ssl=ssl,
-            ssl_options=ssl_options,
-            ssl_context_factory=ssl_context_factory,
-            insecure=insecure,
-            proxy_host=proxy_host,
-            proxy_port=proxy_port,
-            version=version,
-        )
+        port=port,
+        headers=headers,
+        block_size=block_size,
+        connection_timeout=connection_timeout,
+        network_timeout=network_timeout,
+        disable_ipv6=disable_ipv6,
+        concurrency=concurrency,
+        ssl=ssl,
+        ssl_options=ssl_options,
+        ssl_context_factory=ssl_context_factory,
+        insecure=insecure,
+        proxy_host=proxy_host,
+        proxy_port=proxy_port,
+        version=version,
+    )
 
 
-@pytest.mark.network
-def test_client_simple():
-    client = HTTPBinClient("httpbin.org")
-    assert client.port == 80
-    response = client.get("/")
-    assert response.status_code == 200
-    body = response.read()
-    assert len(body)
+@pytest.fixture
+def httpbin():
+    return httpbin_client()
 
 
-@pytest.mark.network
-def test_client_without_leading_slash():
-    client = HTTPBinClient("httpbin.org")
-    with client.get("") as response:
-        assert response.status_code == 200
-    with client.get("base64/test") as response:
-        assert response.status_code in (200, 301, 302)
+@pytest.mark.parametrize("request_uri", ["/tp/", "tp/", f"http://{HTTPBIN_HOST}/tp/"])
+def test_build_request(httpbin, request_uri):
+    request_ref = f"GET /tp/ HTTP/1.1\r\nuser-agent: python/gevent-http-client-{__version__}\r\nhost: {HTTPBIN_HOST}\r\n\r\n"
+    assert httpbin._build_request("GET", request_uri) == request_ref
 
 
-test_headers = {
-    "User-Agent": "Mozilla/5.0 (X11; U; Linux i686; de; rv:1.9.2.17) Gecko/20110422 Ubuntu/10.04 (lucid) Firefox/3.6.17"
-}
-
-
-@pytest.mark.network
-def test_client_with_default_headers():
-    client = HTTPBinClient("httpbin.org", headers=test_headers)
-    response = client.get("/")
-    assert response.status_code == 200
-
-
-@pytest.mark.network
-def test_request_with_headers():
-    client = HTTPBinClient("httpbin.org")
-    response = client.get("/", headers=test_headers)
-    assert response.status_code == 200
-
-
-client = HTTPClient("www.heise.de")
-raw_req_cmp = client._build_request("GET", "/tp/")
-
-
-@pytest.mark.network
-def test_build_request_relative_uri():
-    raw_req = client._build_request("GET", "tp/")
-    assert raw_req == raw_req_cmp
-
-
-@pytest.mark.network
-def test_build_request_absolute_uri():
-    raw_req = client._build_request("GET", "/tp/")
-    assert raw_req == raw_req_cmp
-
-
-@pytest.mark.network
-def test_build_request_full_url():
-    raw_req = client._build_request("GET", "http://www.heise.de/tp/")
-    assert raw_req == raw_req_cmp
-
-
-@pytest.mark.network
-def test_build_request_invalid_host():
+def test_build_request_invalid_host(httpbin):
     with pytest.raises(ValueError):
-        client._build_request("GET", "http://www.spiegel.de/")
+        httpbin._build_request("GET", "http://someunrelatedhost.com/")
 
 
-@pytest.mark.network
-def test_response_context_manager():
-    client = HTTPClient.from_url("http://httpbin.org/")
-    r = None
-    with client.get("/") as response:
-        assert response.status_code == 200
-        r = response
-    assert r._sock is None  # released
+test_url_client_args = [
+    ("http://python.org", ("python.org", 80)),
+    ("http://python.org:333", ("python.org", 333)),
+]
 
 
-@pytest.mark.skipif(
-    os.environ.get("TRAVIS") == "true",
-    reason="We have issues on travis with the SSL tests",
-)
-@pytest.mark.network
-def test_client_ssl():
-    client = HTTPClient("github.com", ssl=True)
-    assert client.port == 443
-    response = client.get("/")
-    assert response.status_code == 200
-    body = response.read()
-    assert len(body)
-
-
-@pytest.mark.network
-def test_ssl_fail_invalid_certificate():
-    certs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
-    client = HTTPClient("github.com", ssl_options={"ca_certs": certs})
-    assert client.port == 443
-    with pytest.raises(SSLError) as e_info:
-        client.get("/")
-    assert e_info.value.reason == "CERTIFICATE_VERIFY_FAILED"
-
-
-@pytest.mark.network
-def test_multi_queries_greenlet_safe():
-    client = HTTPBinClient("httpbin.org", concurrency=3)
-    group = gevent.pool.Group()
-    event = gevent.event.Event()
-
-    def run(i):
-        event.wait()
-        response = client.get("/")
-        return response, response.read()
-
-    count = 0
-    ok_count = 0
-
-    gevent.spawn_later(0.2, event.set)
-    for response, content in group.imap_unordered(run, range(5)):
-        # occasionally httpbin.org will return 504 :-/
-        assert response.status_code in [200, 504]
-        if response.status_code == 200:
-            ok_count += 1
-        assert len(content)
-        count += 1
-    assert count == 5
-    # ensure at least 3 of requests got 200
-    assert ok_count >= 3
+@pytest.mark.parametrize(["url", "client_args"], test_url_client_args)
+def test_from_url(url, client_args):
+    from_url = HTTPClient.from_url(url)
+    from_args = HTTPClient(*client_args)
+    assert from_args.host == from_url.host
+    assert from_args.port == from_url.port
 
 
 class StreamTestIterator:
@@ -368,3 +266,103 @@ def test_unicode_post():
     with wsgiserver(check_upload(byte_string, len(byte_string))):
         client = HTTPClient(*LISTENER)
         client.post("/", unicode_string)
+
+
+# The tests below require online access. We should try to replace them at least
+# partly with local testing solutions and have the online tests as an extra on top.
+
+
+@pytest.mark.network
+def test_client_simple(httpbin):
+    assert httpbin.port == 80
+    response = httpbin.get("/")
+    assert response.status_code == 200
+    body = response.read()
+    assert len(body)
+
+
+@pytest.mark.network
+def test_client_without_leading_slash(httpbin):
+    with httpbin.get("") as response:
+        assert response.status_code == 200
+    with httpbin.get("base64/test") as response:
+        assert response.status_code in (200, 301, 302)
+
+
+FIREFOX_USER_AGENT = (
+    "Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:124.0) Gecko/20100101 Firefox/124.0"
+)
+FIREFOX_HEADERS = {"User-Agent": FIREFOX_USER_AGENT}
+
+
+@pytest.mark.network
+def test_client_with_default_headers():
+    httpbin = httpbin_client(headers=FIREFOX_HEADERS)
+    response = httpbin.get("/headers")
+    assert response.status_code == 200
+    sent_headers = json.loads(response.read().decode())["headers"]
+    assert sent_headers["User-Agent"] == FIREFOX_USER_AGENT
+
+
+@pytest.mark.network
+def test_request_with_headers(httpbin):
+    response = httpbin.get("/headers", headers=FIREFOX_HEADERS)
+    assert response.status_code == 200
+    sent_headers = json.loads(response.read().decode())["headers"]
+    assert sent_headers["User-Agent"] == FIREFOX_USER_AGENT
+
+
+@pytest.mark.network
+def test_response_context_manager(httpbin):
+    r = None
+    with httpbin.get("/") as response:
+        assert response.status_code == 200
+        r = response
+    assert r._sock is None  # released
+
+
+@pytest.mark.network
+def test_client_ssl():
+    client = HTTPClient("github.com", ssl=True)
+    assert client.port == 443
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.read()
+    assert len(body)
+
+
+@pytest.mark.network
+def test_ssl_fail_invalid_certificate():
+    certs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
+    client = HTTPClient("github.com", ssl_options={"ca_certs": certs})
+    assert client.port == 443
+    with pytest.raises(SSLError) as e_info:
+        client.get("/")
+    assert e_info.value.reason == "CERTIFICATE_VERIFY_FAILED"
+
+
+@pytest.mark.network
+def test_multi_queries_greenlet_safe():
+    httpbin = httpbin_client(concurrency=3)
+    group = gevent.pool.Group()
+    event = gevent.event.Event()
+
+    def run(i):
+        event.wait()
+        response = httpbin.get("/")
+        return response, response.read()
+
+    count = 0
+    ok_count = 0
+
+    gevent.spawn_later(0.2, event.set)
+    for response, content in group.imap_unordered(run, range(5)):
+        # occasionally remotely hosted httpbin does return server errors :-/
+        assert response.status_code in {200, 502, 504}
+        if response.status_code == 200:
+            ok_count += 1
+        assert len(content)
+        count += 1
+    assert count == 5
+    # ensure at least 3 of requests got 200
+    assert ok_count >= 3

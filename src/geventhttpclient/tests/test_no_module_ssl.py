@@ -33,4 +33,4 @@ def test_httpclient_raises_with_no_ssl():
         from geventhttpclient import HTTPClient
 
         with pytest.raises(Exception):
-            HTTPClient.from_url("https://httpbin.org/")
+            HTTPClient.from_url("https://somesslhost.org/")
