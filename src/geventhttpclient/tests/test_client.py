@@ -297,7 +297,7 @@ FIREFOX_HEADERS = {"User-Agent": FIREFOX_USER_AGENT}
 
 def check_user_agent_header(ua_header, ua_header_ref):
     """
-    unlike original httpbin, httpbingo.org sends back a list of header
+    Unlike original httpbin, httpbingo.org sends back a list of header
     strings instead of a simple string. So we need to be a bit flexible
     with the answer.
     """

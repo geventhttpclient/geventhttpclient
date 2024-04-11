@@ -1,3 +1,4 @@
+import urllib.request
 from contextlib import contextmanager
 from http.client import HTTPException
 
@@ -64,3 +65,11 @@ def test_msg():
 
         assert response.msg["Set-Cookie"] == "foo=bar, baz=bar"
         assert response.msg["Content-Type"] == "text/plain"
+
+
+@pytest.mark.network
+@pytest.mark.parametrize("url", ["http://httpbingo.org", "https://github.com"])
+def test_urllib_request(url):
+    content = urllib.request.urlopen(url).read()
+    assert content
+    assert b"body" in content

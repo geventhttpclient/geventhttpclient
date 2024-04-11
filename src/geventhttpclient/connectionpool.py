@@ -1,4 +1,5 @@
 import os
+from contextlib import contextmanager
 
 import gevent.queue
 import gevent.socket
@@ -184,8 +185,21 @@ class ConnectionPool:
             self._semaphore.release()
 
 
+def init_ssl_context(ssl_context_factory, ca_certs, check_hostname=True):
+    try:
+        ssl_context = ssl_context_factory(cafile=ca_certs)
+    except TypeError:
+        ssl_context = ssl_context_factory()
+        ssl_context.load_verify_locations(cafile=ca_certs)
+    ssl_context.check_hostname = check_hostname
+    if check_hostname:
+        ssl_context.verify_mode = gevent.ssl.CERT_REQUIRED
+    return ssl_context
+
+
 try:
     import gevent.ssl
+
     try:
         from gevent.ssl import create_default_context
     except ImportError:
@@ -228,20 +242,15 @@ else:
 
             ssl_context_factory = ssl_context_factory or create_default_context
             if ssl_context_factory is not None:
-                self.init_ssl_context(ssl_context_factory)
+                self.ssl_context = init_ssl_context(
+                    ssl_context_factory,
+                    self.ssl_options["ca_certs"],
+                    check_hostname=not self.insecure,
+                )
             else:
                 self.ssl_context = None
 
             super().__init__(connection_host, connection_port, request_host, request_port, **kw)
-
-        def init_ssl_context(self, ssl_context_factory):
-            ca_certs = self.ssl_options["ca_certs"]
-            try:
-                self.ssl_context = ssl_context_factory(cafile=ca_certs)
-            except TypeError:
-                self.ssl_context = ssl_context_factory()
-                self.ssl_context.load_verify_locations(cafile=ca_certs)
-            self.ssl_context.check_hostname = not self.insecure
 
         def _connect_socket(self, sock, address):
             sock = super()._connect_socket(sock, address)
@@ -251,3 +260,30 @@ else:
             else:
                 server_hostname = self.ssl_options.get("server_hostname", self._request_host)
                 return self.ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+
+
+class ClientPool:
+    """
+    Pool implementation for HTTP clients, that weren't designed with concurrency in mind.
+    Usage example:
+
+    pool = ClientPool(MyHttpClient)
+    with pool.get() as client:
+        response = client.request("127.0.0.1")
+    """
+
+    def __init__(self, factory, concurrency=5):
+        self.factory = factory
+        self.queue = gevent.queue.Queue(concurrency)
+        for i in range(concurrency):
+            self.queue.put(factory())
+
+    @contextmanager
+    def get(self):
+        client = self.queue.get()
+        yield client
+        self.queue.put(client)
+
+    def close(self):
+        for client in self.queue:
+            client.close()

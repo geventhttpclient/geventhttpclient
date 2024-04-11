@@ -1,23 +1,26 @@
+import gevent.monkey
+
+gevent.monkey.patch_all()
+
 from geventhttpclient import httplib
 
 httplib.patch()
 
-from httplib2 import Http
+from geventhttpclient import httplib2
 
-if __name__ == "__main__":
-    http = Http()
-    response, content = http.request("http://google.fr/")
-    assert response.status == 200
-    assert content
-    print(response)
-    print(content)
+http = httplib2.Http()
+response, content = http.request("http://github.com")
+assert response.status == 200
+assert content
+print(response)
+print(content[:1000])
 
-    response, content = http.request("http://google.fr/", method="HEAD")
-    assert response.status == 200
-    assert content == ""
-    print(response)
+response, content = http.request("https://github.com/", method="HEAD")
+assert response.status == 200
+assert not content
+print(response)
 
-    response, content = http.request("https://www.google.com/", method="HEAD")
-    assert response.status == 200
-    assert content == ""
-    print(response)
+response, content = http.request("https://google.com/", method="HEAD")
+assert response.status == 200
+assert not content
+print(response)

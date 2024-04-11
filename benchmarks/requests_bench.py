@@ -3,27 +3,27 @@ import time
 import gevent.pool
 import requests
 
-N = 1000
-C = 10
 
-url = "http://127.0.0.1/"
+def main(n=1000, concurrency=10, url="http://127.0.0.1/"):
+    def run(client):
+        response = client.get(url)
+        assert response.status_code == requests.codes.ok
+
+    client = requests.Session()
+    group = gevent.pool.Pool(size=concurrency)
+
+    for i in range(5):
+        now = time.time()
+        for _ in range(n):
+            group.spawn(run, client)
+        group.join()
+
+        delta = time.time() - now
+        req_per_sec = n / delta
+
+        print(f"request count:{n}, concurrency:{concurrency}, {req_per_sec:.2f} req/s")
 
 
-def run(client):
-    response = client.get(url)
-    assert response.status_code == requests.codes.ok
-
-
-client = requests.Session()
-group = gevent.pool.Pool(size=C)
-
-for i in range(5):
-    now = time.time()
-    for _ in range(N):
-        group.spawn(run, client)
-    group.join()
-
-    delta = time.time() - now
-    req_per_sec = N / delta
-
-    print(f"request count:{N}, concurrenry:{C}, {req_per_sec} req/s")
+if __name__ == "__main__":
+    # main(n=10, concurrency=5, url="https://github.com")
+    main()
