@@ -11,7 +11,7 @@ from gevent.ssl import SSLError
 from geventhttpclient import HTTPClient, __version__
 
 LISTENER = "127.0.0.1", 54323
-HTTPBIN_HOST = "httpbin.org"  # this might be exchanged with a self-hosted version
+HTTPBIN_HOST = "httpbingo.org"  # this might be exchanged with a self-hosted version
 
 
 @contextmanager
@@ -295,13 +295,26 @@ FIREFOX_USER_AGENT = (
 FIREFOX_HEADERS = {"User-Agent": FIREFOX_USER_AGENT}
 
 
+def check_user_agent_header(ua_header, ua_header_ref):
+    """
+    unlike original httpbin, httpbingo.org sends back a list of header
+    strings instead of a simple string. So we need to be a bit flexible
+    with the answer.
+    """
+    if isinstance(ua_header, list):
+        assert len(ua_header) == 1
+        assert ua_header[0] == ua_header_ref
+        return
+    assert ua_header == ua_header_ref
+
+
 @pytest.mark.network
 def test_client_with_default_headers():
     httpbin = httpbin_client(headers=FIREFOX_HEADERS)
     response = httpbin.get("/headers")
     assert response.status_code == 200
     sent_headers = json.loads(response.read().decode())["headers"]
-    assert sent_headers["User-Agent"] == FIREFOX_USER_AGENT
+    check_user_agent_header(sent_headers["User-Agent"], FIREFOX_USER_AGENT)
 
 
 @pytest.mark.network
@@ -309,7 +322,7 @@ def test_request_with_headers(httpbin):
     response = httpbin.get("/headers", headers=FIREFOX_HEADERS)
     assert response.status_code == 200
     sent_headers = json.loads(response.read().decode())["headers"]
-    assert sent_headers["User-Agent"] == FIREFOX_USER_AGENT
+    check_user_agent_header(sent_headers["User-Agent"], FIREFOX_USER_AGENT)
 
 
 @pytest.mark.network
