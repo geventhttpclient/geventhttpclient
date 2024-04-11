@@ -12,6 +12,7 @@ develop: _develop build_ext
 clean:
 	rm -rf build
 	rm -rf dist
+	rm -rf src/geventhttpclient.egg_info
 	find . -name '*.pyc' -delete
 	find src -name '*.so' -delete
 
