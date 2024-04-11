@@ -162,8 +162,8 @@ with open('/tmp/100.dat', 'w') as f:
 The benchmark does 10000 get requests against a local nginx server in the default 
 configuration with a concurrency of 10. See `benchmarks` folder. The requests per
 second for a couple of popular clients is given in the table below. Please read
-[benchmarks/README.md](https://github.com/geventhttpclient/geventhttpclient/blob/master/benchmarks/benchmark.py)
-for mor details.
+[benchmarks/README.md](https://github.com/geventhttpclient/geventhttpclient/blob/master/benchmarks/README.md)
+for mor details. Also note, HTTPX is better be used with asyncio, not gevent.
 
 | HTTP Client        | RPS    |
 |--------------------|--------|
