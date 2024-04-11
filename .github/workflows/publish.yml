@@ -4,24 +4,9 @@ on:
   workflow_dispatch
 
 jobs:
-  source:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: actions/setup-python@v5
-      - run: python -m pip install build
-      - run: python -m build --sdist
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          skip_existing: true
   build:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: source
     strategy:
       matrix:
         os: [ubuntu-22.04, windows-2022, macos-12]
@@ -42,9 +27,24 @@ jobs:
         with:
           path: wheelhouse/*.whl
           if-no-files-found: error
+  source:
+    runs-on: ubuntu-22.04
+    needs: build # dont publish source until we're sure binary builds worked
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+      - run: python -m pip install build
+      - run: python -m build --sdist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip_existing: true
   publish:
     runs-on: ubuntu-22.04
-    needs: build
+    needs: [build, source]
     steps:
       - uses: actions/download-artifact@v4
       - uses: pypa/gh-action-pypi-publish@release/v1
