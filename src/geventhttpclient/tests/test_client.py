@@ -79,7 +79,7 @@ def httpbin():
 
 @pytest.mark.parametrize("request_uri", ["/tp/", "tp/", f"http://{HTTPBIN_HOST}/tp/"])
 def test_build_request(httpbin, request_uri):
-    request_ref = f"GET /tp/ HTTP/1.1\r\nuser-agent: python/gevent-http-client-{__version__}\r\nhost: {HTTPBIN_HOST}\r\n\r\n"
+    request_ref = f"GET /tp/ HTTP/1.1\r\nUser-Agent: python/gevent-http-client-{__version__}\r\nHost: {HTTPBIN_HOST}\r\n\r\n"
     assert httpbin._build_request("GET", request_uri) == request_ref
 
 

@@ -4,7 +4,6 @@ to use as drop-in replacements for their counterparts in http.client.
 """
 
 import http.client as httplib
-import ssl
 
 import gevent.socket
 import gevent.ssl
@@ -103,7 +102,7 @@ class HTTPResponse(response.HTTPSocketResponse):
         return self.get(name.lower(), default)
 
     def getheaders(self):
-        return self._headers_index.items()
+        return list(self._headers_index.items())
 
     @property
     def will_close(self):

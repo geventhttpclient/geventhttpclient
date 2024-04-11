@@ -85,6 +85,15 @@ def test_create_from_list():
     assert h["cookie"][-1] == "E"
 
 
+def test_retrieve():
+    h = Headers([("ab", "A"), ("cd", "B"), ("cookie", "C"), ("cookie", "D"), ("cookie", "E")])
+    for key, ref in {"ab": "A", "cd": "B", "cookie": ["C", "D", "E"]}.items():
+        assert h[key] == ref
+        assert h.get(key) == ref
+        assert h.pop(key) == ref
+        assert key not in h
+
+
 def test_case_insensitivity():
     h = Headers({"Content-Type": "text/plain"})
     h.add("Content-Encoding", "utf8")
@@ -95,6 +104,22 @@ def test_case_insensitivity():
         assert h.get(val.lower()) == h.get(val.upper()) == h.get(val.capitalize())
         del h[val.upper()]
         assert val.lower() not in h
+
+
+def test_preserve_case():
+    h = Headers(Cookie="C", COOKIE="D", cookie="E", asdf="E")
+    assert len(h) == 4
+    assert h["cookie"] == ["C", "D", "E"]
+    assert list(h.items()) == [("Cookie", "C"), ("COOKIE", "D"), ("cookie", "E"), ("asdf", "E")]
+
+
+def test_update_preserve_case():
+    h = Headers()
+    h.update(COOKIE="A", Cookie="C")
+    assert list(h.items()) == [("Cookie", "C")]
+    h = Headers()
+    h.update(dict(Cookie="C", COOKIE="D", cookiE="E"))
+    assert list(h.items()) == [("cookiE", "E")]
 
 
 def test_read_multiple_header():
@@ -179,6 +204,11 @@ def test_header_replace():
     d["Content-Type"] = "text/plain"
     d["content-type"] = "text/html"
     assert d["content-type"] == "text/html"
+
+
+def test_formatting():
+    h = Headers(asdf="ddd", ASDF="fff", AsDf="asdfasdf")
+    assert str(h) == "asdf: ddd\nASDF: fff\nAsDf: asdfasdf"
 
 
 def test_compat_dict():
