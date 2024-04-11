@@ -83,7 +83,7 @@ class HTTPClient:
         headers_type=Headers,
     ):
         if headers is None:
-            headers = {}
+            headers = headers_type()
         self.host = host
         self.port = port
         connection_host = self.host

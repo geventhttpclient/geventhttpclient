@@ -103,7 +103,7 @@ class CompatRequest:
         return header_name in self.headers
 
     def header_items(self):
-        return self.headers.items()
+        return list(self.headers.items())
 
     def add_unredirected_header(self, key, val):
         self.headers.add(key, val)
@@ -509,7 +509,7 @@ class UserAgent:
 
     @classmethod
     def _conversation_str(cls, url, resp, payload=None):
-        header_str = "\n".join(f"{key}: {val}" for key, val in resp.headers.iteroriginal())
+        header_str = "\n".join(f"{key}: {val}" for key, val in resp.headers.items())
         ret = "REQUEST: " + url + "\n" + resp._sent_request
         if payload:
             if isinstance(payload, bytes):

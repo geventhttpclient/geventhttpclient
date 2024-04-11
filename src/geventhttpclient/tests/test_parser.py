@@ -81,14 +81,14 @@ def test_parse_small_blocks():
     assert parser.should_keep_alive()
     assert parser.status_code == 301
     assert sorted(parser.items()) == [
-        ("cache-control", "public, max-age=2592000"),
-        ("content-length", "218"),
-        ("content-type", "text/html; charset=UTF-8"),
-        ("date", "Thu, 13 Oct 2011 15:03:12 GMT"),
-        ("expires", "Sat, 12 Nov 2011 15:03:12 GMT"),
-        ("location", "http://www.google.fr/"),
-        ("server", "gws"),
-        ("x-xss-protection", "1; mode=block"),
+        ("Cache-Control", "public, max-age=2592000"),
+        ("Content-Length", "218"),
+        ("Content-Type", "text/html; charset=UTF-8"),
+        ("Date", "Thu, 13 Oct 2011 15:03:12 GMT"),
+        ("Expires", "Sat, 12 Nov 2011 15:03:12 GMT"),
+        ("Location", "http://www.google.fr/"),
+        ("Server", "gws"),
+        ("X-XSS-Protection", "1; mode=block"),
     ]
 
 

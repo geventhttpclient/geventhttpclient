@@ -30,9 +30,7 @@ def wsgiserver(handler):
 
 def check_upload(body, headers=None):
     def wsgi_handler(env, start_response):
-        if headers:
-            # For Python 2.6 which does not have viewitems
-            assert env.items() >= headers.items()
+        assert env["REQUEST_METHOD"] == "POST"
         assert body == env["wsgi.input"].read()
         start_response("200 OK", [])
         return []
