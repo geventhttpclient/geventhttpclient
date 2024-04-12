@@ -23,7 +23,7 @@ jobs:
         env:
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
           CIBW_ARCHS_LINUX: "auto aarch64 ppc64le"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v3
         with:
           path: wheelhouse/*.whl
           if-no-files-found: error
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-22.04
     needs: [build, source]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v3
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
