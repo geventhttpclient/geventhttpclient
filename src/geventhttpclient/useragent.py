@@ -11,8 +11,8 @@ import gevent
 from urllib3 import encode_multipart_formdata
 from urllib3.fields import RequestField
 
-from .client import HTTPClient, HTTPClientPool
-from .url import URL, to_key_val_list
+from geventhttpclient.client import HTTPClient, HTTPClientPool
+from geventhttpclient.url import URL, to_key_val_list
 
 
 class ConnectionError(Exception):

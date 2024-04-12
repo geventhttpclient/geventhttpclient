@@ -146,14 +146,10 @@ class HTTPClient:
         self.default_headers.update(self.DEFAULT_HEADERS)
         self.default_headers.update(headers)
         self.block_size = block_size
-        self._base_url_string = str(self.get_base_url())
 
-    def get_base_url(self):
-        url = URL()
-        url.host = self.host
-        url.port = self.port
-        url.scheme = self.ssl and PROTO_HTTPS or PROTO_HTTP
-        return url
+        scheme = PROTO_HTTPS if self.ssl else PROTO_HTTP
+        port_str = f":{port}" if port else ""
+        self._base_url_string = f"{scheme}://{self.host}{port_str}/"
 
     def close(self):
         self._connection_pool.close()
