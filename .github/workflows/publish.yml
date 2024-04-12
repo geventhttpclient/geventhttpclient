@@ -4,7 +4,7 @@ on:
   workflow_dispatch
 
 jobs:
-  build:
+  build-binaries:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -29,7 +29,7 @@ jobs:
           if-no-files-found: error
   source:
     runs-on: ubuntu-22.04
-    needs: build # dont publish source until we're sure binary builds worked
+    needs: build-binaries # dont publish source until we're sure binary builds worked
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,10 +41,10 @@ jobs:
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-          skip_existing: true
-  publish:
+          skip-existing: true
+  publish-binaries:
     runs-on: ubuntu-22.04
-    needs: [build, source]
+    needs: [build-binaries, source]
     steps:
       - uses: actions/download-artifact@v3
       - uses: pypa/gh-action-pypi-publish@release/v1
