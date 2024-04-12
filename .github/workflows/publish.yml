@@ -50,6 +50,6 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
-          packages_dir: artifact
+          packages-dir: artifact
           password: ${{ secrets.PYPI_API_TOKEN }}
-          skip_existing: true
+          skip-existing: true
