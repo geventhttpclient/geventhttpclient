@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from http.cookiejar import CookieJar
 
 import gevent.pywsgi
+import gevent.queue
 import pytest
 
 from geventhttpclient.useragent import BadStatusCode, UserAgent
@@ -20,10 +21,21 @@ def tmp_file(tmp_path):
 
 @contextmanager
 def wsgiserver(handler):
-    server = gevent.pywsgi.WSGIServer(LISTENER, handler)
+    exception_queue = gevent.queue.Queue()
+
+    def wrapped_handler(env, start_response):
+        try:
+            return handler(env, start_response)
+        except Exception as e:
+            exception_queue.put(e)
+            raise
+
+    server = gevent.pywsgi.WSGIServer(LISTENER, wrapped_handler)
     server.start()
     try:
         yield
+        if not exception_queue.empty():
+            raise exception_queue.get()
     finally:
         server.stop()
 

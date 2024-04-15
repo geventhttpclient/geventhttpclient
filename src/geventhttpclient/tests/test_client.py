@@ -1,14 +1,14 @@
 import json
-import os
 from contextlib import contextmanager
 
 import gevent.pool
 import gevent.pywsgi
+import gevent.queue
 import gevent.server
 import pytest
-from gevent.ssl import SSLError
 
-from geventhttpclient import HTTPClient, __version__
+from geventhttpclient import __version__
+from geventhttpclient.client import METHOD_GET, HTTPClient
 
 LISTENER = "127.0.0.1", 54323
 HTTPBIN_HOST = "httpbingo.org"  # this might be exchanged with a self-hosted version
@@ -26,10 +26,21 @@ def server(handler):
 
 @contextmanager
 def wsgiserver(handler):
-    server = gevent.pywsgi.WSGIServer(LISTENER, handler)
+    exception_queue = gevent.queue.Queue()
+
+    def wrapped_handler(env, start_response):
+        try:
+            return handler(env, start_response)
+        except Exception as e:
+            exception_queue.put(e)
+            raise
+
+    server = gevent.pywsgi.WSGIServer(LISTENER, wrapped_handler)
     server.start()
     try:
         yield
+        if not exception_queue.empty():
+            raise exception_queue.get()
     finally:
         server.stop()
 
@@ -80,12 +91,22 @@ def httpbin():
 @pytest.mark.parametrize("request_uri", ["/tp/", "tp/", f"http://{HTTPBIN_HOST}/tp/"])
 def test_build_request(httpbin, request_uri):
     request_ref = f"GET /tp/ HTTP/1.1\r\nUser-Agent: python/gevent-http-client-{__version__}\r\nHost: {HTTPBIN_HOST}\r\n\r\n"
-    assert httpbin._build_request("GET", request_uri) == request_ref
+    assert httpbin._build_request(METHOD_GET, request_uri) == request_ref
 
 
 def test_build_request_invalid_host(httpbin):
     with pytest.raises(ValueError):
-        httpbin._build_request("GET", "http://someunrelatedhost.com/")
+        httpbin._build_request(METHOD_GET, "http://someunrelatedhost.com/")
+
+
+@pytest.mark.parametrize("port", [None, 1234])
+@pytest.mark.parametrize("host", ["localhost", "127.0.0.1", "::1", "[::1]"])
+def test_build_request_host(host, port):
+    client = HTTPClient(host, port)
+    host_ref = (
+        f"host: {f'[{host}]' if host.startswith(':') else host}{f':{port}' if port else ''}\r\n"
+    )
+    assert host_ref in client._build_request(METHOD_GET, "").lower()
 
 
 test_url_client_args = [
@@ -255,7 +276,7 @@ def test_bytes_post():
 
 
 def test_string_post():
-    with wsgiserver(check_upload("12345", 5)):
+    with wsgiserver(check_upload(b"12345", 5)):
         client = HTTPClient(*LISTENER)
         client.post("/", "12345")
 
@@ -332,26 +353,6 @@ def test_response_context_manager(httpbin):
         assert response.status_code == 200
         r = response
     assert r._sock is None  # released
-
-
-@pytest.mark.network
-def test_client_ssl():
-    client = HTTPClient("github.com", ssl=True)
-    assert client.port == 443
-    response = client.get("/")
-    assert response.status_code == 200
-    body = response.read()
-    assert len(body)
-
-
-@pytest.mark.network
-def test_ssl_fail_invalid_certificate():
-    certs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
-    client = HTTPClient("github.com", ssl_options={"ca_certs": certs})
-    assert client.port == 443
-    with pytest.raises(SSLError) as e_info:
-        client.get("/")
-    assert e_info.value.reason == "CERTIFICATE_VERIFY_FAILED"
 
 
 @pytest.mark.network

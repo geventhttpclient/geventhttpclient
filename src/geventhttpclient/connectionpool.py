@@ -198,12 +198,15 @@ def init_ssl_context(ssl_context_factory, ca_certs, check_hostname=True):
 
 
 try:
+    from ssl import PROTOCOL_TLS_CLIENT
+
     import gevent.ssl
 
     try:
         from gevent.ssl import create_default_context
     except ImportError:
         create_default_context = None
+
 except ImportError:
     pass
 else:
@@ -222,6 +225,7 @@ else:
             "ciphers": _DEFAULT_CIPHERS,
             "ca_certs": _CA_CERTS,
             "cert_reqs": gevent.ssl.CERT_REQUIRED,
+            "ssl_version": PROTOCOL_TLS_CLIENT,
         }
 
         def __init__(
