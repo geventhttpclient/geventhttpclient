@@ -50,6 +50,7 @@ class HTTPResponse(HTTPResponseParser):
     headers = property(items)
 
     def info(self):
+        # compatibility with http.client
         return self._headers_index
 
     def __contains__(self, key):

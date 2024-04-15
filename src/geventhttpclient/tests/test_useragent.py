@@ -2,6 +2,7 @@ from http.cookiejar import CookieJar
 
 import pytest
 
+from geventhttpclient.header import Headers
 from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
 from geventhttpclient.useragent import BadStatusCode, UserAgent
 
@@ -248,6 +249,15 @@ def test_brotli_response():
         resp = UserAgent().urlopen(LISTENER_URL, params={"path": "/"})
         assert resp.status_code == 200
         assert resp.content == b"https://github.com/gwik/geventhttpclient"
+
+
+@pytest.mark.network
+def test_no_form_encoded_header():
+    url = f"https://{HTTPBIN_HOST}/headers"
+    hdrs = Headers(UserAgent().urlopen(url).json()["headers"])
+    print(hdrs)
+    assert "content-type" not in hdrs
+    assert "content-length" not in hdrs
 
 
 @pytest.mark.network
