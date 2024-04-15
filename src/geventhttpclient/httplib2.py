@@ -12,8 +12,39 @@ from geventhttpclient import httplib2
 http = httplib2.Http(concurrency=5)
 """
 
+from contextlib import contextmanager
+
+import gevent.queue
+
 import geventhttpclient.httplib
-from geventhttpclient.connectionpool import ClientPool
+
+
+class ClientPool:
+    """
+    Pool implementation for HTTP clients, that weren't designed with concurrency in mind.
+    Usage example:
+
+    pool = ClientPool(MyHttpClient)
+    with pool.get() as client:
+        response = client.request("127.0.0.1")
+    """
+
+    def __init__(self, factory, concurrency=5):
+        self.factory = factory
+        self.queue = gevent.queue.Queue(concurrency)
+        for i in range(concurrency):
+            self.queue.put(factory())
+
+    @contextmanager
+    def get(self):
+        client = self.queue.get()
+        yield client
+        self.queue.put(client)
+
+    def close(self):
+        for client in self.queue:
+            client.close()
+
 
 with geventhttpclient.httplib.patched():
     import httplib2
