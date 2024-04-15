@@ -1,23 +1,10 @@
 import http.client
 import urllib.request
-from contextlib import contextmanager
 
-import gevent.server
 import pytest
 
 from geventhttpclient.httplib import HTTPConnection, patched
-
-LISTENER = "127.0.0.1", 54323
-
-
-@contextmanager
-def server(handler):
-    server = gevent.server.StreamServer(LISTENER, handle=handler)
-    server.start()
-    try:
-        yield
-    finally:
-        server.stop()
+from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER, server
 
 
 def wrong_response_status_line(sock, addr):
@@ -78,7 +65,7 @@ def test_patched():
 
 
 @pytest.mark.network
-@pytest.mark.parametrize("url", ["http://httpbingo.org", "https://github.com"])
+@pytest.mark.parametrize("url", [f"http://{HTTPBIN_HOST}", "https://github.com"])
 def test_urllib_request(url):
     with patched():
         content = urllib.request.urlopen(url).read()

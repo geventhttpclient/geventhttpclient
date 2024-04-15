@@ -130,7 +130,7 @@ def test_equality():
 
 def test_default_port():
     assert URL("https://python.org").port == 443
-    assert URL("http://httpbingo.org").port == 80
+    assert URL("http://gevent.org").port == 80
     assert URL("example.com").port is None
 
 
