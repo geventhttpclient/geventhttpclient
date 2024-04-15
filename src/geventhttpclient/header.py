@@ -268,10 +268,28 @@ class Headers(dict):
             else:
                 yield from vals
 
-    # Backwards compatibility for httplib
+    # Compatibility with http.client
     getheaders = getlist
     getallmatchingheaders = getlist
-    iget = getlist
 
-    # deprecated
-    iteroriginal = items
+    def iteroriginal(self):
+        import warnings
+
+        warnings.warn(
+            "This is deprecated and will be removed in version v2.3.0. "
+            "Use Headers.items() instead.",
+            DeprecationWarning,
+            2,
+        )
+        return self.items()
+
+    def iget(self, field):
+        import warnings
+
+        warnings.warn(
+            "This is deprecated and will be removed in version v2.3.0. "
+            "Use Headers.getlist() instead.",
+            DeprecationWarning,
+            2,
+        )
+        return self.getlist(field)

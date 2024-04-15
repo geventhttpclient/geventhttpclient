@@ -297,9 +297,9 @@ class HTTPClientPool:
 
     # TODO: Add some housekeeping and cleanup logic
 
-    def __init__(self, **kwargs):
-        self.clients = dict()
-        self.client_args = kwargs
+    def __init__(self, **kw):
+        self.clients = {}
+        self.client_args = kw
 
     def get_client(self, url):
         if not isinstance(url, URL):
