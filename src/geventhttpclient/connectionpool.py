@@ -1,5 +1,4 @@
 import os
-from contextlib import contextmanager
 
 import gevent.queue
 import gevent.socket
@@ -264,30 +263,3 @@ else:
             else:
                 server_hostname = self.ssl_options.get("server_hostname", self._request_host)
                 return self.ssl_context.wrap_socket(sock, server_hostname=server_hostname)
-
-
-class ClientPool:
-    """
-    Pool implementation for HTTP clients, that weren't designed with concurrency in mind.
-    Usage example:
-
-    pool = ClientPool(MyHttpClient)
-    with pool.get() as client:
-        response = client.request("127.0.0.1")
-    """
-
-    def __init__(self, factory, concurrency=5):
-        self.factory = factory
-        self.queue = gevent.queue.Queue(concurrency)
-        for i in range(concurrency):
-            self.queue.put(factory())
-
-    @contextmanager
-    def get(self):
-        client = self.queue.get()
-        yield client
-        self.queue.put(client)
-
-    def close(self):
-        for client in self.queue:
-            client.close()
