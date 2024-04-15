@@ -1,24 +1,11 @@
-from contextlib import contextmanager
 from http.client import HTTPException
 
 import gevent.server
 import gevent.socket
 import pytest
 
-from geventhttpclient import HTTPClient
-
-CRLF = "\r\n"
-LISTENER = "127.0.0.1", 54323
-
-
-@contextmanager
-def server(handler):
-    server = gevent.server.StreamServer(LISTENER, handle=handler)
-    server.start()
-    try:
-        yield
-    finally:
-        server.stop()
+from geventhttpclient.client import CRLF, HTTPClient
+from geventhttpclient.tests.conftest import LISTENER, server
 
 
 def wrong_response_status_line(sock, addr):

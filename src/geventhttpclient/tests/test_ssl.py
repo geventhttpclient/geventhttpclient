@@ -14,8 +14,7 @@ from gevent import joinall
 from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
-
-LISTENER = "127.0.0.1", 54323
+from geventhttpclient.tests.conftest import LISTENER
 
 BASEDIR = os.path.dirname(__file__)
 KEY = os.path.join(BASEDIR, "server.key")
@@ -23,7 +22,7 @@ CERT = os.path.join(BASEDIR, "server.crt")
 
 
 @contextmanager
-def server(handler, backlog=1):
+def sslserver(handler, backlog=1):
     exception_queue = gevent.queue.Queue()
 
     def wrapped_handler(env, start_response):
@@ -83,7 +82,7 @@ def simple_ssl_response(sock, addr):
 
 
 def test_simple_ssl():
-    with server(simple_ssl_response) as listener:
+    with sslserver(simple_ssl_response) as listener:
         client = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
         response = client.get("/")
         assert response.status_code == 200
@@ -252,7 +251,7 @@ def network_timeout(sock, addr):
 
 
 def test_network_timeout():
-    with server(network_timeout) as listener:
+    with sslserver(network_timeout) as listener:
         client = HTTPClient(
             *listener,
             ssl=True,
@@ -274,7 +273,7 @@ def check_client_cert_required(client):
 
 
 def test_verify_self_signed_fail(capsys):
-    with server(simple_ssl_response) as listener:
+    with sslserver(simple_ssl_response) as listener:
         client = HTTPClient(*listener, ssl=True)
         with pytest.raises(CertificateError) as raised:
             client.get("/")

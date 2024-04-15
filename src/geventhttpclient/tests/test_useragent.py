@@ -1,14 +1,9 @@
-from contextlib import contextmanager
 from http.cookiejar import CookieJar
 
-import gevent.pywsgi
-import gevent.queue
 import pytest
 
+from geventhttpclient.tests.conftest import LISTENER_URL, wsgiserver
 from geventhttpclient.useragent import BadStatusCode, UserAgent
-
-LISTENER = "127.0.0.1", 54323
-LISTENER_URL = f"http://{LISTENER[0]}:{LISTENER[1]}/"
 
 
 @pytest.fixture
@@ -17,27 +12,6 @@ def tmp_file(tmp_path):
     with open(fpath, "wb") as f:
         f.write(b"123456789")
     return fpath
-
-
-@contextmanager
-def wsgiserver(handler):
-    exception_queue = gevent.queue.Queue()
-
-    def wrapped_handler(env, start_response):
-        try:
-            return handler(env, start_response)
-        except Exception as e:
-            exception_queue.put(e)
-            raise
-
-    server = gevent.pywsgi.WSGIServer(LISTENER, wrapped_handler)
-    server.start()
-    try:
-        yield
-        if not exception_queue.empty():
-            raise exception_queue.get()
-    finally:
-        server.stop()
 
 
 def check_upload(body, headers=None):

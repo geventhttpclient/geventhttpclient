@@ -1,48 +1,13 @@
 import json
-from contextlib import contextmanager
 
 import gevent.pool
-import gevent.pywsgi
 import gevent.queue
 import gevent.server
 import pytest
 
 from geventhttpclient import __version__
 from geventhttpclient.client import METHOD_GET, HTTPClient
-
-LISTENER = "127.0.0.1", 54323
-HTTPBIN_HOST = "httpbingo.org"  # this might be exchanged with a self-hosted version
-
-
-@contextmanager
-def server(handler):
-    server = gevent.server.StreamServer(LISTENER, handle=handler)
-    server.start()
-    try:
-        yield
-    finally:
-        server.stop()
-
-
-@contextmanager
-def wsgiserver(handler):
-    exception_queue = gevent.queue.Queue()
-
-    def wrapped_handler(env, start_response):
-        try:
-            return handler(env, start_response)
-        except Exception as e:
-            exception_queue.put(e)
-            raise
-
-    server = gevent.pywsgi.WSGIServer(LISTENER, wrapped_handler)
-    server.start()
-    try:
-        yield
-        if not exception_queue.empty():
-            raise exception_queue.get()
-    finally:
-        server.stop()
+from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER, server, wsgiserver
 
 
 def httpbin_client(
