@@ -434,11 +434,11 @@ class UserAgent:
             params=params,
             files=files,
         )
-        for retry in range(self.max_retries):
+        for retry in range(self.max_retries + 1):
             if retry > 0 and self.retry_delay:
                 # Don't wait the first time and skip if no delay specified
                 gevent.sleep(self.retry_delay)
-            for _ in range(self.max_redirects):
+            for _ in range(self.max_redirects + 1):
                 if self.cookiejar is not None:
                     self.cookiejar.add_cookie_header(req)
 
@@ -547,7 +547,7 @@ class UserAgent:
         else:
             offset = 0
 
-        for _ in range(self.max_retries):
+        for _ in range(self.max_retries + 1):
             if offset:
                 headers["Range"] = f"bytes={offset}-"
                 resp = self.urlopen(url, headers=headers, **kwargs)
