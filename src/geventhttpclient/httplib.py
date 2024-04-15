@@ -3,14 +3,15 @@ Provide HTTPConnection, HTTPSConnection and HTTPResponse implementations ready
 to use as drop-in replacements for their counterparts in http.client.
 """
 
-import http.client as httplib
+import http.client
+from contextlib import contextmanager
 
 import gevent.socket
 import gevent.ssl
 
 from geventhttpclient import connectionpool, header, response
 
-_UNKNOWN = getattr(httplib, "_UNKNOWN", "UNKNOWN")
+_UNKNOWN = getattr(http.client, "_UNKNOWN", "UNKNOWN")
 
 
 class HTTPLibHeaders(header.Headers):
@@ -120,10 +121,7 @@ class HTTPResponse(response.HTTPSocketResponse):
         return self.status_code
 
 
-HTTPLibConnection = httplib.HTTPConnection
-
-
-class HTTPConnection(httplib.HTTPConnection):
+class HTTPConnection(http.client.HTTPConnection):
     response_class = HTTPResponse
     source_address = None
     _hidden_socket = None
@@ -220,9 +218,35 @@ else:
 
 
 def patch():
-    httplib.HTTPConnection = HTTPConnection
-    httplib.HTTPResponse = HTTPResponse
+    http.client.HTTPConnection = HTTPConnection
+    http.client.HTTPResponse = HTTPResponse
     try:
-        httplib.HTTPSConnection = HTTPSConnection
+        http.client.HTTPSConnection = HTTPSConnection
     except NameError:
         pass
+
+
+@contextmanager
+def patched():
+    """Temporarily patch http.client."""
+    http_client_HTTPConnection = http.client.HTTPConnection
+    http_client_HTTPResponse = http.client.HTTPResponse
+    try:
+        http_client_HTTPSConnection = http.client.HTTPSConnection
+    except NameError:
+        pass
+    try:
+        http.client.HTTPConnection = HTTPConnection
+        http.client.HTTPResponse = HTTPResponse
+        try:
+            http.client.HTTPSConnection = HTTPSConnection
+        except NameError:
+            pass
+        yield
+    finally:
+        http.client.HTTPConnection = http_client_HTTPConnection
+        http.client.HTTPResponse = http_client_HTTPResponse
+        try:
+            http.client.HTTPSConnection = http_client_HTTPSConnection
+        except NameError:
+            pass

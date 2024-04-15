@@ -1,11 +1,11 @@
+import http.client
 import urllib.request
 from contextlib import contextmanager
-from http.client import HTTPException
 
 import gevent.server
 import pytest
 
-from geventhttpclient.httplib import HTTPConnection
+from geventhttpclient.httplib import HTTPConnection, patched
 
 LISTENER = "127.0.0.1", 54323
 
@@ -29,7 +29,7 @@ def test_httplib_exception():
     with server(wrong_response_status_line):
         connection = HTTPConnection(*LISTENER)
         connection.request("GET", "/")
-        with pytest.raises(HTTPException):
+        with pytest.raises(http.client.HTTPException):
             connection.getresponse()
 
 
@@ -67,9 +67,20 @@ def test_msg():
         assert response.msg["Content-Type"] == "text/plain"
 
 
+def test_patched():
+    assert http.client.HTTPResponse.__module__ == "http.client"
+    assert http.client.HTTPConnection.__module__ == "http.client"
+    with patched():
+        assert http.client.HTTPResponse.__module__ == "geventhttpclient.httplib"
+        assert http.client.HTTPConnection.__module__ == "geventhttpclient.httplib"
+    assert http.client.HTTPResponse.__module__ == "http.client"
+    assert http.client.HTTPConnection.__module__ == "http.client"
+
+
 @pytest.mark.network
 @pytest.mark.parametrize("url", ["http://httpbingo.org", "https://github.com"])
 def test_urllib_request(url):
-    content = urllib.request.urlopen(url).read()
-    assert content
-    assert b"body" in content
+    with patched():
+        content = urllib.request.urlopen(url).read()
+        assert content
+        assert b"body" in content

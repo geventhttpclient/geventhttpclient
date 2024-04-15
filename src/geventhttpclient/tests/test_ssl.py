@@ -5,6 +5,7 @@ from ssl import CertificateError
 from unittest import mock
 
 import dpkt.ssl
+import gevent.queue
 import gevent.server
 import gevent.socket
 import gevent.ssl
@@ -23,17 +24,28 @@ CERT = os.path.join(BASEDIR, "server.crt")
 
 @contextmanager
 def server(handler, backlog=1):
+    exception_queue = gevent.queue.Queue()
+
+    def wrapped_handler(env, start_response):
+        try:
+            return handler(env, start_response)
+        except Exception as e:
+            exception_queue.put(e)
+            raise
+
     server = gevent.server.StreamServer(
         LISTENER,
         backlog=backlog,
-        handle=handler,
+        handle=wrapped_handler,
         keyfile=KEY,
         certfile=CERT,
         ssl_version=ssl.PROTOCOL_TLS_SERVER,
     )
     server.start()
     try:
-        yield (server.server_host, server.server_port)
+        yield server.server_host, server.server_port
+        if not exception_queue.empty():
+            raise exception_queue.get()
     finally:
         server.stop()
 
@@ -72,8 +84,8 @@ def simple_ssl_response(sock, addr):
 
 def test_simple_ssl():
     with server(simple_ssl_response) as listener:
-        http = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
-        response = http.get("/")
+        client = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
+        response = client.get("/")
         assert response.status_code == 200
         response.read()
 
@@ -117,7 +129,7 @@ def _get_sni_sent_from_client(**additional_client_args):
         )
         with mock.patch("gevent.socket.getaddrinfo", mock.Mock(return_value=[mock_addrinfo])):
             server_host = "some_foo"
-            http = HTTPClient(
+            client = HTTPClient(
                 server_host,
                 server_port,
                 insecure=True,
@@ -133,7 +145,7 @@ def _get_sni_sent_from_client(**additional_client_args):
                 except socket_error:
                     pass  # handshake will not be completed
 
-            client_greenlet = gevent.spawn(run, http)
+            client_greenlet = gevent.spawn(run, client)
             joinall([client_greenlet, server_greenlet])
 
     return server_host, server_port, server_greenlet.value
@@ -189,6 +201,8 @@ def sni_checker_server():
     job = gevent.spawn(run, sock)
     try:
         yield sock, job
+        if job.exception:
+            raise job.exception
         sock.close()
     finally:
         job.kill()
@@ -196,7 +210,7 @@ def sni_checker_server():
 
 def test_timeout_on_connect():
     with timeout_connect_server() as listener:
-        http = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
+        client = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
 
         def run(http, wait_time=100):
             try:
@@ -206,7 +220,7 @@ def test_timeout_on_connect():
             except Exception:
                 pass
 
-        gevent.spawn(run, http)
+        gevent.spawn(run, client)
         gevent.sleep(0)
 
         e = None
@@ -239,7 +253,7 @@ def network_timeout(sock, addr):
 
 def test_network_timeout():
     with server(network_timeout) as listener:
-        http = HTTPClient(
+        client = HTTPClient(
             *listener,
             ssl=True,
             insecure=True,
@@ -247,12 +261,53 @@ def test_network_timeout():
             ssl_options={"ca_certs": CERT},
         )
         with pytest.raises(gevent.socket.timeout):
-            response = http.get("/")
-            assert response.status_code == 0, "should have timed out."
+            client.get("/")
 
 
-def test_verify_hostname():
+def check_client_cert_required(client):
+    """Make sure hostnames are checked by default."""
+    ssl_context = client._connection_pool.ssl_context
+    assert ssl_context.check_hostname
+    assert ssl_context.verify_mode == gevent.ssl.CERT_REQUIRED
+    for socket in client._connection_pool._socket_queue.queue:
+        assert socket._context.verify_mode == gevent.ssl.CERT_REQUIRED
+
+
+def test_verify_self_signed_fail(capsys):
     with server(simple_ssl_response) as listener:
-        http = HTTPClient(*listener, ssl=True, ssl_options={"ca_certs": CERT})
-        with pytest.raises(CertificateError):
-            http.get("/")
+        client = HTTPClient(*listener, ssl=True)
+        with pytest.raises(CertificateError) as raised:
+            client.get("/")
+        assert "CERTIFICATE_VERIFY_FAILED" in str(raised.value)
+        assert raised.value.verify_message == "self-signed certificate"
+        check_client_cert_required(client)
+        client.close()
+
+    # This tests breaking server side socket confusingly prints its certificate error message delayed
+    # into other tests output, if we don't give it a split second for printing now.
+    gevent.sleep(0.01)
+    captured = capsys.readouterr().err
+    assert "ssl.SSLError" in captured
+    assert "ALERT_UNKNOWN_CA" in captured
+
+
+@pytest.mark.network
+def test_client_ssl():
+    client = HTTPClient("github.com", ssl=True)
+    assert client.port == 443
+    response = client.get("/")
+    assert response.status_code == 200
+    body = response.read()
+    assert len(body)
+    check_client_cert_required(client)
+
+
+@pytest.mark.network
+def test_fail_invalid_ca_certificate():
+    certs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "oncert.pem")
+    client = HTTPClient("github.com", ssl_options={"ca_certs": certs})
+    assert client.port == 443
+    with pytest.raises(gevent.ssl.SSLError) as e_info:
+        client.get("/")
+    assert e_info.value.reason == "CERTIFICATE_VERIFY_FAILED"
+    check_client_cert_required(client)
