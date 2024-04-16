@@ -174,3 +174,11 @@ for mor details. Also note, HTTPX is better be used with asyncio, not gevent.
 | Httpx              | 770.3  |
 
 *Linux(x86_64), Python 3.11.6 @ Intel i7-7560U*
+
+## License
+
+This package is distributed under the [MIT license](https://github.com/geventhttpclient/geventhttpclient/blob/master/LICENSE-MIT). 
+Previous versions of geventhttpclient used http_parser.c, which in turn 
+was based on `src/http/ngx_http_parse.c` from NGINX, copyright Igor Sysoev, 
+Joyent, Inc., and other Node contributors. For more information, see 
+http://github.com/joyent/http-parser 

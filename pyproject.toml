@@ -9,7 +9,7 @@ version = "2.2.0" # dont forget to update version __init__.py as well
 description = "HTTP client library for gevent"
 readme = "README.md"
 requires-python = ">=3.9"
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE-MIT"}
 keywords = ["http", "gevent", "client"]
 authors = [{name = "Antonin Amand", email = "antonin.amand@gmail.com"}]
 classifiers = [
