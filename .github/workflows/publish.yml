@@ -4,52 +4,83 @@ on:
   workflow_dispatch
 
 jobs:
-  build-binaries:
+  build-wheels:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-22.04, windows-2022, macos-12]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
       - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
       - uses: docker/setup-qemu-action@v3
-        if: ${{ matrix.os == 'ubuntu-22.04' }}
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         name: Set up QEMU
-      - run: python -m pip install cibuildwheel
-      - run: python -m cibuildwheel --output-dir wheelhouse
+      - run: pipx run cibuildwheel --output-dir wheelhouse
+        name: Run build wheel
         env:
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
           CIBW_ARCHS_LINUX: "auto aarch64 ppc64le"
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
-          path: wheelhouse/*.whl
+          name: dist-wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
           if-no-files-found: error
-  source:
-    runs-on: ubuntu-22.04
-    needs: build-binaries # dont publish source until we're sure binary builds worked
+
+  build-sdist:
+    name: Build source distribution
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           submodules: recursive
       - uses: actions/setup-python@v5
-      - run: python -m pip install build
-      - run: python -m build --sdist
-      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          skip-existing: true
-  publish-binaries:
-    runs-on: ubuntu-22.04
-    needs: [build-binaries, source]
+          python-version: '3.11'
+      - run: pipx run build --sdist
+        name: Build source tarball
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-source
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  test-publish:
+    if: github.repository == 'geventhttpclient/geventhttpclient'
+    runs-on: ubuntu-latest
+    needs: [build-wheels, build-sdist]
     steps:
-      - uses: actions/download-artifact@v3
-      - uses: pypa/gh-action-pypi-publish@release/v1
+      - uses: actions/download-artifact@v4
         with:
-          user: __token__
-          packages-dir: artifact
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        name: Publish package to TestPyPI
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish:
+    # only run real publishing on master
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    needs: test-publish
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        name: Publish package to PyPI
+        with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
