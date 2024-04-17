@@ -23,9 +23,9 @@ typedef struct {
 static int on_message_begin(llhttp_t* parser)
 {
     int fail = 0;
-    PyObject* self = (PyObject*)parser->data;
-    if (PyObject_HasAttrString(self, "_on_message_begin")) {
-        PyObject* callable = PyObject_GetAttrString(self, "_on_message_begin");
+    PyHTTPResponseParser *self = (PyHTTPResponseParser*) parser->data;
+    PyObject* callable = PyObject_GetAttrString((PyObject*)self, "_on_message_begin");
+    if (callable) {
         PyObject* result = PyObject_CallObject(callable, NULL);
         PyObject* exception = PyErr_Occurred();
         if (exception != NULL) {
@@ -45,8 +45,8 @@ static int on_message_complete(llhttp_t* parser)
     int fail = 0;
     PyHTTPResponseParser *self = (PyHTTPResponseParser*) parser->data;
     self->should_keep_alive = llhttp_should_keep_alive(parser) ? KA_TRUE : KA_FALSE;
-    if (PyObject_HasAttrString(self, "_on_message_complete")) {
-        PyObject* callable = PyObject_GetAttrString(self, "_on_message_complete");
+    PyObject* callable = PyObject_GetAttrString((PyObject*)self, "_on_message_complete");
+    if (callable) {
         PyObject* result = PyObject_CallObject(callable, NULL);
         PyObject* exception = PyErr_Occurred();
         if (exception != NULL) {
@@ -65,9 +65,9 @@ static int on_headers_complete(llhttp_t* parser)
 {
     /* 1 => skip body, 2 => upgrade, 0 => continue, -1 => error */
     int skip_body = 0;
-    PyObject* self = (PyObject*)parser->data;
-    if (PyObject_HasAttrString(self, "_on_headers_complete")) {
-        PyObject* callable = PyObject_GetAttrString(self, "_on_headers_complete");
+    PyHTTPResponseParser *self = (PyHTTPResponseParser*) parser->data;
+    PyObject* callable = PyObject_GetAttrString((PyObject*)self, "_on_headers_complete");
+    if (callable) {
         PyObject* result = PyObject_CallObject(callable, NULL);
         PyObject* exception = PyErr_Occurred();
         if (exception != NULL) {
@@ -84,9 +84,9 @@ static int on_headers_complete(llhttp_t* parser)
 static int on_http_data_cb(llhttp_t* parser, const char *at, size_t length, const char * python_cb)
 {
     int fail = 0;
-    PyObject* self = (PyObject*)parser->data;
-    if (PyObject_HasAttrString(self, python_cb)) {
-        PyObject* callable = PyObject_GetAttrString(self, python_cb);
+    PyHTTPResponseParser *self = (PyHTTPResponseParser*) parser->data;
+    PyObject* callable = PyObject_GetAttrString((PyObject*)self, python_cb);
+    if (callable) {
         PyObject* args = Py_BuildValue("(s#)", at, length);
         PyObject* result = PyObject_CallObject(callable, args);
         PyObject* exception = PyErr_Occurred();
@@ -121,9 +121,9 @@ static int on_header_value(llhttp_t* parser, const char *at, size_t length)
 static int on_body(llhttp_t* parser, const char *at, size_t length)
 {
     int fail = 0;
-    PyObject* self = (PyObject*)parser->data;
-    if (PyObject_HasAttrString(self, "_on_body")) {
-        PyObject* callable = PyObject_GetAttrString(self, "_on_body");
+    PyHTTPResponseParser *self = (PyHTTPResponseParser*) parser->data;
+    PyObject* callable = PyObject_GetAttrString((PyObject*)self, "_on_body");
+    if (callable) {
         PyObject* bytearray = PyByteArray_FromStringAndSize(at, length);
         PyObject* result = PyObject_CallFunctionObjArgs(
             callable, bytearray, NULL);
