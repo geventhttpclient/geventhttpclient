@@ -2,7 +2,7 @@ from http.cookiejar import CookieJar
 
 import pytest
 
-from geventhttpclient.tests.conftest import LISTENER_URL, wsgiserver
+from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
 from geventhttpclient.useragent import BadStatusCode, UserAgent
 
 
@@ -12,16 +12,6 @@ def tmp_file(tmp_path):
     with open(fpath, "wb") as f:
         f.write(b"123456789")
     return fpath
-
-
-def check_upload(body, headers=None):
-    def wsgi_handler(env, start_response):
-        assert env["REQUEST_METHOD"] == "POST"
-        assert body == env["wsgi.input"].read()
-        start_response("200 OK", [])
-        return []
-
-    return wsgi_handler
 
 
 def internal_server_error():
@@ -83,19 +73,46 @@ def return_brotli():
     return wsgi_handler
 
 
+def test_unicode_post():
+    byte_string = b"\xc8\xb9\xc8\xbc\xc9\x85"
+    unicode_string = byte_string.decode("utf-8")
+    headers = {
+        "Content-Length": str(len(byte_string)),
+        "Content-Type": "text/plain; charset=utf-8",
+    }
+    with wsgiserver(check_upload(byte_string, headers)):
+        useragent = UserAgent()
+        useragent.urlopen(LISTENER_URL, method="POST", payload=unicode_string)
+
+
+def test_bytes_post():
+    headers = {"Content-Length": "5", "Content-Type": "application/octet-stream"}
+    with wsgiserver(check_upload(b"12345", headers)):
+        useragent = UserAgent()
+        useragent.urlopen(LISTENER_URL, method="POST", payload=b"12345")
+
+
+def test_dict_post_with_content_type():
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+    payload = {"foo": "bar"}
+    with wsgiserver(set_cookie()):  # lazy. I just want to see that we dont crash making the request
+        resp = UserAgent().urlopen(LISTENER_URL, method="POST", payload=payload, headers=headers)
+        assert resp.status_code == 200
+
+
 def test_file_post(tmp_file):
-    headers = {"CONTENT_LENGTH": "9", "CONTENT_TYPE": "application/octet-stream"}
+    headers = {"Content-Length": "9", "Content-Type": "application/octet-stream"}
     with wsgiserver(check_upload(b"123456789", headers)):
         useragent = UserAgent()
         with open(tmp_file, "rb") as body:
             useragent.urlopen(LISTENER_URL, method="POST", payload=body)
 
 
-def test_multipart_post(tmp_file):
-    with open(tmp_file, "a+b") as f:
+def test_multipart_file(tmp_file):
+    with open(tmp_file, "rb") as f:
         headers = {
-            "CONTENT_LENGTH": "237",
-            "CONTENT_TYPE": "multipart/form-data; boundary=custom_boundary",
+            "Content-Length": "173",
+            "Content-Type": "multipart/form-data; boundary=custom_boundary",
         }
         files = {
             "file": (
@@ -111,15 +128,11 @@ def test_multipart_post(tmp_file):
             check_upload(
                 (
                     b"--custom_boundary\r\n"
-                    b'Content-Disposition: form-data; name="files"\r\n'
-                    b"\r\n"
-                    b"file\r\n"
-                    b"--custom_boundary\r\n"
                     b'Content-Disposition: form-data; name="file"; filename="report.xls"\r\n'
                     b"Content-Type: application/vnd.ms-excel\r\n"
                     b"Expires: 0\r\n"
                     b"\r\n"
-                    b"\r\n"
+                    b"123456789\r\n"
                     b"--custom_boundary--"
                     b"\r\n"
                 ),
@@ -130,31 +143,43 @@ def test_multipart_post(tmp_file):
             useragent.urlopen(LISTENER_URL, method="POST", files=files)
 
 
-def test_unicode_post():
-    byte_string = b"\xc8\xb9\xc8\xbc\xc9\x85"
-    unicode_string = byte_string.decode("utf-8")
-    headers = {
-        "CONTENT_LENGTH": str(len(byte_string)),
-        "CONTENT_TYPE": "text/plain; charset=utf-8",
-    }
-    with wsgiserver(check_upload(byte_string, headers)):
-        useragent = UserAgent()
-        useragent.urlopen(LISTENER_URL, method="POST", payload=unicode_string)
+def test_multipart_mixed(tmp_file):
+    with open(tmp_file, "rb") as f:
+        headers = {
+            "Content-Length": "248",
+            "Content-Type": "multipart/form-data; boundary=custom_boundary",
+        }
+        files = {
+            "file": (
+                "report.xls",
+                f,
+                "application/vnd.ms-excel",
+                {"Expires": "0"},
+                "custom_boundary",
+            )
+        }
 
-
-def test_bytes_post():
-    headers = {"CONTENT_LENGTH": "5", "CONTENT_TYPE": "application/octet-stream"}
-    with wsgiserver(check_upload(b"12345", headers)):
-        useragent = UserAgent()
-        useragent.urlopen(LISTENER_URL, method="POST", payload=b"12345")
-
-
-def test_dict_post_with_content_type():
-    headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    payload = {"foo": "bar"}
-    with wsgiserver(set_cookie()):  # lazy. I just want to see that we dont crash making the request
-        resp = UserAgent().urlopen(LISTENER_URL, method="POST", payload=payload, headers=headers)
-        assert resp.status_code == 200
+        with wsgiserver(
+            check_upload(
+                (
+                    b"--custom_boundary\r\n"
+                    b'Content-Disposition: form-data; name="bla"\r\n'
+                    b"\r\n"
+                    b"sometext\r\n"
+                    b"--custom_boundary\r\n"
+                    b'Content-Disposition: form-data; name="file"; filename="report.xls"\r\n'
+                    b"Content-Type: application/vnd.ms-excel\r\n"
+                    b"Expires: 0\r\n"
+                    b"\r\n"
+                    b"123456789\r\n"
+                    b"--custom_boundary--"
+                    b"\r\n"
+                ),
+                headers,
+            )
+        ):
+            useragent = UserAgent()
+            useragent.urlopen(LISTENER_URL, method="POST", files=files, bla="sometext")
 
 
 def test_redirect():
@@ -231,3 +256,42 @@ def test_download(tmp_path):
     fpath = tmp_path / url.rsplit("/", 1)[-1]
     UserAgent().download(url, fpath)
     assert fpath.stat().st_size == 2**20  # 1 MB
+
+
+@pytest.mark.network
+def test_httpbin_multipart():
+    """Sent a request body with mixed form data:
+
+    --custom_boundary_12345
+    Content-Disposition: form-data; name="bla"
+
+    sometext
+    --custom_boundary_12345
+    Content-Disposition: form-data; name="file"; filename="report.xls"
+    Content-Type: application/vnd.ms-excel
+    Expires: 0
+
+    1234567890
+    --custom_boundary_12345--
+    """
+
+    custom_boundary = "custom_boundary_12345"
+    files = {
+        "file": (
+            "report.xls",
+            b"1234567890",
+            "application/vnd.ms-excel",
+            {"Expires": "0"},
+            custom_boundary,
+        )
+    }
+    resp = UserAgent().urlopen(
+        f"http://{HTTPBIN_HOST}/post", method="POST", files=files, bla="sometext"
+    )
+    rjson = resp.json()
+    request_lines = rjson["data"].splitlines()
+    assert request_lines[0] == f"--{custom_boundary}"
+    assert request_lines[-1] == f"--{custom_boundary}--"
+    assert rjson["headers"]["Content-Type"] == [f"multipart/form-data; boundary={custom_boundary}"]
+    assert rjson["files"]["file"] == ["1234567890"]
+    assert rjson["form"]["bla"] == ["sometext"]

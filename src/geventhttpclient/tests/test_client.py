@@ -7,7 +7,7 @@ import pytest
 
 from geventhttpclient import __version__
 from geventhttpclient.client import METHOD_GET, HTTPClient
-from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER, server, wsgiserver
+from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
 
 
 def httpbin_client(
@@ -214,34 +214,24 @@ def test_internal_server_error():
         assert len(body) == response.content_length
 
 
-def check_upload(body, body_length):
-    def wsgi_handler(env, start_response):
-        assert int(env.get("CONTENT_LENGTH")) == body_length
-        assert body == env["wsgi.input"].read()
-        start_response("200 OK", [])
-        return []
-
-    return wsgi_handler
-
-
 def test_file_post(tmp_path):
     fpath = tmp_path / "tmp_body.txt"
     with open(fpath, "wb") as body:
         body.write(b"123456789")
-    with wsgiserver(check_upload(b"123456789", 9)):
+    with wsgiserver(check_upload(b"123456789", length=9)):
         client = HTTPClient(*LISTENER)
         with open(fpath, "rb") as body:
             client.post("/", body)
 
 
 def test_bytes_post():
-    with wsgiserver(check_upload(b"12345", 5)):
+    with wsgiserver(check_upload(b"12345", length=5)):
         client = HTTPClient(*LISTENER)
         client.post("/", b"12345")
 
 
 def test_string_post():
-    with wsgiserver(check_upload(b"12345", 5)):
+    with wsgiserver(check_upload(b"12345", length=5)):
         client = HTTPClient(*LISTENER)
         client.post("/", "12345")
 
@@ -249,7 +239,7 @@ def test_string_post():
 def test_unicode_post():
     byte_string = b"\xc8\xb9\xc8\xbc\xc9\x85"
     unicode_string = byte_string.decode("utf-8")
-    with wsgiserver(check_upload(byte_string, len(byte_string))):
+    with wsgiserver(check_upload(byte_string, length=len(byte_string))):
         client = HTTPClient(*LISTENER)
         client.post("/", unicode_string)
 

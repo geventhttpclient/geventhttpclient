@@ -55,3 +55,22 @@ def wsgiserver(handler):
             raise exception_queue.get()
     finally:
         server.stop()
+
+
+def check_upload(body, headers=None, length=None):
+    def wsgi_handler(env, start_response):
+        assert body == env["wsgi.input"].read()
+        assert env["REQUEST_METHOD"] == "POST"
+        if length is not None:
+            assert int(env.get("CONTENT_LENGTH")) == length
+            assert len(body) == length
+        if headers:
+            for field, val in headers.items():
+                env_key = field.upper().replace("-", "_")
+                assert env[env_key] == val
+                if env_key == "CONTENT_LENGTH":
+                    assert len(body) == int(val)
+        start_response("200 OK", [])
+        return []
+
+    return wsgi_handler
