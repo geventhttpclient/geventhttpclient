@@ -22,7 +22,7 @@ if not _CA_CERTS or os.path.isdir(_CA_CERTS):
 _DEFAULT_CIPHERS = (
     "ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:"
     "DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:ECDH+RC4:"
-    "DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5"
+    "DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5"  # codespell-ignore
 )
 
 
@@ -63,7 +63,7 @@ class ConnectionPool:
         self.disable_ipv6 = disable_ipv6
 
     def _resolve(self):
-        """resolve (dns) socket informations needed to connect it."""
+        """resolve (dns) socket information needed to connect it."""
         family = 0
         if self.disable_ipv6:
             family = gevent.socket.AF_INET
@@ -84,7 +84,7 @@ class ConnectionPool:
                 sock = self._socket_queue.get(block=False)
                 try:
                     sock.close()
-                except:
+                except:  # noqa
                     pass
             except gevent.queue.Empty:
                 pass
@@ -118,7 +118,7 @@ class ConnectionPool:
                 sock.close()
                 if not first_error:
                     first_error = e
-            except:
+            except:  # noqa
                 sock.close()
                 raise
 
@@ -159,7 +159,7 @@ class ConnectionPool:
         except gevent.queue.Empty:
             try:
                 return self._create_socket()
-            except:
+            except:  # noqa
                 self._semaphore.release()
                 raise
 
@@ -168,7 +168,7 @@ class ConnectionPool:
         if self._closed:
             try:
                 sock.close()
-            except:
+            except:  # noqa
                 pass
             return
         self._socket_queue.put(sock)
@@ -178,7 +178,7 @@ class ConnectionPool:
         """call when the socket is no more usable."""
         try:
             sock.close()
-        except:
+        except:  # noqa
             pass
         if not self._closed:
             self._semaphore.release()

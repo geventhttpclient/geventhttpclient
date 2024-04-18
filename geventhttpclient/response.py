@@ -150,7 +150,7 @@ class HTTPSocketResponse(HTTPResponse):
             if self._sock is not None and self.should_close():
                 try:
                     self._sock.close()
-                except:
+                except:  # noqa
                     pass
         finally:
             self._sock = None
