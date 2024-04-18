@@ -534,6 +534,18 @@ class UserAgent:
             self._handle_retries_exceeded(url, last_error=e)
         return resp
 
+    def _make_request(self, url, method="GET", headers=None, payload=None, params=None, files=None):
+        """Backwards compatibility for locust."""
+        return _make_request(
+            url,
+            method=method,
+            headers=headers,
+            payload=payload,
+            params=params,
+            files=files,
+            request_type=self.request_type,
+        )
+
 
 def _make_request(
     url, method, headers, payload=None, params=None, files=None, request_type=CompatRequest
