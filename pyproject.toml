@@ -92,9 +92,8 @@ commands =
     rm -rf build
     # find errors for windows
     # find . -name '*.pyc' -delete
-    python -m build
+    python setup.py build_ext --inplace
     pip install -r requirements-dev.txt
-    pip install -e.
     pytest tests
 """
 
