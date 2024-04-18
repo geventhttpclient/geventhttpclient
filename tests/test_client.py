@@ -7,7 +7,7 @@ import pytest
 
 from geventhttpclient import __version__
 from geventhttpclient.client import METHOD_GET, HTTPClient
-from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
+from tests.common import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
 
 
 def httpbin_client(

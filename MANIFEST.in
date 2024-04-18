@@ -1,10 +1,9 @@
-include src/geventhttpclient/*.py
+include geventhttpclient/*.py
 include ext/*.c
 include ext/*.h
 recursive-include llhttp *.h *.c LICENSE-MIT
-recursive-include src/geventhttpclient/tests *
+recursive-exclude tests *
 global-exclude __pycache__
 global-exclude *.py[co]
 include pyproject.toml
-include LICENSE.txt
 include README.md

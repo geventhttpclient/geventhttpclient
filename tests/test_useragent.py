@@ -3,8 +3,8 @@ from http.cookiejar import CookieJar
 import pytest
 
 from geventhttpclient.header import Headers
-from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
 from geventhttpclient.useragent import BadStatusCode, UserAgent
+from tests.common import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
 
 
 @pytest.fixture

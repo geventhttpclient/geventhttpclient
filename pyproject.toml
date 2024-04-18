@@ -58,11 +58,12 @@ download = "https://pypi.org/project/geventhttpclient/#files"
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = ["src"]
-exclude = ["geventhttpclient.tests*"]
+where = [""]
+include = ["geventhttpclient"]
+exclude = ["*.tests", "*.tests.*", "tests.*", "tests"]
 
 [tool.setuptools.package-data]
-"*" = ["LICENSE.txt", "README.md", "release.md", "LICENSE-MIT"]
+"*" = ["README.md", "release.md", "LICENSE-MIT"]
 
 [tool.setuptools.exclude-package-data]
 "*" = ["__pycache__", "*.pyc", "*.pyo"]
@@ -78,6 +79,11 @@ markers = [
 envlist = "py{39,310,311,312}"
 
 [tool.tox.testenv]
+deps = [
+    "pip",
+    "pytest",
+    "build",
+]
 allowlist_externals = [
     "rm",
     "find",
@@ -86,10 +92,10 @@ allowlist_externals = [
 commands = [
     "rm -rf build",
     "find . -name '*.pyc' -delete",
-    "python setup.py clean",
-    "python setup.py build_ext --inplace",
+    "python -m build",
     "pip install -r requirements-dev.txt",
-    "pytest --fulltrace src/geventhttpclient/tests"
+    "pip install -e.",
+    "pytest",
 ]
 
 
@@ -101,7 +107,7 @@ lint.extend-select = ["UP"]
 lint.ignore = ["F821", "UP038", "E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["geventhttpclient"]
+known-first-party = ["geventhttpclient", "tests"]
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

@@ -14,7 +14,7 @@ from gevent import joinall
 from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
-from geventhttpclient.tests.conftest import LISTENER
+from tests.common import LISTENER
 
 BASEDIR = os.path.dirname(__file__)
 KEY = os.path.join(BASEDIR, "server.key")

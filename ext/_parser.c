@@ -269,7 +269,7 @@ PyHTTPResponseParser_should_keep_alive(PyHTTPResponseParser* self)
     if (self->error != HPE_OK) {
         Py_RETURN_FALSE;
     }
-    int should_keep_alive;
+    int should_keep_alive = 0;
     switch (self->should_keep_alive) {
         case KA_INCOMPLETE:
             should_keep_alive = llhttp_should_keep_alive(self->parser);
