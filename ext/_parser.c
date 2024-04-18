@@ -100,7 +100,7 @@ static int on_http_data_cb(llhttp_t* parser, const char *at, size_t length, cons
         Py_DECREF(callable);
         Py_DECREF(args);
     }
-    return fail;    
+    return fail;
 }
 
 static int on_status(llhttp_t* parser, const char *at, size_t length)
@@ -305,7 +305,7 @@ static PyMethodDef PyHTTPResponseParser_methods[] = {
         "Get remaining content length to read"},
     {"should_keep_alive", (PyCFunction)PyHTTPResponseParser_should_keep_alive,
         METH_NOARGS,
-        "Tell wether the connection should stay connected (HTTP 1.1)"},
+        "Tell whether the connection should stay connected (HTTP 1.1)"},
     {"parser_failed", (PyCFunction)PyHTTPResponseParser_parser_failed,
         METH_NOARGS,
         "Tell if parser have failed."},

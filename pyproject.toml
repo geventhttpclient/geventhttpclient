@@ -112,3 +112,6 @@ known-first-party = ["geventhttpclient", "tests"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "test_no_module_ssl.py" = ["F401"]
+
+[tool.codespell]
+ignore-regex = ".*codespell-ignore$"

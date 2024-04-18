@@ -5,11 +5,11 @@
 
 # geventhttpclient
 
-A high performance, concurrent HTTP client library for python using 
+A high performance, concurrent HTTP client library for python using
 [gevent](http://gevent.org).
 
-`gevent.httplib` support for patching `http.client` was removed in 
-[gevent 1.0](https://github.com/surfly/gevent/commit/b45b83b1bc4de14e3c4859362825044b8e3df7d6), 
+`gevent.httplib` support for patching `http.client` was removed in
+[gevent 1.0](https://github.com/surfly/gevent/commit/b45b83b1bc4de14e3c4859362825044b8e3df7d6),
 **geventhttpclient** now provides that missing functionality.
 
 **geventhttpclient** uses a fast [http parser](https://github.com/nodejs/llhttp),
@@ -78,7 +78,7 @@ import httplib2
 ## High Concurrency
 
 `HTTPClient` has connection pool built in and is greenlet safe by design.
-You can use the same instance among several greenlets. It is the low 
+You can use the same instance among several greenlets. It is the low
 level building block of this library.
 
 ```python
@@ -159,11 +159,11 @@ with open("/tmp/100.dat", "w") as f:
 
 ## Benchmarks
 
-The benchmark does 10000 get requests against a local nginx server in the default 
+The benchmark does 10000 get requests against a local nginx server in the default
 configuration with a concurrency of 10. See `benchmarks` folder. The requests per
 second for a couple of popular clients is given in the table below. Please read
 [benchmarks/README.md](https://github.com/geventhttpclient/geventhttpclient/blob/master/benchmarks/README.md)
-for mor details. Also note, HTTPX is better be used with asyncio, not gevent.
+for more details. Also note, HTTPX is better be used with asyncio, not gevent.
 
 | HTTP Client        | RPS    |
 |--------------------|--------|
@@ -177,8 +177,8 @@ for mor details. Also note, HTTPX is better be used with asyncio, not gevent.
 
 ## License
 
-This package is distributed under the [MIT license](https://github.com/geventhttpclient/geventhttpclient/blob/master/LICENSE-MIT). 
-Previous versions of geventhttpclient used http_parser.c, which in turn 
-was based on `src/http/ngx_http_parse.c` from NGINX, copyright Igor Sysoev, 
-Joyent, Inc., and other Node contributors. For more information, see 
-http://github.com/joyent/http-parser 
+This package is distributed under the [MIT license](https://github.com/geventhttpclient/geventhttpclient/blob/master/LICENSE-MIT).
+Previous versions of geventhttpclient used http_parser.c, which in turn
+was based on `src/http/ngx_http_parse.c` from NGINX, copyright Igor Sysoev,
+Joyent, Inc., and other Node contributors. For more information, see
+http://github.com/joyent/http-parser
