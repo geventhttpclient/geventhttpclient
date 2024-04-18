@@ -4,7 +4,7 @@ import urllib.request
 import pytest
 
 from geventhttpclient.httplib import HTTPConnection, patched
-from geventhttpclient.tests.conftest import HTTPBIN_HOST, LISTENER, server
+from tests.common import HTTPBIN_HOST, LISTENER, server
 
 
 def wrong_response_status_line(sock, addr):

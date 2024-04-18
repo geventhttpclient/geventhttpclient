@@ -135,7 +135,7 @@ client.close()
 **geventhttpclient** supports streaming.
 Response objects have a read(N) and readline() method that read the stream
 incrementally.
-See *src/examples/twitter_streaming.py* for pulling twitter stream API.
+See *examples/twitter_streaming.py* for pulling twitter stream API.
 
 Here is an example on how to download a big file chunk by chunk to save memory:
 

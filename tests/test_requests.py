@@ -2,7 +2,7 @@ import pytest
 
 from geventhttpclient.header import Headers
 from geventhttpclient.requests import Session
-from geventhttpclient.tests.conftest import HTTPBIN_HOST
+from tests.common import HTTPBIN_HOST
 
 
 @pytest.mark.network

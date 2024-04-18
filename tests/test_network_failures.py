@@ -5,7 +5,7 @@ import gevent.socket
 import pytest
 
 from geventhttpclient.client import CRLF, HTTPClient
-from geventhttpclient.tests.conftest import LISTENER, server
+from tests.common import LISTENER, server
 
 
 def wrong_response_status_line(sock, addr):
