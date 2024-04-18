@@ -76,27 +76,27 @@ markers = [
 
 
 [tool.tox]
-envlist = "py{39,310,311,312}"
+legacy_tox_ini = """
+[tox]
+envlist = py{39,310,311,312}
 
-[tool.tox.testenv]
-deps = [
-    "pip",
-    "pytest",
-    "build",
-]
-allowlist_externals = [
-    "rm",
-    "find",
-    "pytest"
-]
-commands = [
-    "rm -rf build",
-    "find . -name '*.pyc' -delete",
-    "python -m build",
-    "pip install -r requirements-dev.txt",
-    "pip install -e.",
-    "pytest",
-]
+[testenv]
+deps =
+    pip
+    pytest
+    build
+allowlist_externals =
+    rm
+    find
+commands =
+    rm -rf build
+    # find errors for windows
+    # find . -name '*.pyc' -delete
+    python -m build
+    pip install -r requirements-dev.txt
+    pip install -e.
+    pytest tests
+"""
 
 
 [tool.ruff]
