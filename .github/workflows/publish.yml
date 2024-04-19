@@ -1,7 +1,10 @@
 name: Publish
 
 on: 
-  workflow_dispatch
+  workflow_dispatch:
+  release:
+    types:
+      - published
 
 jobs:
   build-wheels:
