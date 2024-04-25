@@ -55,12 +55,11 @@ download = "https://pypi.org/project/geventhttpclient/#files"
 
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 include-package-data = true
 
 [tool.setuptools.packages.find]
-where = [""]
-include = ["geventhttpclient"]
-exclude = ["*.tests", "*.tests.*", "tests.*", "tests"]
+where = ["src"]
 
 [tool.setuptools.package-data]
 "*" = ["README.md", "release.md", "LICENSE-MIT"]
@@ -94,8 +93,8 @@ commands =
     # find . -name '*.pyc' -delete
     python -m build
     pip install -r requirements-dev.txt
-    pip install -e.
-    pytest tests
+    pip install .
+    pytest
 """
 
 
