@@ -1,6 +1,6 @@
 name: Publish
 
-on: 
+on:
   workflow_dispatch:
   release:
     types:
@@ -72,8 +72,6 @@ jobs:
           skip-existing: true
 
   publish:
-    # only run real publishing on master
-    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     needs: test-publish
     steps:
