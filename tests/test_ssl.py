@@ -1,5 +1,6 @@
 import os
 import ssl
+from unittest.mock import patch, MagicMock
 from contextlib import contextmanager
 from ssl import CertificateError
 from unittest import mock
@@ -288,6 +289,27 @@ def test_verify_self_signed_fail(capsys):
     captured = capsys.readouterr().err
     assert "ssl.SSLError" in captured
     assert "ALERT_UNKNOWN_CA" in captured
+
+
+@patch("ssl.create_default_context")
+def test_ssl_context_cert_and_keyfile(mock_create_default_context):
+    mock_ssl_context = MagicMock()
+    mock_create_default_context.return_value = mock_ssl_context
+
+    ssl_options = {
+        "certfile": "/path/to/certfile.pem",
+        "keyfile": "/path/to/keyfile.pem",
+        "ca_certs": "/path/to/ca-certificates.crt",
+    }
+    http_client = HTTPClient(
+        "github.com", ssl_context_factory=ssl.create_default_context, ssl_options=ssl_options
+    )
+
+    mock_create_default_context.assert_called_once_with(cafile=ssl_options["ca_certs"])
+    mock_ssl_context.load_cert_chain.assert_called_once_with(
+        certfile=ssl_options["certfile"], keyfile=ssl_options["keyfile"]
+    )
+    assert isinstance(http_client, HTTPClient)
 
 
 @pytest.mark.network
