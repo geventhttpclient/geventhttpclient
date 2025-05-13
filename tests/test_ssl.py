@@ -164,7 +164,7 @@ def sni_checker_server():
     def run(sock):
         while True:
             conn, addr = sock.accept()
-            client_hello = conn.recv(1024)
+            client_hello = conn.recv(4096)
             return extract_sni_from_client_hello(client_hello)
 
     def extract_sni_from_client_hello(hello_packet):
