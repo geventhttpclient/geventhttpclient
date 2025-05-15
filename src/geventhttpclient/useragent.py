@@ -457,7 +457,7 @@ class UserAgent:
         client = self.clientpool.get_client(request.url_split)
         resp = client.request(
             request.method,
-            request.url_split.request_uri,
+            request.url_split.quoted_uri,
             body=request.payload,
             headers=request.headers,
         )

@@ -41,11 +41,20 @@ def test_params_urlencoded():
     assert url.fragment == "frag"
 
 
-def test_query_urlencoded():
+def test_quote_spaces():
     url = URL("http://gevent.org/?foo=bar with spaces")
-    assert url.query == "foo=bar%20with%20spaces"
+    assert url.quoted == "http://gevent.org/?foo=bar%20with%20spaces"
+    assert url.quoted_uri == "/?foo=bar%20with%20spaces"
     assert url.host == "gevent.org"
     assert url.port == 80
+
+
+def test_quote_non_ascii():
+    url = URL("http://127.0.0.1:8000/ы")
+    assert url.quoted == "http://127.0.0.1:8000/%D1%8B"
+    assert url.quoted_uri == "/%D1%8B"
+    assert url.host == "127.0.0.1"
+    assert url.port == 8000
 
 
 def test_tuple_unpack():
