@@ -152,7 +152,7 @@ class Headers(dict):
             for field in other:
                 self.add(field, other[field])
         elif hasattr(other, "keys"):
-            for field in other.fields():
+            for field in other.keys():
                 self.add(field, other[field])
         else:
             for field, value in other:
@@ -167,7 +167,7 @@ class Headers(dict):
         while preserving case-sensitive header fields.
         """
         if len(args) > 1:
-            raise TypeError(f"extend() takes at most 1 positional argument ({len(args)} given)")
+            raise TypeError(f"update() takes at most 1 positional argument ({len(args)} given)")
         other = args[0] if len(args) >= 1 else ()
 
         if isinstance(other, type(self)):
