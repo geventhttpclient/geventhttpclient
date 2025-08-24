@@ -1,6 +1,7 @@
 import random
 import string
 from datetime import datetime
+from email.message import Message
 from http.cookiejar import CookieJar
 from urllib.request import Request
 
@@ -225,3 +226,14 @@ def test_compat_dict():
     assert d["D"] == "asdf"
     assert d["E"] == "d, f"
     assert d["Cookie"] == "d, e, f"
+
+
+def test_extend_with_keys():
+    msg = Message()
+    msg["Foo"] = "bar"
+    msg["Baz"] = "qux"
+
+    h = Headers()
+    h.extend(msg)
+    assert h["Foo"] == "bar"
+    assert h["Baz"] == "qux"
