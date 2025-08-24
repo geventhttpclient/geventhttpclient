@@ -138,6 +138,21 @@ def test_readline():
         assert [x["index"] for x in lines] == [x for x in range(0, 100)]
 
 
+def chunks_iter(sock, addr):
+    sock.recv(1024)
+    sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 10\r\nConnection: close\r\n\r\n0123456789")
+
+
+def test_response_chunks_iter():
+    with server(chunks_iter):
+        client = HTTPClient(*LISTENER, block_size=4)
+        response = client.get("/")
+        chunks = [next(response)]
+        for chunk in response:
+            chunks.append(chunk)
+        assert b"".join(chunks) == b"0123456789"
+
+
 def readline_multibyte_sep(sock, addr):
     sock.recv(1024)
     iterator = StreamTestIterator("\r\n", 100)

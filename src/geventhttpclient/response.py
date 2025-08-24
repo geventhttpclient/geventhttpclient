@@ -246,7 +246,7 @@ class HTTPSocketResponse(HTTPResponse):
     def __iter__(self):
         return self
 
-    def next(self):
+    def __next__(self):
         bytes = self.read(self.block_size)
         if not len(bytes):
             raise StopIteration()
