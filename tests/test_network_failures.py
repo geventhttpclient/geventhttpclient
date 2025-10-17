@@ -94,7 +94,7 @@ def test_content_too_small():
             response.read()
 
 
-def close_during_chuncked_readline(sock, addr):
+def close_during_chunked_readline(sock, addr):
     sock.recv(4096)
     sock.sendall(b"HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n")
 
@@ -110,8 +110,8 @@ def close_during_chuncked_readline(sock, addr):
     sock.close()
 
 
-def test_close_during_chuncked_readline():
-    with server(close_during_chuncked_readline):
+def test_close_during_chunked_readline():
+    with server(close_during_chunked_readline):
         client = HTTPClient(*LISTENER)
         response = client.get("/")
         assert response["transfer-encoding"] == "chunked"
@@ -124,7 +124,7 @@ def test_close_during_chuncked_readline():
         assert len(chunks) == 3
 
 
-def timeout_during_chuncked_readline(sock, addr):
+def timeout_during_chunked_readline(sock, addr):
     sock.recv(4096)
     sock.sendall(b"HTTP/1.1 200 Ok\r\nTransfer-Encoding: chunked\r\n\r\n")
 
@@ -140,8 +140,8 @@ def timeout_during_chuncked_readline(sock, addr):
     sock.close()
 
 
-def test_timeout_during_chuncked_readline():
-    with server(timeout_during_chuncked_readline):
+def test_timeout_during_chunked_readline():
+    with server(timeout_during_chunked_readline):
         client = HTTPClient(*LISTENER, network_timeout=0.1)
         response = client.get("/")
         assert response["transfer-encoding"] == "chunked"
