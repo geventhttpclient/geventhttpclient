@@ -102,7 +102,7 @@ fix = false
 line-length = 100
 target-version = "py311"
 lint.extend-select = ["UP"]
-lint.ignore = ["F821", "UP038", "E402"]
+lint.ignore = ["F821", "E402"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["geventhttpclient", "tests"]
