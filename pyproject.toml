@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geventhttpclient"
-version = "2.3.4" # don't forget to update version __init__.py as well
+version = "2.3.5" # don't forget to update version __init__.py as well
 description = "HTTP client library for gevent"
 readme = "README.md"
 requires-python = ">=3.9"
