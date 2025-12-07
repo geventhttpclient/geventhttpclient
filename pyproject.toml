@@ -22,6 +22,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development :: Libraries",
 ]
@@ -76,7 +78,7 @@ markers = [
 [tool.tox]
 legacy_tox_ini = """
 [tox]
-envlist = py{39,310,311,312}
+envlist = py{39,310,311,312,313,314}
 
 [testenv]
 deps =
