@@ -24,7 +24,7 @@ jobs:
       - uses: docker/setup-qemu-action@v3
         if: ${{ matrix.os == 'ubuntu-latest' }}
         name: Set up QEMU
-      - run: pipx run cibuildwheel --output-dir wheelhouse
+      - run: pipx run cibuildwheel==3.3.0 --output-dir wheelhouse
         name: Run build wheel
         env:
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
