@@ -11,8 +11,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {name: Windows, python: '3.13', os: windows-latest, tox: py313}
-          - {name: Mac, python: '3.13', os: macos-latest, tox: py313}
+          - {name: Windows, python: '3.14', os: windows-latest, tox: py314}
+          - {name: Mac, python: '3.14', os: macos-latest, tox: py314}
           - {name: '3.14', python: '3.14', os: ubuntu-latest, tox: py314}
           - {name: '3.13', python: '3.13', os: ubuntu-latest, tox: py313}
           - {name: '3.12', python: '3.12', os: ubuntu-latest, tox: py312}
@@ -21,10 +21,10 @@ jobs:
           - {name: '3.9', python: '3.9', os: ubuntu-latest, tox: py39}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
       - name: Get pip cache dir
