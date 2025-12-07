@@ -20,7 +20,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
       - uses: docker/setup-qemu-action@v3
         if: ${{ matrix.os == 'ubuntu-latest' }}
         name: Set up QEMU
@@ -45,7 +45,7 @@ jobs:
           submodules: recursive
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
       - run: pipx run build --sdist
         name: Build source tarball
       - uses: actions/upload-artifact@v4
