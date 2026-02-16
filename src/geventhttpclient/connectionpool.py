@@ -1,4 +1,5 @@
 import os
+import socket
 
 import gevent.queue
 import gevent.socket
@@ -47,6 +48,7 @@ class ConnectionPool:
         connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
         network_timeout=DEFAULT_NETWORK_TIMEOUT,
         use_proxy=False,
+        validate_connections=False,
     ):
         self._closed = False
         self._connection_host = connection_host
@@ -61,6 +63,7 @@ class ConnectionPool:
         self.network_timeout = network_timeout
         self.size = size
         self.disable_ipv6 = disable_ipv6
+        self.validate_connections = validate_connections
 
     def _resolve(self):
         """resolve (dns) socket information needed to connect it."""
@@ -125,7 +128,7 @@ class ConnectionPool:
         if first_error:
             raise first_error
         else:
-            raise RuntimeError(f"Cannot resolve {self._host}:{self._port}")
+            raise RuntimeError(f"Cannot resolve {self._connection_host}:{self._connection_port}")
 
     def after_connect(self, sock):
         pass
@@ -149,19 +152,57 @@ class ConnectionPool:
             if not parts or parts[1] != b"200":
                 raise RuntimeError(f"Error response from Proxy server : {resp}")
 
+    def _is_socket_alive(self, sock):
+        """Check if a socket is still connected and alive.
+
+        Uses MSG_PEEK | MSG_DONTWAIT to check for EOF without consuming data,
+        and without blocking (critical for gevent compatibility).
+
+        Returns False if connection is closed or broken.
+        """
+        try:
+            # MSG_PEEK: Look at buffer without consuming data
+            # MSG_DONTWAIT: Don't block if no data available (gevent-friendly)
+            data = sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
+            if data == b"":
+                # Connection closed by peer (EOF)
+                return False
+            return True
+        except BlockingIOError:
+            # Socket is healthy but no data available
+            return True
+        except (OSError, IOError):
+            # Socket is broken/closed
+            return False
+
     def get_socket(self):
         """get a socket from the pool. This blocks until one is available."""
         self._semaphore.acquire()
         if self._closed:
             raise RuntimeError("connection pool closed")
-        try:
-            return self._socket_queue.get(block=False)
-        except gevent.queue.Empty:
+
+        # Try to get a valid connection from the pool
+        while not self._socket_queue.empty():
             try:
-                return self._create_socket()
-            except:  # noqa
-                self._semaphore.release()
-                raise
+                sock = self._socket_queue.get(block=False)
+                if self._is_socket_alive(sock):
+                    # Connection is still alive, return it
+                    return sock
+                else:
+                    # Connection is dead, close it and try next
+                    try:
+                        sock.close()
+                    except:
+                        pass
+            except gevent.queue.Empty:
+                break
+
+        # No valid connections in pool, create a new one
+        try:
+            return self._create_socket()
+        except:  # noqa
+            self._semaphore.release()
+            raise
 
     def return_socket(self, sock):
         """return a socket to the pool."""

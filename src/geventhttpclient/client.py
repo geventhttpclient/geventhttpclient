@@ -81,6 +81,7 @@ class HTTPClient:
         proxy_port=None,
         version=HTTP_11,
         headers_type=Headers,
+        validate_connections=False,
     ):
         if headers is None:
             headers = headers_type()
@@ -122,6 +123,7 @@ class HTTPClient:
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
                 use_proxy=self.use_proxy,
+                validate_connections=validate_connections,
             )
         else:
             self.ssl = False
@@ -139,6 +141,7 @@ class HTTPClient:
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
                 use_proxy=self.use_proxy,
+                validate_connections=validate_connections,
             )
         self.version = version
         self.headers_type = headers_type
