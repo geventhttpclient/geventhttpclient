@@ -48,7 +48,6 @@ class ConnectionPool:
         connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
         network_timeout=DEFAULT_NETWORK_TIMEOUT,
         use_proxy=False,
-        validate_connections=False,
     ):
         self._closed = False
         self._connection_host = connection_host
@@ -63,7 +62,6 @@ class ConnectionPool:
         self.network_timeout = network_timeout
         self.size = size
         self.disable_ipv6 = disable_ipv6
-        self.validate_connections = validate_connections
 
     def _resolve(self):
         """resolve (dns) socket information needed to connect it."""
@@ -153,26 +151,24 @@ class ConnectionPool:
                 raise RuntimeError(f"Error response from Proxy server : {resp}")
 
     def _is_socket_alive(self, sock):
-        """Check if a socket is still connected and alive.
+        """check if a socket is still connected and alive.
 
-        Uses MSG_PEEK | MSG_DONTWAIT to check for EOF without consuming data,
-        and without blocking (critical for gevent compatibility).
+        uses MSG_PEEK | MSG_DONTWAIT to check for eof without consuming data,
+        and without blocking.
 
-        Returns False if connection is closed or broken.
+        returns false if connection is closed or broken.
         """
         try:
-            # MSG_PEEK: Look at buffer without consuming data
-            # MSG_DONTWAIT: Don't block if no data available (gevent-friendly)
-            data = sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
+            raw_sock = getattr(sock, "_sock", sock)
+            if raw_sock.fileno() < 0:
+                return False
+            data = raw_sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
             if data == b"":
-                # Connection closed by peer (EOF)
                 return False
             return True
         except BlockingIOError:
-            # Socket is healthy but no data available
             return True
         except (OSError, IOError):
-            # Socket is broken/closed
             return False
 
     def get_socket(self):

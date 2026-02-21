@@ -1,4 +1,5 @@
 import json
+import socket
 
 import gevent.pool
 import gevent.queue
@@ -7,6 +8,7 @@ import pytest
 
 from geventhttpclient import __version__
 from geventhttpclient.client import METHOD_GET, HTTPClient
+from geventhttpclient.connectionpool import ConnectionPool
 from tests.common import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
 
 
@@ -350,3 +352,32 @@ def test_multi_queries_greenlet_safe():
     assert count == 5
     # ensure at least 3 of requests got 200
     assert ok_count >= 3
+
+
+class TestIsSocketAlive:
+    """Unit tests for ConnectionPool._is_socket_alive()"""
+
+    def test_closed_socket_returns_false(self):
+        sock = socket.socket()
+        sock.close()
+        pool = ConnectionPool("127.0.0.1", 80, "127.0.0.1", 80)
+        assert sock.fileno() < 0
+        assert pool._is_socket_alive(sock) is False
+
+    def test_healthy_socket_returns_true(self):
+        s1, s2 = socket.socketpair()
+        try:
+            pool = ConnectionPool("127.0.0.1", 80, "127.0.0.1", 80)
+            assert pool._is_socket_alive(s1) is True
+        finally:
+            s1.close()
+            s2.close()
+
+    def test_peer_orderly_close_returns_false(self):
+        s1, s2 = socket.socketpair()
+        try:
+            s2.close()
+            pool = ConnectionPool("127.0.0.1", 80, "127.0.0.1", 80)
+            assert pool._is_socket_alive(s1) is False
+        finally:
+            s1.close()
