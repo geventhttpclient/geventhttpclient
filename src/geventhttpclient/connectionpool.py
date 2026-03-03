@@ -1,5 +1,6 @@
 import os
 import socket
+import select
 
 import gevent.queue
 import gevent.socket
@@ -151,24 +152,26 @@ class ConnectionPool:
                 raise RuntimeError(f"Error response from Proxy server : {resp}")
 
     def _is_socket_alive(self, sock):
-        """check if a socket is still connected and alive.
+        """Check if a socket is still connected and alive.
 
-        uses MSG_PEEK | MSG_DONTWAIT to check for eof without consuming data,
-        and without blocking.
+        Uses select() to check if socket is readable. An idle keep-alive socket
+        should NOT be readable.
 
-        returns false if connection is closed or broken.
+        Returns False if connection is closed or broken.
         """
+        if sock is None:
+            return False
         try:
-            raw_sock = getattr(sock, "_sock", sock)
-            if raw_sock.fileno() < 0:
+            # Proactive check: A closed socket has a fileno of -1.
+            if sock.fileno() < 0:
                 return False
-            data = raw_sock.recv(1, socket.MSG_PEEK | socket.MSG_DONTWAIT)
-            if data == b"":
+            # If the socket is readable while idle, it's either a FIN or dirty.
+            ready_to_read, _, _ = select.select([sock], [], [], 0.0)
+            if ready_to_read:
                 return False
+            
             return True
-        except BlockingIOError:
-            return True
-        except OSError:
+        except (OSError, ValueError, socket.error):
             return False
 
     def get_socket(self):
