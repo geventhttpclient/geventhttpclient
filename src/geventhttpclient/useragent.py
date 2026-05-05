@@ -277,8 +277,8 @@ class CompatResponse:
 class UserAgent:
     response_type = CompatResponse
     request_type = CompatRequest
-    valid_response_codes = frozenset([200, 206, 301, 302, 303, 307])
-    redirect_resonse_codes = frozenset([301, 302, 303, 307])
+    valid_response_codes = frozenset([200, 206, 301, 302, 303, 307, 308])
+    redirect_resonse_codes = frozenset([301, 302, 303, 307, 308])
 
     def __init__(
         self,
