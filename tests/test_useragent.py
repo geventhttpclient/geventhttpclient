@@ -37,6 +37,20 @@ def check_redirect():
     return wsgi_handler
 
 
+def check_redirect_308():
+    def wsgi_handler(env, start_response):
+        path_info = env.get("PATH_INFO")
+        if path_info == "/":
+            start_response("308 Permanent Redirect", [("Location", LISTENER_URL + "redirected_308")])
+            return []
+        else:
+            assert path_info == "/redirected_308"
+            start_response("200 OK", [])
+            return [b"redirected_308"]
+
+    return wsgi_handler
+
+
 def check_querystring():
     def wsgi_handler(env, start_response):
         querystring = env["QUERY_STRING"]
@@ -188,6 +202,13 @@ def test_redirect():
         resp = UserAgent().urlopen(LISTENER_URL)
         assert resp.status_code == 200
         assert b"redirected" == resp.content
+
+
+def test_redirect_308():
+    with wsgiserver(check_redirect_308()):
+        resp = UserAgent().urlopen(LISTENER_URL)
+        assert resp.status_code == 200
+        assert b"redirected_308" == resp.content
 
 
 def test_params():

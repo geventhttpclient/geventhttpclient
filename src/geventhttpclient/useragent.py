@@ -130,7 +130,7 @@ class CompatRequest:
     def redirect(self, code, location):
         """Modify the request inplace to point to the new location"""
         self.set_url(self.url_split.redirect(location))
-        if code in (302, 303):
+        if code in (301, 302, 303):
             self._drop_payload()
         self._drop_cookies()
 
@@ -277,8 +277,8 @@ class CompatResponse:
 class UserAgent:
     response_type = CompatResponse
     request_type = CompatRequest
-    valid_response_codes = frozenset([200, 206, 301, 302, 303, 307])
-    redirect_resonse_codes = frozenset([301, 302, 303, 307])
+    valid_response_codes = frozenset([200, 206, 301, 302, 303, 307, 308])
+    redirect_resonse_codes = frozenset([301, 302, 303, 307, 308])
 
     def __init__(
         self,
