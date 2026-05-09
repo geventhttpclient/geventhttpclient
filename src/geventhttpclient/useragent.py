@@ -130,7 +130,7 @@ class CompatRequest:
     def redirect(self, code, location):
         """Modify the request inplace to point to the new location"""
         self.set_url(self.url_split.redirect(location))
-        if code in (302, 303):
+        if code in (301, 302, 303):
             self._drop_payload()
         self._drop_cookies()
 
