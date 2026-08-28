@@ -31,6 +31,9 @@ jobs:
         env:
           CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
           CIBW_ARCHS_LINUX: "auto aarch64 ppc64le"
+          # Quick test on Windows because the main tests are disabled for Windows
+          CIBW_TEST_COMMAND_WINDOWS: |-
+            python -c "from geventhttpclient.response import HTTPResponse; r = HTTPResponse(); r.feed(b'HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok'); assert r.status_code == 200, r.status_code; assert r.message_complete"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-wheels-${{ matrix.os }}
