@@ -278,7 +278,7 @@ class UserAgent:
     response_type = CompatResponse
     request_type = CompatRequest
     valid_response_codes = frozenset([200, 206, 301, 302, 303, 307, 308])
-    redirect_resonse_codes = frozenset([301, 302, 303, 307, 308])
+    redirect_response_codes = frozenset([301, 302, 303, 307, 308])
 
     def __init__(
         self,
@@ -421,7 +421,7 @@ class UserAgent:
                 redirection = resp.headers.get("location")
                 if isinstance(redirection, bytes):
                     redirection = redirection.decode("utf-8")
-                if resp.status_code in self.redirect_resonse_codes and redirection:
+                if resp.status_code in self.redirect_response_codes and redirection:
                     resp.release()
                     try:
                         req.redirect(resp.status_code, redirection)
