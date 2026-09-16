@@ -73,7 +73,7 @@ class ConnectionPool:
             self._connection_host,
             self._connection_port,
             family,
-            0,
+            gevent.socket.SOCK_STREAM,
             gevent.socket.SOL_TCP,
         )
         # family, socktype, proto, canonname, sockaddr = info[0]
@@ -169,7 +169,7 @@ class ConnectionPool:
             ready_to_read, _, _ = select.select([sock], [], [], 0.0)
             if ready_to_read:
                 return False
-            
+
             return True
         except (OSError, ValueError, socket.error):
             return False

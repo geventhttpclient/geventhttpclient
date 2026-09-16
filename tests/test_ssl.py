@@ -1,5 +1,6 @@
 import os
 import ssl
+import sys
 from unittest.mock import patch, MagicMock
 from contextlib import contextmanager
 from ssl import CertificateError
@@ -48,6 +49,7 @@ def sslserver(handler, backlog=1):
             raise exception_queue.get()
     finally:
         server.stop()
+        gevent.sleep(0.001)
 
 
 @contextmanager
@@ -287,8 +289,12 @@ def test_verify_self_signed_fail(capsys):
     # into other tests output, if we don't give it a split second for printing now.
     gevent.sleep(0.01)
     captured = capsys.readouterr().err
-    assert "ssl.SSLError" in captured
-    assert "ALERT_UNKNOWN_CA" in captured
+    if sys.platform == "win32":
+        # Windows tears the connection down before the TLS alert reaches the server.
+        assert "ConnectionResetError" in captured or "ssl.SSLError" in captured
+    else:
+        assert "ssl.SSLError" in captured
+        assert "ALERT_UNKNOWN_CA" in captured
 
 
 @patch("ssl.create_default_context")

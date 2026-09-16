@@ -30,6 +30,9 @@ def server(handler):
             raise exception_queue.get()
     finally:
         server.stop()
+        # libuv on Windows needs a loop tick to retire the accept watcher, otherwise
+        # the next server on this port never accepts.
+        gevent.sleep(0.001)
 
 
 @contextmanager
@@ -51,6 +54,7 @@ def wsgiserver(handler):
             raise exception_queue.get()
     finally:
         server.stop()
+        gevent.sleep(0.001)
 
 
 def check_upload(body, headers=None, length=None):

@@ -85,17 +85,12 @@ deps =
     pip
     pytest
     build
-allowlist_externals =
-    rm
-    find
 commands =
-    rm -rf build
-    # find errors for windows
-    # find . -name '*.pyc' -delete
+    python -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
     python -m build
     pip install -r requirements-dev.txt
     pip install .
-    pytest
+    pytest {posargs}
 """
 
 
