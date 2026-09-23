@@ -20,9 +20,9 @@ repos:
         exclude: (.pre-commit-config\.yaml)
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.3.7
+    rev: v0.15.22
     hooks:
-      - id: ruff
+      - id: ruff-check
       - id: ruff-format
 
   - repo: https://github.com/codespell-project/codespell

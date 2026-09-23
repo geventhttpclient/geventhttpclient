@@ -41,7 +41,9 @@ def check_redirect_308():
     def wsgi_handler(env, start_response):
         path_info = env.get("PATH_INFO")
         if path_info == "/":
-            start_response("308 Permanent Redirect", [("Location", LISTENER_URL + "redirected_308")])
+            start_response(
+                "308 Permanent Redirect", [("Location", LISTENER_URL + "redirected_308")]
+            )
             return []
         else:
             assert path_info == "/redirected_308"
@@ -110,7 +112,9 @@ def test_bytes_post():
 def test_dict_post_with_content_type():
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
     payload = {"foo": "bar"}
-    with wsgiserver(set_cookie()):  # lazy. I just want to see that we dont crash making the request
+    with wsgiserver(
+        set_cookie()
+    ):  # lazy. I just want to see that we don't crash making the request
         resp = UserAgent().urlopen(LISTENER_URL, method="POST", payload=payload, headers=headers)
         assert resp.status_code == 200
 
@@ -242,9 +246,8 @@ def test_server_error_with_unicode():
 def test_server_error_with_file(tmp_file):
     with wsgiserver(internal_server_error()):
         useragent = UserAgent()
-        with pytest.raises(BadStatusCode):
-            with open(tmp_file, "rb") as body:
-                useragent.urlopen(LISTENER_URL, method="POST", payload=body)
+        with pytest.raises(BadStatusCode), open(tmp_file, "rb") as body:
+            useragent.urlopen(LISTENER_URL, method="POST", payload=body)
 
 
 def test_cookiejar():

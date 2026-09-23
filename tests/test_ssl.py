@@ -1,10 +1,10 @@
 import os
 import ssl
 import sys
-from unittest.mock import patch, MagicMock
 from contextlib import contextmanager
 from ssl import CertificateError
 from unittest import mock
+from unittest.mock import MagicMock, patch
 
 import dpkt.ssl
 import gevent.queue

@@ -96,8 +96,9 @@ commands =
 
 [tool.ruff]
 fix = false
+unsafe-fixes=false
 line-length = 100
-target-version = "py311"
+target-version = "py39"
 lint.extend-select = ["UP"]
 lint.ignore = ["F821", "E402"]
 

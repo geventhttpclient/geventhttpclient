@@ -1,5 +1,4 @@
 import os
-import socket
 import select
 
 import gevent.queue
@@ -120,7 +119,7 @@ class ConnectionPool:
                 sock.close()
                 if not first_error:
                     first_error = e
-            except:  # noqa
+            except:
                 sock.close()
                 raise
 
@@ -167,11 +166,8 @@ class ConnectionPool:
                 return False
             # If the socket is readable while idle, it's either a FIN or dirty.
             ready_to_read, _, _ = select.select([sock], [], [], 0.0)
-            if ready_to_read:
-                return False
-
-            return True
-        except (OSError, ValueError, socket.error):
+            return not ready_to_read
+        except (OSError, ValueError):
             return False
 
     def get_socket(self):
@@ -199,7 +195,7 @@ class ConnectionPool:
         # No valid connections in pool, create a new one
         try:
             return self._create_socket()
-        except:  # noqa
+        except:
             self._semaphore.release()
             raise
 

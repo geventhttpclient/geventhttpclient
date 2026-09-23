@@ -198,19 +198,22 @@ class Session(useragent.UserAgent):
             If Tuple, ('cert', 'key') pair.
         :rtype: CompatResponse
         """
-        for param_name, param in dict(timeout=timeout, cert=cert, verify=verify).items():
+        for param in {"timeout": timeout, "cert": cert, "verify": verify}.values():
             if param is not None:
                 raise ValueError(
                     f"{param} can not be set on a per-request basis. Please configure the UserAgent instead."
                 )
-        for param_name, param in dict(
-            cookies=cookies, auth=auth, proxies=proxies, hooks=hooks
-        ).items():
+        for param in {
+            "cookies": cookies,
+            "auth": auth,
+            "proxies": proxies,
+            "hooks": hooks,
+        }.values():
             if param is not None:
                 raise NotImplementedError(
                     f"{param} is currently unsupported as a keyword argument."
                 )
-        for param_name, param in dict(hooks=hooks).items():
+        for param in {"hooks": hooks}.values():
             if param is not None:
                 raise NotImplementedError(f"{param} is not supported")
 

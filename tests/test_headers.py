@@ -72,7 +72,7 @@ def test_create_from_iterator():
 
 
 def test_create_from_dict():
-    h = Headers(dict(ab=1, cd=2, ef=3, gh=4))
+    h = Headers({"ab": 1, "cd": 2, "ef": 3, "gh": 4})
     assert len(h) == 4
     assert "ab" in h
 
@@ -119,7 +119,7 @@ def test_update_preserve_case():
     h.update(COOKIE="A", Cookie="C")
     assert list(h.items()) == [("Cookie", "C")]
     h = Headers()
-    h.update(dict(Cookie="C", COOKIE="D", cookiE="E"))
+    h.update({"Cookie": "C", "COOKIE": "D", "cookiE": "E"})
     assert list(h.items()) == [("cookiE", "E")]
 
 
@@ -188,7 +188,7 @@ def test_copy():
         assert rnd_key not in h
 
 
-def test_fieldname_string_enforcement():
+def test_field_name_string_enforcement():
     with pytest.raises(Exception):
         Headers({3: 3})
     h = Headers()

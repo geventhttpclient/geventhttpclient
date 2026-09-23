@@ -64,6 +64,7 @@ def test_tuple_unpack():
     assert scheme == "http"
     assert netloc == "gevent.org"
     assert path == "/somepath"
+    assert params == ""
     assert query == "foo=bar"
     assert fragment == "frag"
 
