@@ -1,7 +1,7 @@
 import base64
 import os
 import select
-import socket
+from typing import ClassVar
 
 import gevent.queue
 import gevent.socket
@@ -111,7 +111,7 @@ class ConnectionPool:
         for sock_info in sock_infos:
             try:
                 sock = self._create_tcp_socket(*sock_info[:3])
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 if not first_error:
                     first_error = e
                 continue
@@ -126,7 +126,7 @@ class ConnectionPool:
                 sock.close()
                 if not first_error:
                     first_error = e
-            except:  # noqa
+            except:
                 sock.close()
                 raise
 
@@ -192,11 +192,8 @@ class ConnectionPool:
                 return False
             # If the socket is readable while idle, it's either a FIN or dirty.
             ready_to_read, _, _ = select.select([sock], [], [], 0.0)
-            if ready_to_read:
-                return False
-
-            return True
-        except (OSError, ValueError, socket.error):
+            return not ready_to_read
+        except (OSError, ValueError):
             return False
 
     def get_socket(self):
@@ -224,7 +221,7 @@ class ConnectionPool:
         # No valid connections in pool, create a new one
         try:
             return self._create_socket()
-        except:  # noqa
+        except:
             self._semaphore.release()
             raise
 
@@ -312,7 +309,7 @@ else:
             if provided. It must be a callable that returns a SSLContext.
         """
 
-        default_options = {
+        default_options: ClassVar[dict] = {
             "ciphers": _DEFAULT_CIPHERS,
             "ca_certs": _CA_CERTS,
             "cert_reqs": gevent.ssl.CERT_REQUIRED,

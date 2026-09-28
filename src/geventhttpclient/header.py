@@ -148,11 +148,8 @@ class Headers(dict):
         if isinstance(other, type(self)):
             for field, value in other.items():
                 self.add(field, value)
-        elif isinstance(other, Mapping):
+        elif isinstance(other, Mapping) or hasattr(other, "keys"):
             for field in other:
-                self.add(field, other[field])
-        elif hasattr(other, "keys"):
-            for field in other.keys():
                 self.add(field, other[field])
         else:
             for field, value in other:
@@ -173,11 +170,8 @@ class Headers(dict):
         if isinstance(other, type(self)):
             for field, value in other.items():
                 self[field] = value
-        elif isinstance(other, Mapping):
+        elif isinstance(other, Mapping) or hasattr(other, "keys"):
             for field in other:
-                self[field] = other[field]
-        elif hasattr(other, "keys"):
-            for field in other.keys():
                 self[field] = other[field]
         else:
             for field, value in other:

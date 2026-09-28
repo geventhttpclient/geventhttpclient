@@ -157,7 +157,7 @@ def to_key_val_list(value):
         return None
 
     if isinstance(value, (str, bytes, bool, int)):
-        raise ValueError("cannot encode objects that are not 2-tuples")
+        raise ValueError("cannot encode objects that are not 2-tuples")  # noqa: TRY004
 
     if isinstance(value, Mapping):
         value = value.items()

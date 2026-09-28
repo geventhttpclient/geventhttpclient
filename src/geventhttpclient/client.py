@@ -465,12 +465,12 @@ class HTTPClient:
                     method=method.upper(),
                     headers_type=self.headers_type,
                 )
-            except HTTPConnectionClosed as e:
+            except HTTPConnectionClosed:
                 # connection is released by the response itself
                 if attempts_left > 0:
                     attempts_left -= 1
                     continue
-                raise e
+                raise
             else:
                 response._sent_request = request
                 return response
@@ -517,7 +517,7 @@ class HTTPClient:
             probe.feed(block)
             data += block
 
-    def get(self, request_uri, headers={}):
+    def get(self, request_uri, headers=None):
         return self.request(METHOD_GET, request_uri, headers=headers)
 
     def head(self, request_uri, headers=None):

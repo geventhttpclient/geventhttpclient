@@ -97,8 +97,8 @@ commands =
 [tool.ruff]
 fix = false
 line-length = 100
-target-version = "py311"
-lint.extend-select = ["UP"]
+target-version = "py39"
+lint.extend-select = ["UP", "I", "W"]
 lint.ignore = ["F821", "E402"]
 
 [tool.ruff.lint.isort]
@@ -107,6 +107,7 @@ known-first-party = ["geventhttpclient", "tests"]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "test_no_module_ssl.py" = ["F401"]
+"tests/*" = ["B017", "RUF059", "S110", "BLE001", "DTZ005"]
 
 [tool.codespell]
 ignore-regex = ".*codespell-ignore$"

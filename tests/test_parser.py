@@ -98,7 +98,7 @@ def test_parse_error():
     try:
         response.feed("HTTP/1.1 asdf\r\n\r\n")
         response.feed("")
-        assert response.status_code, 0
+        assert response.status_code, "status code expected to be parsed"
         assert response.message_begun
     except HTTPException as e:
         assert "Invalid status code" in str(e)

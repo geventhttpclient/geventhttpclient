@@ -1,19 +1,19 @@
 import sys
 
-import gevent  # noqa
-import gevent.ssl  # noqa
+import gevent
+import gevent.ssl
 import pytest
 
 
 class DisableSSL:
     def __enter__(self):
-        self._modules = dict()
+        self._modules = {}
         # pretend there is no ssl support
         self._modules["ssl"] = sys.modules.pop("ssl", None)
         sys.modules["ssl"] = None
 
         # ensure gevent must be re-imported to fire an ssl ImportError
-        for module_name in [k for k in sys.modules.keys() if k.startswith("gevent")]:
+        for module_name in [k for k in sys.modules if k.startswith("gevent")]:
             self._modules[module_name] = sys.modules.pop(module_name)
 
     def __exit__(self, *args, **kwargs):

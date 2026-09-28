@@ -94,7 +94,7 @@ def test_from_url(url, client_args):
 
 class StreamTestIterator:
     def __init__(self, sep, count):
-        lines = [json.dumps({"index": i, "title": f"this is line {i}"}) for i in range(0, count)]
+        lines = [json.dumps({"index": i, "title": f"this is line {i}"}) for i in range(count)]
         self.buf = (sep.join(lines) + sep).encode()
 
     def __len__(self):
@@ -139,7 +139,7 @@ def test_readline():
             data = json.loads(line[:-1].decode())
             lines.append(data)
         assert len(lines) == 100
-        assert [x["index"] for x in lines] == [x for x in range(0, 100)]
+        assert [x["index"] for x in lines] == [x for x in range(100)]
 
 
 def chunks_iter(sock, addr):
@@ -151,9 +151,7 @@ def test_response_chunks_iter():
     with server(chunks_iter):
         client = HTTPClient(*LISTENER, block_size=4)
         response = client.get("/")
-        chunks = [next(response)]
-        for chunk in response:
-            chunks.append(chunk)
+        chunks = [next(response), *response]
         assert b"".join(chunks) == b"0123456789"
 
 
@@ -300,7 +298,7 @@ def test_readline_multibyte_sep():
             data = json.loads(line[:-1].decode())
             lines.append(data)
         assert len(lines) == 100
-        assert [x["index"] for x in lines] == [x for x in range(0, 100)]
+        assert [x["index"] for x in lines] == [x for x in range(100)]
 
 
 def readline_multibyte_splitsep(sock, addr):
@@ -322,9 +320,10 @@ def test_readline_multibyte_splitsep():
             if not line:
                 break
             data = json.loads(line[:-2].decode())
+            lines.append(data)
             assert data["a"] == last_index + 1
             last_index = data["a"]
-        len(lines) == 3
+        assert len(lines) == 3
 
 
 def internal_server_error(sock, addr):

@@ -40,7 +40,7 @@ class ConnectionError(Exception):
     def __repr__(self):
         repr_str = super().__repr__()
         if self.kw_text:
-            return repr_str.replace(")", "".join([", ", self.kw_text, ")"]))
+            return repr_str.replace(")", f", {self.kw_text})")
         return repr_str
 
 
@@ -138,7 +138,7 @@ class CompatRequest:
 class CompatResponse:
     """Adapter for urllib3-style responses."""
 
-    __slots__ = "headers", "_response", "_request", "_sent_request", "_cached_content"
+    __slots__ = "_cached_content", "_request", "_response", "_sent_request", "headers"
 
     def __init__(self, ghc_response, request=None, sent_request=None):
         self._response = ghc_response
@@ -318,18 +318,20 @@ class UserAgent:
         exceed the limit.
         Temporary errors should be swallowed here for automatic retries.
         """
-        if isinstance(e, (socket.timeout, gevent.Timeout)):
-            return e
-        elif isinstance(e, socket.error) and e.errno in {
-            errno.ETIMEDOUT,
-            errno.ENOLINK,
-            errno.ENOENT,
-            errno.EPIPE,
-        }:
-            return e
-        elif isinstance(e, ssl.SSLError) and "read operation timed out" in str(e):
-            return e
-        elif isinstance(e, EmptyResponse):
+        if (
+            isinstance(e, (socket.timeout, gevent.Timeout))
+            or isinstance(e, socket.error)
+            and e.errno
+            in {
+                errno.ETIMEDOUT,
+                errno.ENOLINK,
+                errno.ENOENT,
+                errno.EPIPE,
+            }
+            or isinstance(e, ssl.SSLError)
+            and "read operation timed out" in str(e)
+            or isinstance(e, EmptyResponse)
+        ):
             return e
         raise e.with_traceback(sys.exc_info()[2])
 
@@ -392,7 +394,7 @@ class UserAgent:
                     resp = self._urlopen(req)
                 except gevent.GreenletExit:
                     raise
-                except BaseException as e:
+                except BaseException as e:  # noqa: BLE001
                     e.request = req
                     last_error = self._handle_error(e, url=req.url)
                     break  # Continue with next retry
@@ -408,7 +410,7 @@ class UserAgent:
 
                 try:
                     self._verify_status(resp.status_code, url=req.url)
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     # Basic transmission successful, but not the wished result
                     # Let's collect some debug info
                     e.response = resp
@@ -426,7 +428,7 @@ class UserAgent:
                     try:
                         req.redirect(resp.status_code, redirection)
                         continue
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         last_error = self._handle_error(e, url=req.url)
                         break
 
@@ -437,7 +439,7 @@ class UserAgent:
                     # bodies as error and continue retries automatically
                     try:
                         ret = resp.content
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001
                         last_error = self._handle_error(e, url=req.url)
                         break
                     else:
@@ -450,8 +452,7 @@ class UserAgent:
             else:
                 e = RetriesExceeded(url, f"Redirection limit reached ({self.max_redirects})")
                 last_error = self._handle_error(e, url=url)
-        else:
-            return self._handle_retries_exceeded(url, last_error=last_error)
+        return self._handle_retries_exceeded(url, last_error=last_error)
 
     def _urlopen(self, request):
         client = self.clientpool.get_client(request.url_split)
@@ -522,7 +523,7 @@ class UserAgent:
                         while data:
                             f.write(data)
                             data = resp.read(chunk_size)
-                except BaseException as e:
+                except BaseException as e:  # noqa: BLE001
                     self._handle_error(e, url=url)
                     if resp.headers.get("accept-ranges") == "bytes":
                         # Only if this header is set, we can fall back to partial download
