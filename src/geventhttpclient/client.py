@@ -358,7 +358,7 @@ class HTTPClient:
 
         attempts_left = self._connection_pool.size + 1
 
-        while 1:
+        while True:
             sock = self._connection_pool.get_socket()
             try:
                 _request = request.encode()
