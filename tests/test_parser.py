@@ -7,6 +7,7 @@ import pytest
 
 from geventhttpclient.response import HTTPResponse
 
+
 def test_latin1_header_value():
     """Non-UTF-8 header bytes must parse as latin-1 instead of crashing.
 
@@ -32,10 +33,7 @@ def test_latin1_status_message():
 def test_ascii_roundtrip():
     """Plain ASCII headers keep their exact values."""
     response = HTTPResponse()
-    response.feed(
-        b"HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\n"
-        b"Content-Length: 0\r\n\r\n"
-    )
+    response.feed(b"HTTP/1.1 200 Ok\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n")
     assert response["content-type"] == "text/plain"
 
 
