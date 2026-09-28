@@ -101,7 +101,7 @@ def test_parse_error():
         assert response.status_code, 0
         assert response.message_begun
     except HTTPException as e:
-        assert "Invalid response status" in str(e)
+        assert "Invalid status code" in str(e)
     else:
         assert False, "should have raised"
 

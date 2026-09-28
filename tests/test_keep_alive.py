@@ -76,7 +76,10 @@ def test_keep_alive_bodyless_10x_request_with_body():
     response = HTTPResponse()
     response.feed("""HTTP/1.1 100 Continue\r\nTransfer-Encoding: chunked\r\n\r\n""")
     assert response.should_keep_alive()
-    assert response.should_close()
+    # llhttp >= 9 treats interim 1xx responses as bodyless regardless of a
+    # Transfer-Encoding header, so the message is complete and the connection
+    # can be kept alive for the final response.
+    assert not response.should_close()
 
 
 def test_close_connection_and_no_content_length():
