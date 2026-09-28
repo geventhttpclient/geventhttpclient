@@ -141,15 +141,14 @@ static int on_body(llhttp_t* parser, const char *at, size_t length)
     return fail;
 }
 
-static llhttp_settings_t _parser_settings = {
-    on_message_begin,
-    NULL, // on_url
-    on_status,
-    on_header_field,
-    on_header_value,
-    on_headers_complete,
-    on_body,
-    on_message_complete
+static const llhttp_settings_t _parser_settings = {
+    .on_message_begin = on_message_begin,
+    .on_status = on_status,
+    .on_header_field = on_header_field,
+    .on_header_value = on_header_value,
+    .on_headers_complete = on_headers_complete,
+    .on_body = on_body,
+    .on_message_complete = on_message_complete,
 };
 
 static PyObject*

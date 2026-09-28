@@ -107,6 +107,29 @@ def test_parse_error():
 
 
 @wrap_refcount
+def test_content_length_smuggling_cve_2024_27982():
+    """CVE-2024-27982: reject obfuscated Content-Length headers (llhttp >= 6.1.1)."""
+    smuggling_attempts = [
+        # duplicate Content-Length headers, identical values
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 5\r\n\r\nhello",
+        # duplicate Content-Length headers, conflicting values
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nContent-Length: 6\r\n\r\nhello",
+        # comma separated values
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5, 5\r\n\r\nhello",
+        # space separated values
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5 5\r\n\r\nhello",
+        # signed value
+        b"HTTP/1.1 200 OK\r\nContent-Length: +5\r\n\r\nhello",
+        # Content-Length together with Transfer-Encoding
+        b"HTTP/1.1 200 OK\r\nContent-Length: 5\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+    ]
+    for raw_response in smuggling_attempts:
+        response = HTTPResponse()
+        with pytest.raises(HTTPException):
+            response.feed(raw_response)
+
+
+@wrap_refcount
 def test_incomplete_response():
     response = HTTPResponse()
     response.feed("""HTTP/1.1 200 Ok\r\nContent-Length:10\r\n\r\n1""")
