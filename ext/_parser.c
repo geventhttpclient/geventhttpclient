@@ -86,20 +86,34 @@ static int on_http_data_cb(llhttp_t* parser, const char *at, size_t length, cons
     int fail = 0;
     PyHTTPResponseParser *self = (PyHTTPResponseParser*) parser->data;
     PyObject* callable = PyObject_GetAttrString((PyObject*)self, python_cb);
-    if (callable) {
-        PyObject* args = Py_BuildValue("(s#)", at, length);
-        PyObject* result = PyObject_CallObject(callable, args);
-        PyObject* exception = PyErr_Occurred();
-        if (exception != NULL) {
-            fail = -1;
-        } else {
-            if (PyObject_IsTrue(result))
-                fail = -1;
-        }
-        Py_XDECREF(result);
-        Py_DECREF(callable);
-        Py_DECREF(args);
+    if (callable == NULL) {
+        return -1;
     }
+    /* Header fields and values are opaque octet sequences per RFC 9110.
+     * Decode as latin-1, which maps every byte 1:1 and never fails. This
+     * matches the behavior of http.client in the standard library. Decoding
+     * as UTF-8 here used to segfault the interpreter on non-UTF-8 bytes. */
+    PyObject* data = PyUnicode_DecodeLatin1(at, length, NULL);
+    if (data == NULL) {
+        Py_DECREF(callable);
+        return -1;
+    }
+    PyObject* args = PyTuple_Pack(1, data);
+    Py_DECREF(data);
+    if (args == NULL) {
+        Py_DECREF(callable);
+        return -1;
+    }
+    PyObject* result = PyObject_CallObject(callable, args);
+    Py_DECREF(args);
+    if (result == NULL) {
+        fail = -1;
+    } else {
+        if (PyObject_IsTrue(result))
+            fail = -1;
+        Py_DECREF(result);
+    }
+    Py_DECREF(callable);
     return fail;
 }
 
