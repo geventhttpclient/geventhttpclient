@@ -16,7 +16,7 @@ from geventhttpclient import httplib2
 
 def main(n=1000, concurrency=10, url="http://127.0.0.1/"):
     def run(http):
-        response, content = http.request(url)
+        _response, content = http.request(url)
         assert content
         assert b"body" in content
 

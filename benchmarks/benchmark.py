@@ -101,7 +101,7 @@ class Httplib2Benchmark(Benchmark):
         self.client = httplib2.Http(concurrency=self.concurrency)
 
     def request(self):
-        response, content = self.client.request(self.url)
+        _response, content = self.client.request(self.url)
         return content
 
 

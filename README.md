@@ -33,10 +33,12 @@ simple use-cases, it can serve as a drop-in replacement.
 
 ```python
 import geventhttpclient as requests
+
 requests.get("https://github.com").text
 requests.post("http://httpbingo.org/post", data="asdfasd").json()
 
 from geventhttpclient import Session
+
 s = Session()
 s.get("http://httpbingo.org/headers").json()
 s.get("https://github.com").content
@@ -74,6 +76,7 @@ patch before you import or the `super()` calls will fail.
 
 ```python
 import geventhttpclient.httplib
+
 geventhttpclient.httplib.patch()
 
 import httplib2
@@ -109,6 +112,7 @@ assert response.status_code == 200
 # the json parser as it's being read.
 data = json.load(response)["data"]
 
+
 def print_friend_username(client, friend_id):
     friend_url = URL(f"/{friend_id}", params={"access_token": TOKEN})
     # the greenlet will block until a connection is available
@@ -119,6 +123,7 @@ def print_friend_username(client, friend_id):
         print(f"{friend['username']}: {friend['name']}")
     else:
         print(f"{friend['name']} has no username.")
+
 
 # allow to run 20 greenlet at a time, this is more than concurrency
 # of the http client but isn't a problem since the client has its own
@@ -149,7 +154,7 @@ client = HTTPClient.from_url(url)
 response = client.get(url.query_string)
 assert response.status_code == 200
 
-CHUNK_SIZE = 1024 * 16 # 16KB
+CHUNK_SIZE = 1024 * 16  # 16KB
 with open("/tmp/100.dat", "w") as f:
     data = response.read(CHUNK_SIZE)
     while data:
@@ -178,6 +183,7 @@ iterables of bytes work as request bodies as well:
 def generate_data():
     for i in range(100):
         yield b"some data block\n"
+
 
 response = client.post("/upload", body=generate_data())
 ```
