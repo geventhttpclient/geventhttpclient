@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Iterable, Iterator, Mapping
 from typing import Any, overload
 from urllib import parse as urlparse
