@@ -1,6 +1,7 @@
+import base64
 import os
-import socket
 import select
+import socket
 
 import gevent.queue
 import gevent.socket
@@ -49,6 +50,8 @@ class ConnectionPool:
         connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
         network_timeout=DEFAULT_NETWORK_TIMEOUT,
         use_proxy=False,
+        proxy_user=None,
+        proxy_password=None,
     ):
         self._closed = False
         self._connection_host = connection_host
@@ -58,6 +61,9 @@ class ConnectionPool:
         self._semaphore = lock.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
         self._use_proxy = use_proxy
+        self._proxy_credentials = None
+        if proxy_user is not None or proxy_password is not None:
+            self._proxy_credentials = f"{proxy_user or ''}:{proxy_password or ''}"
 
         self.connection_timeout = connection_timeout
         self.network_timeout = network_timeout
@@ -134,22 +140,41 @@ class ConnectionPool:
 
     def _connect_socket(self, sock, address):
         sock.connect(address)
-        self._setup_proxy(sock)
         return sock
 
-    def _setup_proxy(self, sock):
-        if self._use_proxy:
-            sock.send(
-                bytes(
-                    f"CONNECT {self._request_host}:{self._request_port} HTTP/1.1\r\n\r\n",
-                    "utf8",
-                )
-            )
+    def _proxy_connect_request(self):
+        """Build the CONNECT request line and headers for the proxy tunnel."""
+        request = f"CONNECT {self._request_host}:{self._request_port} HTTP/1.1\r\n"
+        request += f"Host: {self._request_host}:{self._request_port}\r\n"
+        if self._proxy_credentials is not None:
+            token = base64.b64encode(self._proxy_credentials.encode("utf-8")).decode("ascii")
+            request += f"Proxy-Authorization: Basic {token}\r\n"
+        return request + "\r\n"
 
-            resp = sock.recv(4096)
-            parts = resp.split()
-            if not parts or parts[1] != b"200":
-                raise RuntimeError(f"Error response from Proxy server : {resp}")
+    def _setup_proxy(self, sock):
+        """Establish a CONNECT tunnel through the proxy (used for SSL targets).
+
+        Plain HTTP requests are forwarded directly using absolute request URIs
+        and do not require a tunnel.
+        """
+        sock.sendall(self._proxy_connect_request().encode("utf-8"))
+
+        response = b""
+        while b"\r\n\r\n" not in response:
+            block = sock.recv(4096)
+            if not block:
+                raise RuntimeError(
+                    "Proxy closed the connection before answering the CONNECT request"
+                )
+            response += block
+
+        status_line = response.split(b"\r\n", 1)[0]
+        parts = status_line.split(None, 2)
+        if len(parts) < 2 or parts[1] != b"200":
+            hint = (
+                " (proxy authentication required?)" if len(parts) > 1 and parts[1] == b"407" else ""
+            )
+            raise RuntimeError(f"Proxy CONNECT failed: {status_line.decode('latin-1')}{hint}")
 
     def _is_socket_alive(self, sock):
         """Check if a socket is still connected and alive.
@@ -325,6 +350,9 @@ else:
 
         def _connect_socket(self, sock, address):
             sock = super()._connect_socket(sock, address)
+
+            if self._use_proxy:
+                self._setup_proxy(sock)
 
             if self.ssl_context is None:
                 # create_default_context not available

@@ -1,3 +1,4 @@
+import base64
 import errno
 import os
 
@@ -20,6 +21,7 @@ HEADER_HOST = "Host"
 HEADER_CONTENT_LENGTH = "Content-Length"
 HEADER_TRANSFER_ENCODING = "Transfer-Encoding"
 TRANSFER_ENCODING_CHUNKED = "chunked"
+HEADER_PROXY_AUTHORIZATION = "Proxy-Authorization"
 
 METHOD_GET = "GET"
 METHOD_HEAD = "HEAD"
@@ -130,6 +132,8 @@ class HTTPClient:
         insecure=False,
         proxy_host=None,
         proxy_port=None,
+        proxy_user=None,
+        proxy_password=None,
         version=HTTP_11,
         headers_type=Headers,
     ):
@@ -144,8 +148,12 @@ class HTTPClient:
             self.use_proxy = True
             connection_host = proxy_host
             connection_port = proxy_port
+            self._proxy_credentials = None
+            if proxy_user is not None or proxy_password is not None:
+                self._proxy_credentials = f"{proxy_user or ''}:{proxy_password or ''}"
         else:
             self.use_proxy = False
+            self._proxy_credentials = None
         if ssl:
             ssl_options = ssl_options.copy() if ssl_options else {}
         if ssl_options is not None:
@@ -173,6 +181,8 @@ class HTTPClient:
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
                 use_proxy=self.use_proxy,
+                proxy_user=proxy_user,
+                proxy_password=proxy_password,
             )
         else:
             self.ssl = False
@@ -190,6 +200,8 @@ class HTTPClient:
                 connection_timeout=connection_timeout,
                 disable_ipv6=disable_ipv6,
                 use_proxy=self.use_proxy,
+                proxy_user=proxy_user,
+                proxy_password=proxy_password,
             )
         self.version = version
         self.headers_type = headers_type
@@ -240,6 +252,16 @@ class HTTPClient:
             if self.port not in (80, 443):
                 host_port += HOST_PORT_SEP + str(self.port)
             header_fields[HEADER_HOST] = host_port
+        if (
+            self.use_proxy
+            and not self.ssl
+            and self._proxy_credentials is not None
+            and HEADER_PROXY_AUTHORIZATION not in header_fields
+        ):
+            # the plain HTTP proxy is the recipient of the request and needs
+            # the credentials; inside a CONNECT tunnel they must not be sent
+            token = base64.b64encode(self._proxy_credentials.encode("utf-8")).decode("ascii")
+            header_fields[HEADER_PROXY_AUTHORIZATION] = f"Basic {token}"
         if chunked is None:
             chunked = _uses_chunked_transfer(header_fields, body)
         if chunked and HEADER_TRANSFER_ENCODING not in header_fields:
@@ -253,7 +275,10 @@ class HTTPClient:
                 header_fields[HEADER_CONTENT_LENGTH] = body_length
 
         request_url = request_uri
-        if self.use_proxy:
+        if self.use_proxy and not self.ssl:
+            # A plain HTTP proxy is the recipient of the request and requires
+            # the absolute request URI. With CONNECT tunneling (SSL targets)
+            # the tunnel is transparent and the origin form must be used.
             base_url = self._base_url_string
             if request_uri.startswith(SLASH):
                 base_url = base_url[:-1]

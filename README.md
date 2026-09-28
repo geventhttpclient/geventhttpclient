@@ -186,6 +186,26 @@ Chunked transfer encoding requires HTTP/1.1; a `ValueError` is raised for
 HTTP/1.0 requests. A user-provided `Content-Length` header is dropped when
 chunked encoding is used.
 
+## Proxy support
+
+`HTTPClient` can route requests through an HTTP proxy. Plain HTTP requests are
+forwarded with an absolute request URI, HTTPS requests are tunneled with
+`CONNECT`, optionally with `Basic` proxy authentication:
+
+```python
+client = HTTPClient(
+    "target.example.com",
+    port=443,
+    ssl=True,
+    proxy_host="proxy.example.com",
+    proxy_port=3128,
+    proxy_user="user",
+    proxy_password="pass",
+)
+```
+
+The same keyword arguments are accepted by `UserAgent` and `HTTPClientPool`.
+
 ## Benchmarks
 
 The benchmark runs 10000 `GET` requests against a local nginx server in the default
