@@ -1,5 +1,6 @@
 import json
 import socket
+import sys
 
 import gevent.pool
 import gevent.queue
@@ -153,6 +154,31 @@ def test_response_chunks_iter():
         for chunk in response:
             chunks.append(chunk)
         assert b"".join(chunks) == b"0123456789"
+
+
+def early_reject_handler(sock, addr):
+    # read only the request headers, then reject and close the connection
+    # without reading the request body
+    data = b""
+    while b"\r\n\r\n" not in data:
+        data += sock.recv(1024)
+    sock.sendall(b"HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+    sock.close()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows discards received data on RST, the pending response "
+    "is not readable after the connection reset",
+)
+def test_early_server_rejection_returns_response():
+    # https://github.com/geventhttpclient/geventhttpclient/issues/234
+    # A server rejecting a request with a large body before the body has been
+    # sent completely must not hide its response behind a broken pipe error.
+    with server(early_reject_handler):
+        client = HTTPClient(*LISTENER, block_size=1024)
+        response = client.post("/", body=b"x" * (16 * 1024 * 1024))
+        assert response.status_code == 401
 
 
 def readline_multibyte_sep(sock, addr):

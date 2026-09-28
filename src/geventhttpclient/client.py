@@ -6,7 +6,7 @@ import gevent.socket
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.header import Headers
-from geventhttpclient.response import HTTPConnectionClosed, HTTPSocketPoolResponse
+from geventhttpclient.response import HTTPConnectionClosed, HTTPParseError, HTTPSocketPoolResponse
 from geventhttpclient.url import URL
 
 CRLF = "\r\n"
@@ -243,11 +243,32 @@ class HTTPClient:
                 else:
                     sock.sendall(_request)
             except gevent.socket.error as e:
-                self._connection_pool.release_socket(sock)
-                if (e.errno == errno.ECONNRESET or e.errno == errno.EPIPE) and attempts_left > 0:
-                    attempts_left -= 1
-                    continue
-                raise e
+                if e.errno not in (errno.ECONNRESET, errno.EPIPE):
+                    self._connection_pool.release_socket(sock)
+                    raise
+                # The connection broke while the request was being sent. The
+                # server may have rejected the request early (e.g. 401/403 on
+                # a huge body) and already sent its response before closing
+                # the connection. Try to retrieve that response instead of
+                # hiding it behind the socket error. The response releases the
+                # socket itself in both the success and the error case.
+                try:
+                    response = HTTPSocketPoolResponse(
+                        sock,
+                        self._connection_pool,
+                        block_size=self.block_size,
+                        method=method.upper(),
+                        headers_type=self.headers_type,
+                    )
+                except (gevent.socket.error, HTTPParseError):
+                    # no pending (valid) response, socket is released already
+                    if attempts_left > 0:
+                        attempts_left -= 1
+                        continue
+                    raise
+                else:
+                    response._sent_request = request
+                    return response
 
             try:
                 response = HTTPSocketPoolResponse(
