@@ -1,8 +1,11 @@
 import errno
+from collections.abc import Iterator
+from typing import Any, Self
 
 import gevent.socket
 
 from geventhttpclient._parser import HTTPParseError, HTTPResponseParser
+from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.header import Headers
 
 HEADER_STATE_INIT = 0
@@ -11,8 +14,8 @@ HEADER_STATE_VALUE = 2
 HEADER_STATE_DONE = 3
 
 
-def copy(data):
-    return data[:]
+def copy(data: bytes | bytearray) -> bytes:
+    return bytes(data)
 
 
 class HTTPConnectionClosed(HTTPParseError):
@@ -24,7 +27,7 @@ class HTTPProtocolViolationError(HTTPParseError):
 
 
 class HTTPResponse(HTTPResponseParser):
-    def __init__(self, method="GET", headers_type=Headers):
+    def __init__(self, method: str = "GET", headers_type: type[Headers] = Headers) -> None:
         super().__init__()
         self.method = method.upper()
         self.headers_complete = False
@@ -32,31 +35,31 @@ class HTTPResponse(HTTPResponseParser):
         self.message_complete = False
         self._headers_index = headers_type()
         self._header_state = HEADER_STATE_INIT
-        self._current_header_field = None
-        self._current_header_value = None
+        self._current_header_field: bytes | None = None
+        self._current_header_value: bytes | None = None
         self._header_position = 1
         self._body_buffer = bytearray()
-        self.status_message = None
+        self.status_message: bytes | None = None
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str) -> Any:
         return self._headers_index[key]
 
-    def get(self, key, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         return self._headers_index.get(key, default)
 
-    def items(self):
+    def items(self) -> Iterator[tuple[str, Any]]:
         return self._headers_index.items()
 
     headers = property(items)
 
-    def info(self):
+    def info(self) -> Headers:
         # compatibility with http.client
         return self._headers_index
 
-    def __contains__(self, key):
+    def __contains__(self, key: str) -> bool:
         return key in self._headers_index
 
-    def should_close(self):
+    def should_close(self) -> bool:
         """return if we should close the connection.
 
         It is not the opposite of should_keep_alive method. It also checks
@@ -65,27 +68,28 @@ class HTTPResponse(HTTPResponseParser):
         return not self.message_complete or self.parser_failed() or not super().should_keep_alive()
 
     @property
-    def status_code(self):
+    def status_code(self) -> int:
         return self.get_code()
 
     @property
-    def content_length(self):
+    def content_length(self) -> int | None:
         length = self.get("content-length", None)
         if length is not None:
             return int(length)
+        return None
 
     @property
-    def length(self):
+    def length(self) -> int | None:
         return self.content_length
 
     @property
-    def version(self):
+    def version(self) -> str:
         return self.get_http_version()
 
-    def _on_status(self, msg):
+    def _on_status(self, msg: bytes) -> None:
         self.status_message = msg
 
-    def _on_message_begin(self):
+    def _on_message_begin(self) -> None:
         if self.message_begun and not self.message_complete:
             raise HTTPProtocolViolationError(f"A new response began before end of {self!r}.")
         if self.message_complete:
@@ -99,19 +103,19 @@ class HTTPResponse(HTTPResponseParser):
             self._current_header_value = None
         self.message_begun = True
 
-    def _on_message_complete(self):
+    def _on_message_complete(self) -> None:
         self.message_complete = True
 
-    def _on_headers_complete(self):
+    def _on_headers_complete(self) -> int | bool | None:
         self._flush_header()
         self._header_state = HEADER_STATE_DONE
         self.headers_complete = True
 
         return self.method == "HEAD"  # SKIP BODY
 
-    def _on_header_field(self, string):
+    def _on_header_field(self, string: bytes) -> None:
         if self._header_state == HEADER_STATE_FIELD:
-            self._current_header_field += string
+            self._current_header_field = (self._current_header_field or b"") + string
         else:
             if self._header_state == HEADER_STATE_VALUE:
                 self._flush_header()
@@ -119,25 +123,25 @@ class HTTPResponse(HTTPResponseParser):
 
         self._header_state = HEADER_STATE_FIELD
 
-    def _on_header_value(self, string):
+    def _on_header_value(self, string: bytes) -> None:
         if self._header_state == HEADER_STATE_VALUE:
-            self._current_header_value += string
+            self._current_header_value = (self._current_header_value or b"") + string
         else:
             self._current_header_value = string
 
         self._header_state = HEADER_STATE_VALUE
 
-    def _flush_header(self):
+    def _flush_header(self) -> None:
         if self._current_header_field is not None:
             self._headers_index.add(self._current_header_field, self._current_header_value)
             self._header_position += 1
             self._current_header_field = None
             self._current_header_value = None
 
-    def _on_body(self, buf):
+    def _on_body(self, buf: bytes) -> None:
         self._body_buffer += buf
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"<{self.__class__.__name__} status={self.status_code} headers={dict(self.headers)}>"
 
 
@@ -146,19 +150,19 @@ class HTTPSocketResponse(HTTPResponse):
 
     def __init__(
         self,
-        sock,
-        block_size=DEFAULT_BLOCK_SIZE,
-        method="GET",
-        headers_type=Headers,
-        pre_buffered=b"",
-        **kw,
-    ):
+        sock: gevent.socket.socket,
+        block_size: int = DEFAULT_BLOCK_SIZE,
+        method: str = "GET",
+        headers_type: type[Headers] = Headers,
+        pre_buffered: bytes = b"",
+        **kw: Any,
+    ) -> None:
         super().__init__(method=method, headers_type=headers_type)
-        self._sock = sock
+        self._sock: gevent.socket.socket | None = sock
         self.block_size = block_size
         self._read_headers(pre_buffered)
 
-    def release(self):
+    def release(self) -> None:
         try:
             if self._sock is not None and self.should_close():
                 try:
@@ -168,10 +172,12 @@ class HTTPSocketResponse(HTTPResponse):
         finally:
             self._sock = None
 
-    def __del__(self):
+    def __del__(self) -> None:
         self.release()
 
-    def _read_headers(self, pre_buffered=b""):
+    def _read_headers(self, pre_buffered: bytes = b"") -> None:
+        sock = self._sock
+        assert sock is not None
         try:
             if pre_buffered:
                 self.feed(pre_buffered)
@@ -183,7 +189,7 @@ class HTTPSocketResponse(HTTPResponse):
             # of a final (non 1xx) response are complete.
             while not self.headers_complete or self.get_code() < 200:
                 try:
-                    data = self._sock.recv(self.block_size)
+                    data = sock.recv(self.block_size)
                     self.feed(data)
                     # depending on gevent version we get a conn reset or no data
                     if not len(data):
@@ -204,7 +210,7 @@ class HTTPSocketResponse(HTTPResponse):
             self.release()
             raise
 
-    def readline(self, sep=b"\r\n"):
+    def readline(self, sep: bytes = b"\r\n") -> bytes:
         cursor = 0
         multibyte = len(sep) > 1
         while True:
@@ -227,29 +233,33 @@ class HTTPSocketResponse(HTTPResponse):
                 cursor = 0
             if self.message_complete:
                 return b""
+            sock = self._sock
+            if sock is None:
+                raise HTTPConnectionClosed("connection closed.")
             try:
-                data = self._sock.recv(self.block_size)
+                data = sock.recv(self.block_size)
                 self.feed(data)
             except BaseException:
                 self.release()
                 raise
 
-    def read(self, length=None):
+    def read(self, length: int | None = None) -> bytes:
         # get the existing body that may have already been parsed
         # during headers parsing
         if length is not None and len(self._body_buffer) >= length:
-            read = self._body_buffer[0:length]
+            read = copy(self._body_buffer[0:length])
             del self._body_buffer[0:length]
-            return copy(read)
+            return read
 
         if self._sock is None:
             read = copy(self._body_buffer)
             del self._body_buffer[:]
             return read
 
+        sock = self._sock
         try:
             while not self.message_complete and (length is None or len(self._body_buffer) < length):
-                data = self._sock.recv(length or self.block_size)
+                data = sock.recv(length or self.block_size)
                 self.feed(data)
         except:
             self.release()
@@ -264,42 +274,43 @@ class HTTPSocketResponse(HTTPResponse):
         del self._body_buffer[:]
         return read
 
-    def __iter__(self):
+    def __iter__(self) -> "HTTPSocketResponse":
         return self
 
-    def __next__(self):
-        bytes = self.read(self.block_size)
-        if not len(bytes):
+    def __next__(self) -> bytes:
+        data = self.read(self.block_size)
+        if not len(data):
             raise StopIteration()
-        return bytes
+        return data
 
-    def _on_message_complete(self):
+    def _on_message_complete(self) -> None:
         super()._on_message_complete()
         self.release()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> None:
         self.release()
 
 
 class HTTPSocketPoolResponse(HTTPSocketResponse):
-    def __init__(self, sock, pool, **kw):
-        self._pool = pool
+    def __init__(self, sock: gevent.socket.socket, pool: ConnectionPool, **kw: Any) -> None:
+        self._pool: ConnectionPool | None = pool
         super().__init__(sock, **kw)
 
-    def release(self):
+    def release(self) -> None:
+        pool, sock = self._pool, self._sock
         try:
-            if self._sock is not None:
+            if sock is not None and pool is not None:
                 if self.should_close():
-                    self._pool.release_socket(self._sock)
+                    pool.release_socket(sock)
                 else:
-                    self._pool.return_socket(self._sock)
+                    pool.return_socket(sock)
         finally:
             self._sock = None
             self._pool = None
 
-    def __del__(self):
-        if self._sock is not None:
+    def __del__(self) -> None:
+        if self._sock is not None and self._pool is not None:
             self._pool.release_socket(self._sock)

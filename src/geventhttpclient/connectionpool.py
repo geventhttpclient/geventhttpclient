@@ -1,11 +1,17 @@
+from __future__ import annotations
+
 import base64
 import os
 import select
-from typing import ClassVar
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import gevent.queue
 import gevent.socket
 from gevent import lock
+
+if TYPE_CHECKING:
+    import gevent.ssl
 
 _CA_CERTS = None
 
@@ -41,18 +47,18 @@ class ConnectionPool:
 
     def __init__(
         self,
-        connection_host,
-        connection_port,
-        request_host,
-        request_port,
-        size=5,
-        disable_ipv6=False,
-        connection_timeout=DEFAULT_CONNECTION_TIMEOUT,
-        network_timeout=DEFAULT_NETWORK_TIMEOUT,
-        use_proxy=False,
-        proxy_user=None,
-        proxy_password=None,
-    ):
+        connection_host: str,
+        connection_port: int,
+        request_host: str,
+        request_port: int,
+        size: int = 5,
+        disable_ipv6: bool = False,
+        connection_timeout: float = DEFAULT_CONNECTION_TIMEOUT,
+        network_timeout: float = DEFAULT_NETWORK_TIMEOUT,
+        use_proxy: bool = False,
+        proxy_user: str | None = None,
+        proxy_password: str | None = None,
+    ) -> None:
         self._closed = False
         self._connection_host = connection_host
         self._connection_port = connection_port
@@ -61,7 +67,7 @@ class ConnectionPool:
         self._semaphore = lock.BoundedSemaphore(size)
         self._socket_queue = gevent.queue.LifoQueue(size)
         self._use_proxy = use_proxy
-        self._proxy_credentials = None
+        self._proxy_credentials: str | None = None
         if proxy_user is not None or proxy_password is not None:
             self._proxy_credentials = f"{proxy_user or ''}:{proxy_password or ''}"
 
@@ -70,7 +76,7 @@ class ConnectionPool:
         self.size = size
         self.disable_ipv6 = disable_ipv6
 
-    def _resolve(self):
+    def _resolve(self) -> list[tuple[Any, ...]]:
         """resolve (dns) socket information needed to connect it."""
         family = 0
         if self.disable_ipv6:
@@ -85,7 +91,7 @@ class ConnectionPool:
         # family, socktype, proto, canonname, sockaddr = info[0]
         return info
 
-    def close(self):
+    def close(self) -> None:
         self._closed = True
         while not self._socket_queue.empty():
             try:
@@ -97,12 +103,12 @@ class ConnectionPool:
             except gevent.queue.Empty:
                 pass
 
-    def _create_tcp_socket(self, family, socktype, protocol):
+    def _create_tcp_socket(self, family: int, socktype: int, protocol: int) -> gevent.socket.socket:
         """tcp socket factory."""
         sock = gevent.socket.socket(family, socktype, protocol)
         return sock
 
-    def _create_socket(self):
+    def _create_socket(self) -> gevent.socket.socket:
         """might be overridden and super for wrapping into a ssl socket
         or set tcp/socket options
         """
@@ -135,14 +141,14 @@ class ConnectionPool:
         else:
             raise RuntimeError(f"Cannot resolve {self._connection_host}:{self._connection_port}")
 
-    def after_connect(self, sock):
+    def after_connect(self, sock: gevent.socket.socket) -> None:
         pass
 
-    def _connect_socket(self, sock, address):
+    def _connect_socket(self, sock: gevent.socket.socket, address: Any) -> gevent.socket.socket:
         sock.connect(address)
         return sock
 
-    def _proxy_connect_request(self):
+    def _proxy_connect_request(self) -> str:
         """Build the CONNECT request line and headers for the proxy tunnel."""
         request = f"CONNECT {self._request_host}:{self._request_port} HTTP/1.1\r\n"
         request += f"Host: {self._request_host}:{self._request_port}\r\n"
@@ -151,7 +157,7 @@ class ConnectionPool:
             request += f"Proxy-Authorization: Basic {token}\r\n"
         return request + "\r\n"
 
-    def _setup_proxy(self, sock):
+    def _setup_proxy(self, sock: gevent.socket.socket) -> None:
         """Establish a CONNECT tunnel through the proxy (used for SSL targets).
 
         Plain HTTP requests are forwarded directly using absolute request URIs
@@ -176,7 +182,7 @@ class ConnectionPool:
             )
             raise RuntimeError(f"Proxy CONNECT failed: {status_line.decode('latin-1')}{hint}")
 
-    def _is_socket_alive(self, sock):
+    def _is_socket_alive(self, sock: gevent.socket.socket | None) -> bool:
         """Check if a socket is still connected and alive.
 
         Uses select() to check if socket is readable. An idle keep-alive socket
@@ -196,7 +202,7 @@ class ConnectionPool:
         except (OSError, ValueError):
             return False
 
-    def get_socket(self):
+    def get_socket(self) -> gevent.socket.socket:
         """get a socket from the pool. This blocks until one is available."""
         self._semaphore.acquire()
         if self._closed:
@@ -225,7 +231,7 @@ class ConnectionPool:
             self._semaphore.release()
             raise
 
-    def return_socket(self, sock):
+    def return_socket(self, sock: gevent.socket.socket) -> None:
         """return a socket to the pool."""
         if self._closed:
             try:
@@ -236,7 +242,7 @@ class ConnectionPool:
         self._socket_queue.put(sock)
         self._semaphore.release()
 
-    def release_socket(self, sock):
+    def release_socket(self, sock: gevent.socket.socket) -> None:
         """call when the socket is no more usable."""
         try:
             sock.close()
@@ -261,7 +267,10 @@ except ImportError:
 else:
 
     def init_ssl_context(
-        ssl_context_factory, ca_certs, check_hostname=True, ssl_options=None
+        ssl_context_factory: Callable[..., gevent.ssl.SSLContext],
+        ca_certs: str | None,
+        check_hostname: bool = True,
+        ssl_options: dict | None = None,
     ) -> gevent.ssl.SSLContext:
         """
         Initializes an SSL context with additional SSL options.
@@ -318,15 +327,15 @@ else:
 
         def __init__(
             self,
-            connection_host,
-            connection_port,
-            request_host,
-            request_port,
-            insecure=False,
-            ssl_context_factory=None,
-            ssl_options=None,
-            **kw,
-        ):
+            connection_host: str,
+            connection_port: int,
+            request_host: str,
+            request_port: int,
+            insecure: bool = False,
+            ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
+            ssl_options: dict | None = None,
+            **kw: Any,
+        ) -> None:
             self.insecure = insecure
 
             self.ssl_options = self.default_options.copy()
@@ -345,7 +354,7 @@ else:
 
             super().__init__(connection_host, connection_port, request_host, request_port, **kw)
 
-        def _connect_socket(self, sock, address):
+        def _connect_socket(self, sock: gevent.socket.socket, address: Any) -> gevent.socket.socket:
             sock = super()._connect_socket(sock, address)
 
             if self._use_proxy:

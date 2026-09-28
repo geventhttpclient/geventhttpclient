@@ -1,6 +1,8 @@
 import base64
 import errno
 import os
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from typing import IO, Any
 
 import gevent.socket
 
@@ -40,7 +42,7 @@ METHOD_OPTIONS = "OPTIONS"
 METHOD_TRACE = "TRACE"
 
 
-def _get_body_length(body):
+def _get_body_length(body: Any) -> int | None:
     """
     Get len of string or file
 
@@ -57,7 +59,7 @@ def _get_body_length(body):
             return None
 
 
-def _uses_chunked_transfer(header_fields, body):
+def _uses_chunked_transfer(header_fields: Mapping[str, Any], body: Any) -> bool:
     """Check whether the body must be sent with chunked transfer coding.
 
     That is the case when the user requested `Transfer-Encoding: chunked`, or
@@ -73,7 +75,7 @@ def _uses_chunked_transfer(header_fields, body):
     return not isinstance(body, (bytes, bytearray, memoryview)) and _get_body_length(body) is None
 
 
-def _requests_100_continue(header_fields):
+def _requests_100_continue(header_fields: Mapping[str, Any]) -> bool:
     """Check whether the merged headers request `Expect: 100-continue`."""
     for field, value in header_fields.items():
         if field.lower() == HEADER_EXPECT.lower() and EXPECT_100_CONTINUE in str(value).lower():
@@ -81,7 +83,7 @@ def _requests_100_continue(header_fields):
     return False
 
 
-def _iter_chunked(body, block_size):
+def _iter_chunked(body: Any, block_size: int) -> Iterator[bytes]:
     """Encode the given body with chunked transfer coding (RFC 9112, section 7.1).
 
     Accepts bytes-like data, a file-like object with `read` or any iterable
@@ -91,7 +93,7 @@ def _iter_chunked(body, block_size):
     if isinstance(body, (bytes, bytearray, memoryview)):
         data = memoryview(body)
         for offset in range(0, len(data), block_size):
-            block = data[offset : offset + block_size]
+            block: Any = data[offset : offset + block_size]
             yield b"%x\r\n" % len(block) + bytes(block) + b"\r\n"
     elif hasattr(body, "read"):
         while True:
@@ -117,11 +119,11 @@ def _iter_chunked(body, block_size):
 class _ExpectContinueProbe(HTTPResponse):
     """Parser tracking whether an interim 1xx message has been completed."""
 
-    def __init__(self, **kw):
+    def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
         self.interim_seen = False
 
-    def _on_message_complete(self):
+    def _on_message_complete(self) -> None:
         if self.get_code() < 200:
             self.interim_seen = True
         super()._on_message_complete()
@@ -136,7 +138,7 @@ class HTTPClient:
     DEFAULT_HEADERS = Headers({"User-Agent": "python/gevent-http-client-" + __version__})
 
     @classmethod
-    def from_url(cls, url, **kw):
+    def from_url(cls, url: str | URL, **kw: Any) -> "HTTPClient":
         if not isinstance(url, URL):
             url = URL(url)
         enable_ssl = url.scheme == PROTO_HTTPS
@@ -146,25 +148,25 @@ class HTTPClient:
 
     def __init__(
         self,
-        host,
-        port=None,
-        headers=None,
-        block_size=BLOCK_SIZE,
-        connection_timeout=ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
-        network_timeout=ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
-        disable_ipv6=False,
-        concurrency=1,
-        ssl=False,
-        ssl_options=None,
-        ssl_context_factory=None,
-        insecure=False,
-        proxy_host=None,
-        proxy_port=None,
-        proxy_user=None,
-        proxy_password=None,
-        version=HTTP_11,
-        headers_type=Headers,
-    ):
+        host: str,
+        port: int | None = None,
+        headers: Mapping[str, Any] | None = None,
+        block_size: int = BLOCK_SIZE,
+        connection_timeout: float = ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
+        network_timeout: float = ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
+        disable_ipv6: bool = False,
+        concurrency: int = 1,
+        ssl: bool = False,
+        ssl_options: dict | None = None,
+        ssl_context_factory: Callable[..., Any] | None = None,
+        insecure: bool = False,
+        proxy_host: str | None = None,
+        proxy_port: int | None = None,
+        proxy_user: str | None = None,
+        proxy_password: str | None = None,
+        version: str = HTTP_11,
+        headers_type: type[Headers] = Headers,
+    ) -> None:
         if headers is None:
             headers = headers_type()
         self.host = host
@@ -196,7 +198,7 @@ class HTTPClient:
             # Import SSL as late as possible, fail hard with Import Error
             from geventhttpclient.connectionpool import SSLConnectionPool
 
-            self._connection_pool = SSLConnectionPool(
+            self._connection_pool: ConnectionPool = SSLConnectionPool(
                 connection_host,
                 connection_port,
                 self.host,
@@ -242,13 +244,20 @@ class HTTPClient:
         port_str = f":{port}" if port else ""
         self._base_url_string = f"{scheme}://{self.host}{port_str}/"
 
-    def close(self):
+    def close(self) -> None:
         self._connection_pool.close()
 
     # Like urllib2, try to treat the body as a file if we can't determine the
     # file length with `len()`
 
-    def _build_request(self, method, request_uri, body="", headers=None, chunked=None):
+    def _build_request(
+        self,
+        method: str,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = b"",
+        headers: Mapping[str, Any] | None = None,
+        chunked: bool | None = None,
+    ) -> str:
         """
 
         :param method:
@@ -326,7 +335,13 @@ class HTTPClient:
         request += CRLF
         return request
 
-    def request(self, method, request_uri, body=b"", headers=None):
+    def request(
+        self,
+        method: str,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = b"",
+        headers: Mapping[str, Any] | None = None,
+    ) -> HTTPSocketPoolResponse:
         """
 
         :param method:
@@ -394,6 +409,7 @@ class HTTPClient:
                         response._sent_request = request
                         return response
                     self._send_body_after_continue(sock, body, chunked)
+                    assert remainder is not None
                     try:
                         response = HTTPSocketPoolResponse(
                             sock,
@@ -475,7 +491,9 @@ class HTTPClient:
                 response._sent_request = request
                 return response
 
-    def _send_body_after_continue(self, sock, body, chunked):
+    def _send_body_after_continue(
+        self, sock: gevent.socket.socket, body: Any, chunked: bool
+    ) -> None:
         """Send the request body after an interim 100 Continue response."""
         if chunked:
             if body:
@@ -488,7 +506,9 @@ class HTTPClient:
         elif body:
             sock.sendfile(body)
 
-    def _wait_for_continue_response(self, sock, method):
+    def _wait_for_continue_response(
+        self, sock: gevent.socket.socket, method: str
+    ) -> tuple[bytes | None, bytes | None]:
         """Wait for the answer to a request with `Expect: 100-continue`.
 
         Returns a tuple `(remainder, final_data)`. When the server answered
@@ -517,28 +537,59 @@ class HTTPClient:
             probe.feed(block)
             data += block
 
-    def get(self, request_uri, headers=None):
+    def get(
+        self, request_uri: str, headers: Mapping[str, Any] | None = None
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_GET, request_uri, headers=headers)
 
-    def head(self, request_uri, headers=None):
+    def head(
+        self, request_uri: str, headers: Mapping[str, Any] | None = None
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_HEAD, request_uri, headers=headers)
 
-    def post(self, request_uri, body="", headers=None):
+    def post(
+        self,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        headers: Mapping[str, Any] | None = None,
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
-    def put(self, request_uri, body="", headers=None):
+    def put(
+        self,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        headers: Mapping[str, Any] | None = None,
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
-    def delete(self, request_uri, body="", headers=None):
+    def delete(
+        self,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        headers: Mapping[str, Any] | None = None,
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
 
-    def patch(self, request_uri, body="", headers=None):
+    def patch(
+        self,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        headers: Mapping[str, Any] | None = None,
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_PATCH, request_uri, body=body, headers=headers)
 
-    def trace(self, request_uri, body="", headers=None):
+    def trace(
+        self,
+        request_uri: str,
+        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        headers: Mapping[str, Any] | None = None,
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_TRACE, request_uri, body=body, headers=headers)
 
-    def options(self, request_uri, headers=None):
+    def options(
+        self, request_uri: str, headers: Mapping[str, Any] | None = None
+    ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_OPTIONS, request_uri, headers=headers)
 
 
@@ -547,11 +598,11 @@ class HTTPClientPool:
 
     # TODO: Add some housekeeping and cleanup logic
 
-    def __init__(self, **kw):
-        self.clients = {}
+    def __init__(self, **kw: Any) -> None:
+        self.clients: dict[tuple[str, int | None], HTTPClient] = {}
         self.client_args = kw
 
-    def get_client(self, url):
+    def get_client(self, url: str | URL) -> HTTPClient:
         if not isinstance(url, URL):
             url = URL(url)
         client_key = url.host, url.port
@@ -562,7 +613,7 @@ class HTTPClientPool:
             self.clients[client_key] = client
             return client
 
-    def close(self):
+    def close(self) -> None:
         for client in self.clients.values():
             client.close()
         self.clients.clear()

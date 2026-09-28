@@ -258,6 +258,27 @@ def test_post_chunked_request_drops_content_length():
         assert response.status_code == 200
 
 
+def test_delete_with_body():
+    """Regression test: delete() must keep accepting a request body."""
+
+    def handler(sock, addr):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            block = sock.recv(4096)
+            assert block, "connection closed before request was complete"
+            data += block
+        header, _, body = data.partition(b"\r\n\r\n")
+        assert header.lower().startswith(b"delete / http/1.1")
+        assert b"content-length: 4" in header.lower()
+        assert body == b"data"
+        sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+
+    with server(handler):
+        client = HTTPClient(*LISTENER)
+        response = client.delete("/", body=b"data")
+        assert response.status_code == 200
+
+
 def test_chunked_transfer_header_override():
     """A request-level Transfer-Encoding header overrides the client default."""
 
