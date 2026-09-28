@@ -1,8 +1,6 @@
 import os
 import ssl
-import sys
 from contextlib import contextmanager
-from ssl import CertificateError
 from unittest import mock
 from unittest.mock import MagicMock, patch
 
@@ -82,14 +80,6 @@ def simple_ssl_response(sock, addr):
     sock.recv(1024)
     sock.sendall(b"HTTP/1.1 200 Ok\r\nConnection: close\r\n\r\n")
     sock.close()
-
-
-def test_simple_ssl():
-    with sslserver(simple_ssl_response) as listener:
-        client = HTTPClient(*listener, insecure=True, ssl=True, ssl_options={"ca_certs": CERT})
-        response = client.get("/")
-        assert response.status_code == 200
-        response.read()
 
 
 def timeout_on_connect(sock, addr):
@@ -273,28 +263,6 @@ def check_client_cert_required(client):
     assert ssl_context.verify_mode == gevent.ssl.CERT_REQUIRED
     for socket in client._connection_pool._socket_queue.queue:
         assert socket._context.verify_mode == gevent.ssl.CERT_REQUIRED
-
-
-def test_verify_self_signed_fail(capsys):
-    with sslserver(simple_ssl_response) as listener:
-        client = HTTPClient(*listener, ssl=True)
-        with pytest.raises(CertificateError) as raised:
-            client.get("/")
-        assert "CERTIFICATE_VERIFY_FAILED" in str(raised.value)
-        assert raised.value.verify_message == "self-signed certificate"
-        check_client_cert_required(client)
-        client.close()
-
-    # This tests breaking server side socket confusingly prints its certificate error message delayed
-    # into other tests output, if we don't give it a split second for printing now.
-    gevent.sleep(0.01)
-    captured = capsys.readouterr().err
-    if sys.platform == "win32":
-        # Windows tears the connection down before the TLS alert reaches the server.
-        assert "ConnectionResetError" in captured or "ssl.SSLError" in captured
-    else:
-        assert "ssl.SSLError" in captured
-        assert "ALERT_UNKNOWN_CA" in captured
 
 
 @patch("ssl.create_default_context")

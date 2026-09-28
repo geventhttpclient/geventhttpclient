@@ -4,6 +4,11 @@ build_ext:
 test:
 	uv run pytest tests
 
+# Run the suite without gevent monkey patching (see issue #241).
+# Tests that require patching (tests/gevent_only) are excluded automatically.
+test-nongevent:
+	NON_GEVENT=1 uv run pytest tests
+
 _develop:
 	python setup.py develop
 
@@ -22,4 +27,4 @@ dist:
 release:
 	cat release.md
 
-.PHONY: develop dist release test
+.PHONY: develop dist release test test-nongevent
