@@ -35,11 +35,11 @@ class HTTPResponse(HTTPResponseParser):
         self.message_complete = False
         self._headers_index = headers_type()
         self._header_state = HEADER_STATE_INIT
-        self._current_header_field: bytes | None = None
-        self._current_header_value: bytes | None = None
+        self._current_header_field: str | None = None
+        self._current_header_value: str | None = None
         self._header_position = 1
         self._body_buffer = bytearray()
-        self.status_message: bytes | None = None
+        self.status_message: str | None = None
 
     def __getitem__(self, key: str) -> Any:
         return self._headers_index[key]
@@ -86,7 +86,7 @@ class HTTPResponse(HTTPResponseParser):
     def version(self) -> str:
         return self.get_http_version()
 
-    def _on_status(self, msg: bytes) -> None:
+    def _on_status(self, msg: str) -> None:
         self.status_message = msg
 
     def _on_message_begin(self) -> None:
@@ -113,9 +113,9 @@ class HTTPResponse(HTTPResponseParser):
 
         return self.method == "HEAD"  # SKIP BODY
 
-    def _on_header_field(self, string: bytes) -> None:
+    def _on_header_field(self, string: str) -> None:
         if self._header_state == HEADER_STATE_FIELD:
-            self._current_header_field = (self._current_header_field or b"") + string
+            self._current_header_field = (self._current_header_field or "") + string
         else:
             if self._header_state == HEADER_STATE_VALUE:
                 self._flush_header()
@@ -123,9 +123,9 @@ class HTTPResponse(HTTPResponseParser):
 
         self._header_state = HEADER_STATE_FIELD
 
-    def _on_header_value(self, string: bytes) -> None:
+    def _on_header_value(self, string: str) -> None:
         if self._header_state == HEADER_STATE_VALUE:
-            self._current_header_value = (self._current_header_value or b"") + string
+            self._current_header_value = (self._current_header_value or "") + string
         else:
             self._current_header_value = string
 
@@ -138,7 +138,7 @@ class HTTPResponse(HTTPResponseParser):
             self._current_header_field = None
             self._current_header_value = None
 
-    def _on_body(self, buf: bytes) -> None:
+    def _on_body(self, buf: bytearray) -> None:
         self._body_buffer += buf
 
     def __repr__(self) -> str:
