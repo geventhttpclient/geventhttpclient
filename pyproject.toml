@@ -29,7 +29,6 @@ dependencies = [
     "gevent",
     "certifi",
     "brotli",
-    "urllib3",
 ]
 optional-dependencies.dev = [
     "mypy",

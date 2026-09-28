@@ -409,7 +409,6 @@ dependencies = [
     { name = "brotli" },
     { name = "certifi" },
     { name = "gevent" },
-    { name = "urllib3" },
 ]
 
 [package.optional-dependencies]
@@ -442,7 +441,6 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "requests", marker = "extra == 'benchmarks'" },
     { name = "requests", marker = "extra == 'dev'" },
-    { name = "urllib3" },
     { name = "urllib3", marker = "extra == 'benchmarks'" },
 ]
 provides-extras = ["dev", "benchmarks", "examples"]

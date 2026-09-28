@@ -1,9 +1,10 @@
 from http.cookiejar import CookieJar
+from io import BytesIO
 
 import pytest
 
 from geventhttpclient.header import Headers
-from geventhttpclient.useragent import BadStatusCode, UserAgent
+from geventhttpclient.useragent import BadStatusCode, UserAgent, _encode_multipart_formdata
 from tests.common import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
 
 
@@ -197,6 +198,40 @@ def test_multipart_mixed(tmp_file):
         ):
             useragent = UserAgent()
             useragent.urlopen(LISTENER_URL, method="POST", files=files, bla="sometext")
+
+
+def test_multipart_boundary_none_in_5_tuple():
+    """A 5-tuple with boundary=None must yield a consistent random boundary."""
+    body, content_type = _encode_multipart_formdata(
+        {"file": ("a.txt", BytesIO(b"hi"), None, None, None)}, None
+    )
+    boundary = content_type.rsplit("=", 1)[1]
+    assert boundary != "None"
+    assert body.startswith(b"--%s\r\n" % boundary.encode())
+    assert body.endswith(b"--%s--\r\n" % boundary.encode())
+
+
+def test_multipart_two_custom_boundaries_first_wins():
+    """Header and body must use the same boundary when files disagree."""
+    body, content_type = _encode_multipart_formdata(
+        [
+            ("f1", ("a.txt", BytesIO(b"hi"), None, None, "first")),
+            ("f2", ("b.txt", BytesIO(b"ho"), None, None, "second")),
+        ],
+        None,
+    )
+    assert content_type == "multipart/form-data; boundary=first"
+    assert body.startswith(b"--first\r\n")
+    assert body.endswith(b"--first--\r\n")
+    assert b"second" not in body
+
+
+def test_multipart_too_long_tuple_raises():
+    """File tuples with more than 5 elements must raise a ValueError."""
+    with pytest.raises(ValueError):
+        _encode_multipart_formdata(
+            {"file": ("a.txt", BytesIO(b"hi"), None, None, "b", "extra")}, None
+        )
 
 
 def test_redirect():
