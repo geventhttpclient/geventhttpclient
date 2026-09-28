@@ -1,4 +1,0 @@
-certifi
-gevent
-brotli
-urllib3

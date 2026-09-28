@@ -75,25 +75,6 @@ markers = [
 ]
 
 
-[tool.tox]
-legacy_tox_ini = """
-[tox]
-envlist = py{39,310,311,312,313,314}
-
-[testenv]
-deps =
-    pip
-    pytest
-    build
-commands =
-    python -c "import shutil; shutil.rmtree('build', ignore_errors=True)"
-    python -m build
-    pip install -r requirements-dev.txt
-    pip install .
-    pytest {posargs}
-"""
-
-
 [tool.ruff]
 fix = false
 line-length = 100

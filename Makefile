@@ -1,8 +1,8 @@
 build_ext:
-	python setup.py build_ext --inplace
+	uv run python setup.py build_ext --inplace
 
 test:
-	pytest geventhttpclient/tests
+	uv run pytest tests
 
 _develop:
 	python setup.py develop

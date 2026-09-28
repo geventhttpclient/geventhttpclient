@@ -1,4 +1,0 @@
--rrequirements.txt
-pytest
-dpkt
-requests
