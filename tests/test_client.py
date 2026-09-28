@@ -1,3 +1,4 @@
+import io
 import json
 import socket
 import sys
@@ -179,6 +180,104 @@ def test_early_server_rejection_returns_response():
         client = HTTPClient(*LISTENER, block_size=1024)
         response = client.post("/", body=b"x" * (16 * 1024 * 1024))
         assert response.status_code == 401
+
+
+def chunked_echo_handler(body):
+    """Verify that the received request is correctly chunk-encoded and that the
+    de-chunked body matches `body`."""
+
+    def handler(sock, addr):
+        data = b""
+        while not data.endswith(b"0\r\n\r\n"):
+            block = sock.recv(4096)
+            assert block, "connection closed before final chunk"
+            data += block
+        header, _, chunks = data.partition(b"\r\n\r\n")
+        assert b"transfer-encoding: chunked" in header.lower()
+        assert b"content-length" not in header.lower()
+        received = b""
+        while True:
+            size, _, chunks = chunks.partition(b"\r\n")
+            chunk_size = int(size, 16)
+            if not chunk_size:
+                break
+            received += chunks[:chunk_size]
+            chunks = chunks[chunk_size + 2 :]
+        assert received == body
+        sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+
+    return handler
+
+
+def test_post_chunked_request_with_header():
+    body = b"x" * (2 * HTTPClient.BLOCK_SIZE + 123)
+    with server(chunked_echo_handler(body)):
+        client = HTTPClient(*LISTENER)
+        response = client.post("/", body=body, headers={"Transfer-Encoding": "chunked"})
+        assert response.status_code == 200
+
+
+def test_post_chunked_request_auto_for_iterator_body():
+    body = b"0123456789" * 500
+    blocks = (body[i : i + 100] for i in range(0, len(body), 100))
+    with server(chunked_echo_handler(body)):
+        client = HTTPClient(*LISTENER)
+        response = client.post("/", body=blocks)
+        assert response.status_code == 200
+
+
+def test_post_chunked_request_auto_for_file_without_fileno():
+    body = b"y" * 12345
+    with server(chunked_echo_handler(body)):
+        client = HTTPClient(*LISTENER)
+        response = client.post("/", body=io.BytesIO(body))
+        assert response.status_code == 200
+
+
+def test_post_chunked_request_empty_body_with_header():
+    with server(chunked_echo_handler(b"")):
+        client = HTTPClient(*LISTENER)
+        response = client.post("/", body=b"", headers={"Transfer-Encoding": "chunked"})
+        assert response.status_code == 200
+
+
+def test_chunked_request_rejects_http_1_0():
+    client = HTTPClient(*LISTENER, version=HTTPClient.HTTP_10)
+    with pytest.raises(ValueError):
+        client.post("/", body=(b"chunk" for _ in range(3)))
+
+
+def test_post_chunked_request_drops_content_length():
+    """Content-Length must not be sent alongside Transfer-Encoding: chunked."""
+    body = b"x" * 10
+    with server(chunked_echo_handler(body)):
+        client = HTTPClient(*LISTENER)
+        response = client.post(
+            "/",
+            body=body,
+            headers={"Transfer-Encoding": "chunked", "Content-Length": str(len(body))},
+        )
+        assert response.status_code == 200
+
+
+def test_chunked_transfer_header_override():
+    """A request-level Transfer-Encoding header overrides the client default."""
+
+    def handler(sock, addr):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            block = sock.recv(4096)
+            assert block, "connection closed before request was complete"
+            data += block
+        header = data.split(b"\r\n\r\n", 1)[0].lower()
+        assert b"chunked" not in header
+        assert b"content-length: 4" in header
+        sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+
+    with server(handler):
+        client = HTTPClient(*LISTENER, headers={"Transfer-Encoding": "chunked"})
+        response = client.post("/", body=b"data", headers={"Transfer-Encoding": "identity"})
+        assert response.status_code == 200
 
 
 def readline_multibyte_sep(sock, addr):

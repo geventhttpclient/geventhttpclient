@@ -157,6 +157,35 @@ with open("/tmp/100.dat", "w") as f:
         data = response.read(CHUNK_SIZE)
 ```
 
+## Chunked request bodies
+
+Requests with `Transfer-Encoding: chunked` are supported. Add the header
+explicitly to have the body chunk-encoded automatically:
+
+```python
+client = HTTPClient.from_url(url)
+response = client.post(
+    "/upload",
+    body=data,
+    headers={"Transfer-Encoding": "chunked"},
+)
+```
+
+Bodies of unknown length are chunk-encoded automatically, so generators and
+iterables of bytes work as request bodies as well:
+
+```python
+def generate_data():
+    for i in range(100):
+        yield b"some data block\n"
+
+response = client.post("/upload", body=generate_data())
+```
+
+Chunked transfer encoding requires HTTP/1.1; a `ValueError` is raised for
+HTTP/1.0 requests. A user-provided `Content-Length` header is dropped when
+chunked encoding is used.
+
 ## Benchmarks
 
 The benchmark runs 10000 `GET` requests against a local nginx server in the default

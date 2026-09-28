@@ -18,6 +18,8 @@ PROTO_HTTP = "http"
 PROTO_HTTPS = "https"
 HEADER_HOST = "Host"
 HEADER_CONTENT_LENGTH = "Content-Length"
+HEADER_TRANSFER_ENCODING = "Transfer-Encoding"
+TRANSFER_ENCODING_CHUNKED = "chunked"
 
 METHOD_GET = "GET"
 METHOD_HEAD = "HEAD"
@@ -44,6 +46,55 @@ def _get_body_length(body):
             return os.fstat(body.fileno()).st_size
         except (AttributeError, OSError):
             return None
+
+
+def _uses_chunked_transfer(header_fields, body):
+    """Check whether the body must be sent with chunked transfer coding.
+
+    That is the case when the user requested `Transfer-Encoding: chunked`, or
+    when the body is a stream of unknown length (iterable or file-like object
+    without usable fileno) that cannot be announced with a Content-Length.
+    """
+    for field, value in header_fields.items():
+        if (
+            field.lower() == HEADER_TRANSFER_ENCODING.lower()
+            and TRANSFER_ENCODING_CHUNKED in str(value).lower()
+        ):
+            return True
+    return not isinstance(body, (bytes, bytearray, memoryview)) and _get_body_length(body) is None
+
+
+def _iter_chunked(body, block_size):
+    """Encode the given body with chunked transfer coding (RFC 9112, section 7.1).
+
+    Accepts bytes-like data, a file-like object with `read` or any iterable
+    of bytes/str blocks and yields ready-to-send encoded blocks, terminated
+    by the final zero-size chunk.
+    """
+    if isinstance(body, (bytes, bytearray, memoryview)):
+        data = memoryview(body)
+        for offset in range(0, len(data), block_size):
+            block = data[offset : offset + block_size]
+            yield b"%x\r\n" % len(block) + bytes(block) + b"\r\n"
+    elif hasattr(body, "read"):
+        while True:
+            block = body.read(block_size)
+            if not block:
+                break
+            if isinstance(block, str):
+                block = block.encode("utf-8")
+            yield b"%x\r\n" % len(block) + block + b"\r\n"
+    else:
+        for block in body:
+            if isinstance(block, str):
+                block = block.encode("utf-8")
+            elif not isinstance(block, (bytes, bytearray, memoryview)):
+                raise TypeError(
+                    "chunked body items must be bytes or str, not " + type(block).__name__
+                )
+            if block:
+                yield b"%x\r\n" % len(block) + bytes(block) + b"\r\n"
+    yield b"0\r\n\r\n"
 
 
 class HTTPClient:
@@ -157,7 +208,7 @@ class HTTPClient:
     # Like urllib2, try to treat the body as a file if we can't determine the
     # file length with `len()`
 
-    def _build_request(self, method, request_uri, body="", headers=None):
+    def _build_request(self, method, request_uri, body="", headers=None, chunked=None):
         """
 
         :param method:
@@ -165,9 +216,12 @@ class HTTPClient:
         :param request_uri:
         :type request_uri: str or bytes
         :param body:
-        :type body: str or bytes or file
+        :type body: str or bytes or file or iterable
         :param headers:
         :type headers: dict
+        :param chunked:
+            Precomputed chunked-transfer decision from `request`. When None,
+            it is derived from the merged headers and the body type.
         :return:
         :rtype: str or bytes
         """
@@ -186,7 +240,14 @@ class HTTPClient:
             if self.port not in (80, 443):
                 host_port += HOST_PORT_SEP + str(self.port)
             header_fields[HEADER_HOST] = host_port
-        if body and HEADER_CONTENT_LENGTH not in header_fields:
+        if chunked is None:
+            chunked = _uses_chunked_transfer(header_fields, body)
+        if chunked and HEADER_TRANSFER_ENCODING not in header_fields:
+            header_fields[HEADER_TRANSFER_ENCODING] = TRANSFER_ENCODING_CHUNKED
+        if chunked and HEADER_CONTENT_LENGTH in header_fields:
+            # Content-Length must not be sent alongside Transfer-Encoding: chunked
+            del header_fields[HEADER_CONTENT_LENGTH]
+        if body and not chunked and HEADER_CONTENT_LENGTH not in header_fields:
             body_length = _get_body_length(body)
             if body_length:
                 header_fields[HEADER_CONTENT_LENGTH] = body_length
@@ -225,7 +286,18 @@ class HTTPClient:
         if isinstance(body, str):
             body = body.encode("utf-8")
 
-        request = self._build_request(method.upper(), request_uri, body=body, headers=headers)
+        # the same case-insensitive merge `_build_request` performs before
+        # deciding on the Content-Length header
+        merged_headers = self.headers_type()
+        merged_headers.update(self.default_headers)
+        merged_headers.update(headers or {})
+        chunked = _uses_chunked_transfer(merged_headers, body)
+        if chunked and self.version != self.HTTP_11:
+            raise ValueError("Chunked transfer encoding requires HTTP/1.1")
+
+        request = self._build_request(
+            method.upper(), request_uri, body=body, headers=headers, chunked=chunked
+        )
 
         attempts_left = self._connection_pool.size + 1
 
@@ -233,12 +305,21 @@ class HTTPClient:
             sock = self._connection_pool.get_socket()
             try:
                 _request = request.encode()
-                if body:
+                if chunked:
+                    sock.sendall(_request)
+                    # Note: on retry, file-like/iterable bodies continue
+                    # from their current position or are exhausted, same
+                    # as with `sendfile` before.
+                    if body:
+                        for block in _iter_chunked(body, self.block_size):
+                            sock.sendall(block)
+                    else:
+                        sock.sendall(b"0\r\n\r\n")
+                elif body:
                     if isinstance(body, bytes):
                         sock.sendall(_request + body)
                     else:
                         sock.sendall(_request)
-                        # TODO: Support non file-like iterables, e.g. `(u"string1", u"string2")`.
                         sock.sendfile(body)
                 else:
                     sock.sendall(_request)
