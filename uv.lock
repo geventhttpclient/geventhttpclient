@@ -530,7 +530,7 @@ wheels = [
 
 [[package]]
 name = "geventhttpclient"
-version = "2.3.8"
+version = "2.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "brotli" },
