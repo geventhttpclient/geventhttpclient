@@ -1,8 +1,18 @@
+import sys
 from contextlib import contextmanager
 
 import gevent.pywsgi
 import gevent.queue
 import gevent.server
+
+
+def _raise_stored_exception(exception_queue):
+    """Raise a handler exception after the server has been stopped, so that
+    late handler failures do not go unnoticed. An exception already propagating
+    through the context manager takes precedence."""
+    if not exception_queue.empty() and sys.exc_info()[0] is None:
+        raise exception_queue.get()
+
 
 TEST_HOST = "127.0.0.1"
 TEST_PORT = 54323
@@ -26,13 +36,13 @@ def server(handler):
     server.start()
     try:
         yield
-        if not exception_queue.empty():
-            raise exception_queue.get()
+        _raise_stored_exception(exception_queue)
     finally:
         server.stop()
         # libuv on Windows needs a loop tick to retire the accept watcher, otherwise
         # the next server on this port never accepts.
         gevent.sleep(0.001)
+        _raise_stored_exception(exception_queue)
 
 
 @contextmanager
@@ -50,11 +60,11 @@ def wsgiserver(handler):
     server.start()
     try:
         yield
-        if not exception_queue.empty():
-            raise exception_queue.get()
+        _raise_stored_exception(exception_queue)
     finally:
         server.stop()
         gevent.sleep(0.001)
+        _raise_stored_exception(exception_queue)
 
 
 def check_upload(body, headers=None, length=None):

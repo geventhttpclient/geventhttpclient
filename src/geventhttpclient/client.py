@@ -7,7 +7,12 @@ import gevent.socket
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.header import Headers
-from geventhttpclient.response import HTTPConnectionClosed, HTTPParseError, HTTPSocketPoolResponse
+from geventhttpclient.response import (
+    HTTPConnectionClosed,
+    HTTPParseError,
+    HTTPResponse,
+    HTTPSocketPoolResponse,
+)
 from geventhttpclient.url import URL
 
 CRLF = "\r\n"
@@ -22,6 +27,8 @@ HEADER_CONTENT_LENGTH = "Content-Length"
 HEADER_TRANSFER_ENCODING = "Transfer-Encoding"
 TRANSFER_ENCODING_CHUNKED = "chunked"
 HEADER_PROXY_AUTHORIZATION = "Proxy-Authorization"
+HEADER_EXPECT = "Expect"
+EXPECT_100_CONTINUE = "100-continue"
 
 METHOD_GET = "GET"
 METHOD_HEAD = "HEAD"
@@ -66,6 +73,14 @@ def _uses_chunked_transfer(header_fields, body):
     return not isinstance(body, (bytes, bytearray, memoryview)) and _get_body_length(body) is None
 
 
+def _requests_100_continue(header_fields):
+    """Check whether the merged headers request `Expect: 100-continue`."""
+    for field, value in header_fields.items():
+        if field.lower() == HEADER_EXPECT.lower() and EXPECT_100_CONTINUE in str(value).lower():
+            return True
+    return False
+
+
 def _iter_chunked(body, block_size):
     """Encode the given body with chunked transfer coding (RFC 9112, section 7.1).
 
@@ -97,6 +112,19 @@ def _iter_chunked(body, block_size):
             if block:
                 yield b"%x\r\n" % len(block) + bytes(block) + b"\r\n"
     yield b"0\r\n\r\n"
+
+
+class _ExpectContinueProbe(HTTPResponse):
+    """Parser tracking whether an interim 1xx message has been completed."""
+
+    def __init__(self, **kw):
+        super().__init__(**kw)
+        self.interim_seen = False
+
+    def _on_message_complete(self):
+        if self.get_code() < 200:
+            self.interim_seen = True
+        super()._on_message_complete()
 
 
 class HTTPClient:
@@ -320,6 +348,10 @@ class HTTPClient:
         if chunked and self.version != self.HTTP_11:
             raise ValueError("Chunked transfer encoding requires HTTP/1.1")
 
+        # `Expect: 100-continue` is an HTTP/1.1 mechanism; with earlier
+        # versions the header is sent as-is and the body sent right away.
+        expect_continue = self.version == self.HTTP_11 and _requests_100_continue(merged_headers)
+
         request = self._build_request(
             method.upper(), request_uri, body=body, headers=headers, chunked=chunked
         )
@@ -330,6 +362,55 @@ class HTTPClient:
             sock = self._connection_pool.get_socket()
             try:
                 _request = request.encode()
+                if expect_continue:
+                    sock.sendall(_request)
+                    try:
+                        remainder, final_data = self._wait_for_continue_response(sock, method)
+                    except HTTPConnectionClosed:
+                        # no response object was created, release the socket
+                        self._connection_pool.release_socket(sock)
+                        if attempts_left > 0:
+                            attempts_left -= 1
+                            continue
+                        raise
+                    if final_data is not None:
+                        # the server rejected the request without an interim
+                        # response, return it and do not send the body
+                        try:
+                            response = HTTPSocketPoolResponse(
+                                sock,
+                                self._connection_pool,
+                                block_size=self.block_size,
+                                method=method.upper(),
+                                headers_type=self.headers_type,
+                                pre_buffered=final_data,
+                            )
+                        except HTTPConnectionClosed:
+                            # connection is released by the response itself
+                            if attempts_left > 0:
+                                attempts_left -= 1
+                                continue
+                            raise
+                        response._sent_request = request
+                        return response
+                    self._send_body_after_continue(sock, body, chunked)
+                    try:
+                        response = HTTPSocketPoolResponse(
+                            sock,
+                            self._connection_pool,
+                            block_size=self.block_size,
+                            method=method.upper(),
+                            headers_type=self.headers_type,
+                            pre_buffered=remainder,
+                        )
+                    except HTTPConnectionClosed:
+                        # connection is released by the response itself
+                        if attempts_left > 0:
+                            attempts_left -= 1
+                            continue
+                        raise
+                    response._sent_request = request
+                    return response
                 if chunked:
                     sock.sendall(_request)
                     # Note: on retry, file-like/iterable bodies continue
@@ -393,6 +474,48 @@ class HTTPClient:
             else:
                 response._sent_request = request
                 return response
+
+    def _send_body_after_continue(self, sock, body, chunked):
+        """Send the request body after an interim 100 Continue response."""
+        if chunked:
+            if body:
+                for block in _iter_chunked(body, self.block_size):
+                    sock.sendall(block)
+            else:
+                sock.sendall(b"0\r\n\r\n")
+        elif isinstance(body, bytes):
+            sock.sendall(body)
+        elif body:
+            sock.sendfile(body)
+
+    def _wait_for_continue_response(self, sock, method):
+        """Wait for the answer to a request with `Expect: 100-continue`.
+
+        Returns a tuple `(remainder, final_data)`. When the server answered
+        with an interim 100 Continue response, `final_data` is None and
+        `remainder` holds already received bytes of the final response (may
+        be empty). When the server sent a final response instead, `final_data`
+        holds the received bytes of that response and the request body must
+        not be sent.
+        """
+        probe = _ExpectContinueProbe(method=method.upper(), headers_type=self.headers_type)
+        data = b""
+        while True:
+            if probe.interim_seen:
+                # the interim response invited us to continue, send the body
+                # even when the final response has already been received;
+                # everything beyond the interim header terminator belongs to
+                # the final response
+                return data.split(b"\r\n\r\n", 1)[1], None
+            if probe.headers_complete and probe.get_code() >= 200:
+                return None, data
+            block = sock.recv(self.block_size)
+            if not block:
+                raise HTTPConnectionClosed(
+                    "connection closed while waiting for 100 Continue response"
+                )
+            probe.feed(block)
+            data += block
 
     def get(self, request_uri, headers={}):
         return self.request(METHOD_GET, request_uri, headers=headers)

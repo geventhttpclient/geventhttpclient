@@ -86,8 +86,17 @@ class HTTPResponse(HTTPResponseParser):
         self.status_message = msg
 
     def _on_message_begin(self):
-        if self.message_begun:
+        if self.message_begun and not self.message_complete:
             raise HTTPProtocolViolationError(f"A new response began before end of {self!r}.")
+        if self.message_complete:
+            # A complete bodyless message (e.g. an interim 1xx response) is
+            # followed by the final response on the same parser and socket.
+            self.headers_complete = False
+            self.message_complete = False
+            self._headers_index.clear()
+            self._header_state = HEADER_STATE_INIT
+            self._current_header_field = None
+            self._current_header_value = None
         self.message_begun = True
 
     def _on_message_complete(self):
@@ -138,12 +147,18 @@ class HTTPSocketResponse(HTTPResponse):
     DEFAULT_BLOCK_SIZE = 1024 * 4  # 4KB
 
     def __init__(
-        self, sock, block_size=DEFAULT_BLOCK_SIZE, method="GET", headers_type=Headers, **kw
+        self,
+        sock,
+        block_size=DEFAULT_BLOCK_SIZE,
+        method="GET",
+        headers_type=Headers,
+        pre_buffered=b"",
+        **kw,
     ):
         super().__init__(method=method, headers_type=headers_type)
         self._sock = sock
         self.block_size = block_size
-        self._read_headers()
+        self._read_headers(pre_buffered)
 
     def release(self):
         try:
@@ -158,17 +173,26 @@ class HTTPSocketResponse(HTTPResponse):
     def __del__(self):
         self.release()
 
-    def _read_headers(self):
+    def _read_headers(self, pre_buffered=b""):
         try:
-            start = True
-            while not self.headers_complete:
+            if pre_buffered:
+                self.feed(pre_buffered)
+                start = False
+            else:
+                start = True
+            # Interim 1xx responses are bodyless and followed by the final
+            # response on the same connection. Keep reading until the headers
+            # of a final (non 1xx) response are complete.
+            while not self.headers_complete or self.get_code() < 200:
                 try:
                     data = self._sock.recv(self.block_size)
                     self.feed(data)
                     # depending on gevent version we get a conn reset or no data
-                    if not len(data) and not self.headers_complete:
+                    if not len(data):
                         if start:
                             raise HTTPConnectionClosed("connection closed.")
+                        if self.headers_complete:
+                            raise HTTPParseError("connection closed after interim response")
                         raise HTTPParseError("connection closed before end of the headers")
                     start = False
                 except gevent.socket.error as e:

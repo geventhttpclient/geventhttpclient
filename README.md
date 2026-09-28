@@ -206,6 +206,21 @@ client = HTTPClient(
 
 The same keyword arguments are accepted by `UserAgent` and `HTTPClientPool`.
 
+## Expect: 100-continue
+
+Add an `Expect: 100-continue` header to let the server reject a request with a
+large body before the body is sent. The client sends the headers first, waits
+for an interim `100 Continue` response before sending the body, and returns
+the final response directly if the server rejects the request:
+
+```python
+client = HTTPClient.from_url(url)
+response = client.post("/upload", body=data, headers={"Expect": "100-continue"})
+```
+
+Note that servers not answering an `Expect: 100-continue` request block until
+the network timeout is reached.
+
 ## Benchmarks
 
 The benchmark runs 10000 `GET` requests against a local nginx server in the default
