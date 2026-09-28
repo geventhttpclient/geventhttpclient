@@ -158,63 +158,55 @@ class HTTPConnection(http.client.HTTPConnection):
         super().close()
 
 
-try:
-    import gevent.ssl
-except ImportError:
-    pass
-else:
+class HTTPSConnection(HTTPConnection):
+    default_port = 443
 
-    class HTTPSConnection(HTTPConnection):
-        default_port = 443
+    def __init__(
+        self,
+        host,
+        port=None,
+        key_file=None,
+        cert_file=None,
+        context=None,
+        check_hostname=None,
+        **kw,
+    ):
+        super().__init__(host, port, **kw)
+        if key_file is not None or cert_file is not None or check_hostname is not None:
+            import warnings
 
-        def __init__(
-            self,
-            host,
-            port=None,
-            key_file=None,
-            cert_file=None,
-            context=None,
-            check_hostname=None,
-            **kw,
-        ):
-            super().__init__(host, port, **kw)
-            if key_file is not None or cert_file is not None or check_hostname is not None:
-                import warnings
-
-                warnings.warn(
-                    "key_file, cert_file and check_hostname are "
-                    "deprecated, use a custom context instead.",
-                    DeprecationWarning,
-                    2,
-                )
-            self.key_file = key_file
-            self.cert_file = cert_file or connectionpool._CA_CERTS
-            if context is None:
-                context = connectionpool.init_ssl_context(
-                    gevent.ssl.create_default_context,
-                    self.cert_file,
-                    check_hostname=check_hostname,
-                )
-                # send ALPN extension to indicate HTTP/1.1 protocol
-                if self._http_vsn == 11:
-                    context.set_alpn_protocols(["http/1.1"])
-                # enable PHA for TLS 1.3 connections if available
-                if context.post_handshake_auth is not None:
-                    context.post_handshake_auth = True
-            self._context = context
-
-        def connect(self):
-            """Connect to a host on a given (SSL) port."""
-
-            sock = gevent.socket.create_connection(
-                (self.host, self.port), self.timeout, self.source_address
+            warnings.warn(
+                "key_file, cert_file and check_hostname are "
+                "deprecated, use a custom context instead.",
+                DeprecationWarning,
+                2,
             )
-            if self._tunnel_host:
-                self.sock = sock
-                self._tunnel()
-            self.sock = gevent.ssl.SSLSocket(
-                sock, _context=self._context, server_hostname=self.host
+        self.key_file = key_file
+        self.cert_file = cert_file or connectionpool._CA_CERTS
+        if context is None:
+            context = connectionpool.init_ssl_context(
+                gevent.ssl.create_default_context,
+                self.cert_file,
+                check_hostname=check_hostname,
             )
+            # send ALPN extension to indicate HTTP/1.1 protocol
+            if self._http_vsn == 11:
+                context.set_alpn_protocols(["http/1.1"])
+            # enable PHA for TLS 1.3 connections if available
+            if context.post_handshake_auth is not None:
+                context.post_handshake_auth = True
+        self._context = context
+
+    def connect(self):
+        """Connect to a host on a given (SSL) port."""
+
+        sock = gevent.socket.create_connection(
+            (self.host, self.port), self.timeout, self.source_address
+        )
+        if self._tunnel_host:
+            self.sock = sock
+            self._tunnel()
+        self.sock = gevent.ssl.SSLSocket(sock, _context=self._context, server_hostname=self.host)
 
 
 def patch():

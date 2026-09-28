@@ -4,24 +4,17 @@ import base64
 import os
 import select
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, ClassVar
+from ssl import PROTOCOL_TLS_CLIENT, get_default_verify_paths
+from typing import Any, ClassVar
 
 import gevent.queue
 import gevent.socket
+import gevent.ssl
 from gevent import lock
+from gevent.ssl import create_default_context
 
-if TYPE_CHECKING:
-    import gevent.ssl
-
-_CA_CERTS = None
-
-try:
-    from ssl import get_default_verify_paths
-except ImportError:
-    _CA_CERTS = None
-else:
-    _certs = get_default_verify_paths()
-    _CA_CERTS = _certs.cafile or _certs.capath
+_certs = get_default_verify_paths()
+_CA_CERTS = _certs.cafile or _certs.capath
 
 if not _CA_CERTS or os.path.isdir(_CA_CERTS):
     import certifi
@@ -252,117 +245,97 @@ class ConnectionPool:
             self._semaphore.release()
 
 
-try:
-    from ssl import PROTOCOL_TLS_CLIENT
+def init_ssl_context(
+    ssl_context_factory: Callable[..., gevent.ssl.SSLContext],
+    ca_certs: str | None,
+    check_hostname: bool = True,
+    ssl_options: dict | None = None,
+) -> gevent.ssl.SSLContext:
+    """
+    Initializes an SSL context with additional SSL options.
 
-    import gevent.ssl
+    :param ssl_context_factory: Callable to create an SSL context
+    :param ca_certs: Path to CA certificates file
+    :param check_hostname: Whether to enable hostname checking
+    :param ssl_options: Optional dictionary of additional SSL options
+    :return: Configured SSLContext instance
+    """
+    ssl_options = ssl_options or {}
 
     try:
-        from gevent.ssl import create_default_context
-    except ImportError:
-        create_default_context = None
+        ssl_context = ssl_context_factory(cafile=ca_certs)
+    except TypeError:
+        ssl_context = ssl_context_factory()
+        ssl_context.load_verify_locations(cafile=ca_certs)
 
-except ImportError:
-    pass
-else:
+    ssl_context.check_hostname = check_hostname
+    if check_hostname:
+        ssl_context.verify_mode = gevent.ssl.CERT_REQUIRED
 
-    def init_ssl_context(
-        ssl_context_factory: Callable[..., gevent.ssl.SSLContext],
-        ca_certs: str | None,
-        check_hostname: bool = True,
+    if "certfile" in ssl_options and "keyfile" in ssl_options:
+        ssl_context.load_cert_chain(
+            certfile=ssl_options["certfile"], keyfile=ssl_options["keyfile"]
+        )
+
+    if "ciphers" in ssl_options:
+        ssl_context.set_ciphers(ssl_options["ciphers"])
+
+    # Apply additional SSL options (e.g., options, verify_flags)
+    for option in ["options", "verify_flags"]:
+        if option in ssl_options:
+            setattr(ssl_context, option, ssl_options[option])
+
+    return ssl_context
+
+
+class SSLConnectionPool(ConnectionPool):
+    """SSLConnectionPool creates connections wrapped with SSL/TLS.
+
+    :param host: hostname
+    :param port: port
+    :param ssl_options: additional SSL options such as certfile, keyfile,
+        ciphers, options and verify_flags
+    :param ssl_context_factory: use `ssl.create_default_context` by default
+        if provided. It must be a callable that returns a SSLContext.
+    """
+
+    default_options: ClassVar[dict] = {
+        "ciphers": _DEFAULT_CIPHERS,
+        "ca_certs": _CA_CERTS,
+        "cert_reqs": gevent.ssl.CERT_REQUIRED,
+        "ssl_version": PROTOCOL_TLS_CLIENT,
+    }
+
+    def __init__(
+        self,
+        connection_host: str,
+        connection_port: int,
+        request_host: str,
+        request_port: int,
+        insecure: bool = False,
+        ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
         ssl_options: dict | None = None,
-    ) -> gevent.ssl.SSLContext:
-        """
-        Initializes an SSL context with additional SSL options.
+        **kw: Any,
+    ) -> None:
+        self.insecure = insecure
 
-        :param ssl_context_factory: Callable to create an SSL context
-        :param ca_certs: Path to CA certificates file
-        :param check_hostname: Whether to enable hostname checking
-        :param ssl_options: Optional dictionary of additional SSL options
-        :return: Configured SSLContext instance
-        """
-        ssl_options = ssl_options or {}
+        self.ssl_options = self.default_options.copy()
+        self.ssl_options.update(ssl_options or {})
 
-        try:
-            ssl_context = ssl_context_factory(cafile=ca_certs)
-        except TypeError:
-            ssl_context = ssl_context_factory()
-            ssl_context.load_verify_locations(cafile=ca_certs)
+        self.ssl_context = init_ssl_context(
+            ssl_context_factory or create_default_context,
+            self.ssl_options["ca_certs"],
+            check_hostname=not self.insecure,
+            ssl_options=ssl_options,
+        )
 
-        ssl_context.check_hostname = check_hostname
-        if check_hostname:
-            ssl_context.verify_mode = gevent.ssl.CERT_REQUIRED
+        super().__init__(connection_host, connection_port, request_host, request_port, **kw)
 
-        if "certfile" in ssl_options and "keyfile" in ssl_options:
-            ssl_context.load_cert_chain(
-                certfile=ssl_options["certfile"], keyfile=ssl_options["keyfile"]
-            )
+    def _connect_socket(self, sock: gevent.socket.socket, address: Any) -> gevent.socket.socket:
+        sock = super()._connect_socket(sock, address)
 
-        if "ciphers" in ssl_options:
-            ssl_context.set_ciphers(ssl_options["ciphers"])
+        if self._use_proxy:
+            self._setup_proxy(sock)
 
-        # Apply additional SSL options (e.g., options, verify_flags)
-        for option in ["options", "verify_flags"]:
-            if option in ssl_options:
-                setattr(ssl_context, option, ssl_options[option])
-
-        return ssl_context
-
-    class SSLConnectionPool(ConnectionPool):
-        """SSLConnectionPool creates connections wrapped with SSL/TLS.
-
-        :param host: hostname
-        :param port: port
-        :param ssl_options: accepts any options supported by `ssl.wrap_socket`
-        :param ssl_context_factory: use `ssl.create_default_context` by default
-            if provided. It must be a callable that returns a SSLContext.
-        """
-
-        default_options: ClassVar[dict] = {
-            "ciphers": _DEFAULT_CIPHERS,
-            "ca_certs": _CA_CERTS,
-            "cert_reqs": gevent.ssl.CERT_REQUIRED,
-            "ssl_version": PROTOCOL_TLS_CLIENT,
-        }
-
-        def __init__(
-            self,
-            connection_host: str,
-            connection_port: int,
-            request_host: str,
-            request_port: int,
-            insecure: bool = False,
-            ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
-            ssl_options: dict | None = None,
-            **kw: Any,
-        ) -> None:
-            self.insecure = insecure
-
-            self.ssl_options = self.default_options.copy()
-            self.ssl_options.update(ssl_options or {})
-
-            ssl_context_factory = ssl_context_factory or create_default_context
-            if ssl_context_factory is not None:
-                self.ssl_context = init_ssl_context(
-                    ssl_context_factory,
-                    self.ssl_options["ca_certs"],
-                    check_hostname=not self.insecure,
-                    ssl_options=ssl_options,
-                )
-            else:
-                self.ssl_context = None
-
-            super().__init__(connection_host, connection_port, request_host, request_port, **kw)
-
-        def _connect_socket(self, sock: gevent.socket.socket, address: Any) -> gevent.socket.socket:
-            sock = super()._connect_socket(sock, address)
-
-            if self._use_proxy:
-                self._setup_proxy(sock)
-
-            if self.ssl_context is None:
-                # create_default_context not available
-                return gevent.ssl.wrap_socket(sock, **self.ssl_options)
-
-            server_hostname = self.ssl_options.get("server_hostname", self._request_host)
-            return self.ssl_context.wrap_socket(sock, server_hostname=server_hostname)
+        server_hostname = self.ssl_options.get("server_hostname", self._request_host)
+        return self.ssl_context.wrap_socket(sock, server_hostname=server_hostname)

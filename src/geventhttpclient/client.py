@@ -7,7 +7,7 @@ from typing import IO, Any
 import gevent.socket
 
 from geventhttpclient import __version__
-from geventhttpclient.connectionpool import ConnectionPool
+from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
 from geventhttpclient.header import Headers
 from geventhttpclient.response import (
     HTTPConnectionClosed,
@@ -195,9 +195,6 @@ class HTTPClient:
                 self.port = 443
             if not connection_port:
                 connection_port = self.port
-            # Import SSL as late as possible, fail hard with Import Error
-            from geventhttpclient.connectionpool import SSLConnectionPool
-
             self._connection_pool: ConnectionPool = SSLConnectionPool(
                 connection_host,
                 connection_port,
