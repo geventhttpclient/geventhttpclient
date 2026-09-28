@@ -32,6 +32,7 @@ dependencies = [
     "urllib3",
 ]
 optional-dependencies.dev = [
+    "mypy",
     "pytest",
     "dpkt",
     "requests",
@@ -79,6 +80,23 @@ line-length = 100
 target-version = "py311"
 lint.extend-select = ["UP", "I", "W"]
 lint.ignore = ["F821", "E402"]
+[tool.mypy]
+python_version = "3.11"
+files = ["src"]
+ignore_missing_imports = true
+disallow_untyped_defs = true
+
+# Modules not fully typed yet. Remove the override as soon as the module
+# is annotated.
+[[tool.mypy.overrides]]
+module = [
+    "geventhttpclient.api",
+    "geventhttpclient.httplib",
+    "geventhttpclient.httplib2",
+    "geventhttpclient.requests",
+    "geventhttpclient.useragent",
+]
+ignore_errors = true
 
 [tool.ruff.lint.isort]
 known-first-party = ["geventhttpclient", "tests"]

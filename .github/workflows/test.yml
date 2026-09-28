@@ -3,6 +3,23 @@ name: Tests
 on: [push, pull_request]
 
 jobs:
+  mypy:
+    name: mypy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: '3.12'
+          enable-cache: true
+      - name: Install project and dependencies
+        run: uv sync --extra dev
+      - name: Run mypy
+        run: uv run mypy
+
   tests:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}

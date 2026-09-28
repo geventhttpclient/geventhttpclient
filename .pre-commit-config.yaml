@@ -24,6 +24,16 @@ repos:
       - id: ruff
       - id: ruff-format
 
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (via uv)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+        files: ^src/
+
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.3
     hooks:
