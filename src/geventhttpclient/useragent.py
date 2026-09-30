@@ -665,36 +665,31 @@ class UserAgent:
             self._handle_retries_exceeded(url, last_error=e)  # type: ignore[misc]
         return resp
 
-    def _make_request(
-        self,
-        url: str | URL,
-        method: str = "GET",
-        headers: Headers | None = None,
-        payload: Payload = None,
-        params: ParamsDataType | None = None,
-        files: FilesInput | None = None,
-    ) -> CompatRequest:
-        """Backwards compatibility for locust."""
-        return _make_request(
-            url,
-            method=method,
-            headers=headers,  # type: ignore[arg-type]
-            payload=payload,
-            params=params,
-            files=files,
-            request_type=self.request_type,
-        )
+    def _make_request(self, *args: Any, **kw: Any) -> CompatRequest:
+        """Build a request for this agent, without sending it.
+
+        The work happens in the module level :func:`_make_request`, which takes
+        the very same arguments; this method only adds the request_type of the
+        agent it is called on.  Packages built on top of us create requests
+        through here, so these arguments have to keep working.
+        """
+        kw.setdefault("request_type", self.request_type)
+        return _make_request(*args, **kw)
 
 
 def _make_request(
     url: str | URL,
-    method: str,
-    headers: Headers,
+    method: str = "GET",
+    headers: Headers | None = None,
     payload: Payload = None,
     params: ParamsDataType | None = None,
     files: FilesInput | None = None,
     request_type: type[CompatRequest] = CompatRequest,
 ) -> CompatRequest:
+    # callers that have no headers at all pass None
+    if headers is None:
+        headers = Headers()
+
     # Adjust headers depending on payload content
     content_type = headers.get("content-type", None)
     if files:

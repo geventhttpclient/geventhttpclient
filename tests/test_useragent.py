@@ -4,7 +4,12 @@ from io import BytesIO
 import pytest
 
 from geventhttpclient.header import Headers
-from geventhttpclient.useragent import BadStatusCode, UserAgent, _encode_multipart_formdata
+from geventhttpclient.useragent import (
+    BadStatusCode,
+    CompatRequest,
+    UserAgent,
+    _encode_multipart_formdata,
+)
 from tests.common import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
 
 
@@ -362,3 +367,35 @@ def test_httpbin_multipart():
     assert rjson["headers"]["Content-Type"] == [f"multipart/form-data; boundary={custom_boundary}"]
     assert rjson["files"]["file"] == ["1234567890"]
     assert rjson["form"]["bla"] == ["sometext"]
+
+
+def test_make_request_without_headers():
+    """A caller that hands us headers=None must not crash."""
+    request = UserAgent()._make_request("http://example.com/", method="GET", headers=None)
+    assert request.method == "GET"
+    assert len(request.headers) == 0
+    assert request.headers.get("content-type") is None
+
+
+def test_make_request_still_describes_the_payload():
+    """The headers invented for a headerless request still get the payload ones."""
+    request = UserAgent()._make_request(
+        "http://example.com/", method="POST", headers=None, payload={"a": "b"}
+    )
+    assert request.headers.get("content-type") == "application/x-www-form-urlencoded; charset=utf-8"
+    assert request.headers.get("content-length") == 3
+    assert request.payload == b"a=b"
+
+
+def test_make_request_uses_the_agents_request_type():
+    """The method on the agent exists to pass on its own request type."""
+
+    class CustomRequest(CompatRequest):
+        pass
+
+    class CustomAgent(UserAgent):
+        request_type = CustomRequest
+
+    made = CustomAgent()._make_request("http://example.com/", method="GET", headers=None)
+    assert type(made) is CustomRequest
+    assert type(UserAgent()._make_request("http://example.com/")) is CompatRequest
