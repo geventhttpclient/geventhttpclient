@@ -39,6 +39,7 @@ dependencies = [
 optional-dependencies.dev = [
     "mypy",
     "pytest",
+    "pytest-rerunfailures",
     "dpkt",
     "requests",
 ]
