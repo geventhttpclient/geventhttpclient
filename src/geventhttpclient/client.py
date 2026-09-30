@@ -96,7 +96,7 @@ def _iter_chunked(body: Any, block_size: int) -> Iterator[bytes]:
     if isinstance(body, (bytes, bytearray, memoryview)):
         data = memoryview(body)
         for offset in range(0, len(data), block_size):
-            block: Any = data[offset : offset + block_size]
+            block: memoryview = data[offset : offset + block_size]
             yield b"%x\r\n" % len(block) + bytes(block) + b"\r\n"
     elif hasattr(body, "read"):
         while True:
@@ -161,7 +161,7 @@ class HTTPClient:
         concurrency: int = 1,
         ssl: bool = False,
         ssl_options: dict | None = None,
-        ssl_context_factory: Callable[..., Any] | None = None,
+        ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
         insecure: bool = False,
         proxy_host: str | None = None,
         proxy_port: int | None = None,
@@ -254,7 +254,7 @@ class HTTPClient:
         self,
         method: str,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = b"",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = b"",
         headers: Mapping[str, Any] | None = None,
         chunked: bool | None = None,
     ) -> str:
@@ -339,7 +339,7 @@ class HTTPClient:
         self,
         method: str,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = b"",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = b"",
         headers: Mapping[str, Any] | None = None,
     ) -> HTTPSocketPoolResponse:
         """
@@ -554,7 +554,7 @@ class HTTPClient:
     def post(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
         headers: Mapping[str, Any] | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
@@ -562,7 +562,7 @@ class HTTPClient:
     def put(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
         headers: Mapping[str, Any] | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
@@ -570,7 +570,7 @@ class HTTPClient:
     def delete(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
         headers: Mapping[str, Any] | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
@@ -578,7 +578,7 @@ class HTTPClient:
     def patch(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
         headers: Mapping[str, Any] | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_PATCH, request_uri, body=body, headers=headers)
@@ -586,7 +586,7 @@ class HTTPClient:
     def trace(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | IO[Any] | Iterable[bytes] = "",
+        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
         headers: Mapping[str, Any] | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_TRACE, request_uri, body=body, headers=headers)

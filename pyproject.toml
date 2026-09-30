@@ -113,18 +113,6 @@ files = ["src"]
 ignore_missing_imports = true
 disallow_untyped_defs = true
 
-# Modules not fully typed yet. Remove the override as soon as the module
-# is annotated.
-[[tool.mypy.overrides]]
-module = [
-    "geventhttpclient.api",
-    "geventhttpclient.httplib",
-    "geventhttpclient.httplib2",
-    "geventhttpclient.requests",
-    "geventhttpclient.useragent",
-]
-ignore_errors = true
-
 [tool.ruff.lint.isort]
 known-first-party = ["geventhttpclient", "tests"]
 

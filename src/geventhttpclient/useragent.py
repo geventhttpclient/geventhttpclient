@@ -6,17 +6,48 @@ import socket
 import ssl
 import sys
 import zlib
+from collections.abc import Iterable, Iterator, Mapping, MutableMapping
+from http.cookiejar import CookieJar
+from types import TracebackType
+from typing import IO, Any, ClassVar, Literal, Never, Self, overload
 from urllib.parse import urlencode
 
 import brotli
 import gevent
 
 from geventhttpclient.client import HTTPClient, HTTPClientPool
-from geventhttpclient.url import URL, to_key_val_list
+from geventhttpclient.header import Headers
+from geventhttpclient.response import HTTPSocketResponse
+from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
+
+# Request payloads are passed through to the client untouched, which accepts
+# mappings, strings, bytes and file like objects, depending on the content type.
+# _make_request normalises mappings and strings into bytes before the client
+# ever sees them.
+Payload = (
+    str
+    | bytes
+    | bytearray
+    | memoryview
+    | MutableMapping[str, Any]
+    | IO[Any]
+    | Iterable[bytes]
+    | None
+)
+
+FilesInput = Mapping[str, Any] | Iterable[tuple[str, Any]]
+
+# The stdlib jar, fed our own urllib.request compatible request and response
+# objects, which the stdlib annotations do not accept.
+CookieJarLike = CookieJar | None
 
 
 class ConnectionError(Exception):
-    def __init__(self, url, *args, **kw):
+    url: str | URL | None
+    text: str
+    kw_text: str
+
+    def __init__(self, url: str | URL | None, *args: Any, **kw: Any) -> None:
         self.url = url
         self.__dict__.update(kw)
         if args and isinstance(args[0], str):
@@ -30,13 +61,13 @@ class ConnectionError(Exception):
         else:
             self.text = ""
 
-    def __str__(self):
+    def __str__(self) -> str:
         if self.text:
             return f"URL {self.url}: {self.text}"
         else:
             return f"URL {self.url}"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         repr_str = super().__repr__()
         if self.kw_text:
             return repr_str.replace(")", f", {self.kw_text})")
@@ -64,19 +95,35 @@ class CompatRequest:
     #       urllib.request.Request and only deviate when required. Not rebuild
     #       the whole thing.
 
-    def __init__(self, url, method="GET", headers=None, payload=None, params=None):
+    url: str
+    url_split: URL
+    original_host: str
+    method: str
+    headers: Headers
+    payload: Payload
+
+    def __init__(
+        self,
+        url: str | URL,
+        method: str = "GET",
+        headers: Headers | None = None,
+        payload: Payload = None,
+        params: ParamsDataType | None = None,
+    ) -> None:
         self.set_url(url, params=params)
         self.original_host = self.url_split.host
         self.method = method.upper()
-        self.headers = headers
+        # None is accepted for backwards compatibility with callers which never
+        # touch the headers. Every path reading them requires a Headers object.
+        self.headers = headers  # type: ignore[assignment]
         self.payload = payload
 
     @property
-    def full_url(self):
+    def full_url(self) -> str:
         # new in python3.x
         return self.url
 
-    def set_url(self, url, params=None):
+    def set_url(self, url: str | URL, params: ParamsDataType | None = None) -> None:
         if isinstance(url, URL):
             self.url = str(url)
             self.url_split = url
@@ -84,49 +131,49 @@ class CompatRequest:
             self.url = url
             self.url_split = URL(self.url, params=params)
 
-    def get_full_url(self):
+    def get_full_url(self) -> str:
         return self.url
 
-    def get_host(self):
+    def get_host(self) -> str:
         return self.url_split.host
 
-    def get_type(self):
+    def get_type(self) -> str:
         return self.url_split.scheme
 
-    def get_origin_req_host(self):
+    def get_origin_req_host(self) -> str:
         return self.original_host
 
-    def is_unverifiable(self):
+    def is_unverifiable(self) -> bool:
         """See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!"""
         return False
 
     @property
-    def unverifiable(self):
+    def unverifiable(self) -> bool:
         return self.is_unverifiable()
 
-    def get_header(self, header_name, default=None):
+    def get_header(self, header_name: str, default: Any = None) -> Any:
         return self.headers.get(header_name, default)
 
-    def has_header(self, header_name):
+    def has_header(self, header_name: str) -> bool:
         return header_name in self.headers
 
-    def header_items(self):
+    def header_items(self) -> list[tuple[str, Any]]:
         return list(self.headers.items())
 
-    def add_unredirected_header(self, key, val):
+    def add_unredirected_header(self, key: str, val: Any) -> None:
         self.headers.add(key, val)
 
-    def _drop_payload(self):
+    def _drop_payload(self) -> None:
         self.method = "GET"
         self.payload = None
         for item in ("content-length", "content-type", "content-encoding"):
             self.headers.discard(item)
 
-    def _drop_cookies(self):
+    def _drop_cookies(self) -> None:
         for item in ("cookie", "cookie2"):
             self.headers.discard(item)
 
-    def redirect(self, code, location):
+    def redirect(self, code: int, location: str) -> None:
         """Modify the request inplace to point to the new location"""
         self.set_url(self.url_split.redirect(location))
         if code in (301, 302, 303):
@@ -139,49 +186,63 @@ class CompatResponse:
 
     __slots__ = "_cached_content", "_request", "_response", "_sent_request", "headers"
 
-    def __init__(self, ghc_response, request=None, sent_request=None):
+    _response: HTTPSocketResponse
+    _request: CompatRequest | None
+    _sent_request: str | None
+    headers: Headers
+    _cached_content: bytes
+
+    def __init__(
+        self,
+        ghc_response: HTTPSocketResponse,
+        request: CompatRequest | None = None,
+        sent_request: str | None = None,
+    ) -> None:
         self._response = ghc_response
         self._request = request
         self._sent_request = sent_request
         self.headers = self._response._headers_index
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, *args):
+    def __exit__(self, *args: object) -> None:
         self.release()
 
     @property
-    def status_code(self):
+    def status_code(self) -> int:
         """HTTP status code as plain integer"""
         return self._response.get_code()
 
-    def __len__(self):
+    def __len__(self) -> int:
         """The content lengths as declared from the headers"""
-        return self._response.length
+        # a chunked response declares no length at all; the protocol level check
+        # in len() still raises for it, as it always did
+        return self._response.length  # type: ignore[return-value]
 
-    def info(self):
+    def info(self) -> Headers:
         """Adaption to http.client."""
         return self.headers
 
-    def __nonzero__(self):
+    def __nonzero__(self) -> bool:
         """If we have an empty response body, we still don't want to evaluate as false"""
         return True
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[bytes]:
         return iter(self._response)
 
-    def read(self, n=None):
+    def read(self, n: int | None = None) -> bytes:
         """Read n bytes from the response body"""
         return self._response.read(n)
 
-    def readline(self):
+    def readline(self) -> bytes:
+        # the wrapped response defaults to the header delimiter b"\r\n"
         return self._response.readline()
 
-    def release(self):
+    def release(self) -> None:
         return self._response.release()
 
-    def unzipped(self, gzip=True, br=False):
+    def unzipped(self, gzip: bool = True, br: bool = False) -> bytes:
         bodystr = self._response.read()
         if gzip:
             return zlib.decompress(bodystr, 16 + zlib.MAX_WBITS)
@@ -196,7 +257,7 @@ class CompatResponse:
                 return zlib.decompress(bodystr)
 
     @property
-    def content(self):
+    def content(self) -> bytes:
         """Unzips if necessary and buffers the received body. Careful with large files!"""
         try:
             return self._cached_content
@@ -204,7 +265,7 @@ class CompatResponse:
             self._cached_content = self._content()
             return self._cached_content
 
-    def _content(self):
+    def _content(self) -> bytes:
         try:
             content_encoding = self.headers.getheaders("content-encoding")[0].lower()
         except IndexError:
@@ -228,7 +289,10 @@ class CompatResponse:
         return ret
 
     @property
-    def text(self):
+    def text(self) -> bytes | str:
+        """Decoded body for text content types, raw bytes otherwise. Unlike
+        requests.Response.text this does not decode non-text responses, to
+        avoid mangling binary payloads."""
         if not self.content:
             return ""
 
@@ -248,46 +312,53 @@ class CompatResponse:
             return self.content.decode(codec)
         return self.content
 
-    def json(self):
+    def json(self) -> Any:
         return jsonlib.load(self)
 
     # the stuff only for urllib3
 
     @property
-    def status(self):
+    def status(self) -> str:
         """HTTP status for urllib3"""
         return str(self.status_code)
 
     @property
-    def data(self):
+    def data(self) -> bytes:
         """Content for urllib3"""
         return self.content
 
     @property
-    def stream(self):
+    def stream(self) -> HTTPSocketResponse:
         """Readable stream for urllib3"""
         return self._response
 
-    def isclosed(self):
+    def isclosed(self) -> bool:
         """Closed status for urllib3"""
         return self._response.message_complete
 
 
 class UserAgent:
-    response_type = CompatResponse
-    request_type = CompatRequest
-    valid_response_codes = frozenset([200, 206, 301, 302, 303, 307, 308])
-    redirect_response_codes = frozenset([301, 302, 303, 307, 308])
+    response_type: ClassVar[type[CompatResponse]] = CompatResponse
+    request_type: ClassVar[type[CompatRequest]] = CompatRequest
+    valid_response_codes: ClassVar[frozenset[int]] = frozenset([200, 206, 301, 302, 303, 307, 308])
+    redirect_response_codes: ClassVar[frozenset[int]] = frozenset([301, 302, 303, 307, 308])
+
+    max_redirects: int
+    max_retries: int
+    retry_delay: float
+    default_headers: Headers
+    cookiejar: CookieJarLike
+    clientpool: HTTPClientPool
 
     def __init__(
         self,
-        max_redirects=3,
-        max_retries=3,
-        retry_delay=0,
-        cookiejar=None,
-        headers=None,
-        **kw,
-    ):
+        max_redirects: int = 3,
+        max_retries: int = 3,
+        retry_delay: float = 0,
+        cookiejar: CookieJarLike = None,
+        headers: Mapping[str, Any] | None = None,
+        **kw: Any,
+    ) -> None:
         self.max_redirects = int(max_redirects)
         self.max_retries = int(max_retries)
         self.retry_delay = retry_delay
@@ -297,21 +368,26 @@ class UserAgent:
         self.cookiejar = cookiejar
         self.clientpool = HTTPClientPool(**kw)
 
-    def close(self):
+    def close(self) -> None:
         self.clientpool.close()
 
-    def __enter__(self):
+    def __enter__(self) -> Self:
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         self.close()
 
-    def _verify_status(self, status_code, url=None):
+    def _verify_status(self, status_code: int, url: str | URL | None = None) -> None:
         """Hook for subclassing"""
         if status_code not in self.valid_response_codes:
             raise BadStatusCode(url, code=status_code)
 
-    def _handle_error(self, e, url=None):
+    def _handle_error(self, e: BaseException, url: str | URL | None = None) -> BaseException:
         """Hook for subclassing. Raise the error to interrupt further retrying,
         return it to continue retries and save the error, when retries
         exceed the limit.
@@ -334,25 +410,61 @@ class UserAgent:
             return e
         raise e.with_traceback(sys.exc_info()[2])
 
-    def _handle_retries_exceeded(self, url, last_error=None):
+    def _handle_retries_exceeded(
+        self, url: str | URL, last_error: BaseException | None = None
+    ) -> Never:
         """Hook for subclassing"""
         raise RetriesExceeded(url, self.max_retries, original=last_error)
 
+    @overload
     def urlopen(
         self,
-        url,
-        method="GET",
-        response_codes=valid_response_codes,
-        headers=None,
-        payload=None,
-        to_string=False,
-        debug_stream=None,
-        params=None,
-        max_retries=None,
-        max_redirects=None,
-        files=None,
-        **kw,
-    ):
+        url: str | URL,
+        method: str = "GET",
+        response_codes: frozenset[int] = valid_response_codes,
+        headers: Mapping[str, Any] | None = None,
+        payload: Payload = None,
+        to_string: Literal[False] = False,
+        debug_stream: IO[str] | None = None,
+        params: ParamsDataType | None = None,
+        max_retries: int | None = None,
+        max_redirects: int | None = None,
+        files: FilesInput | None = None,
+        **kw: Any,
+    ) -> CompatResponse: ...
+
+    @overload
+    def urlopen(
+        self,
+        url: str | URL,
+        method: str = "GET",
+        response_codes: frozenset[int] = valid_response_codes,
+        headers: Mapping[str, Any] | None = None,
+        payload: Payload = None,
+        to_string: Literal[True] = True,
+        debug_stream: IO[str] | None = None,
+        params: ParamsDataType | None = None,
+        max_retries: int | None = None,
+        max_redirects: int | None = None,
+        files: FilesInput | None = None,
+        **kw: Any,
+    ) -> bytes: ...
+
+    def urlopen(
+        self,
+        url: str | URL,
+        method: str = "GET",
+        response_codes: frozenset[int] = valid_response_codes,
+        headers: Mapping[str, Any] | None = None,
+        payload: Payload = None,
+        to_string: bool = False,
+        debug_stream: IO[str] | None = None,
+        params: ParamsDataType | None = None,
+        max_retries: int | None = None,
+        max_redirects: int | None = None,
+        files: FilesInput | None = None,
+        **kw: Any,
+    ) -> CompatResponse | bytes:
         """Open a URL, do retries and redirects and verify the status code"""
         # POST or GET parameters can be passed in **kw
         req_headers = self.default_headers.copy()
@@ -387,14 +499,14 @@ class UserAgent:
                 gevent.sleep(self.retry_delay)
             for _ in range(max_redirects + 1):
                 if self.cookiejar is not None:
-                    self.cookiejar.add_cookie_header(req)
+                    self.cookiejar.add_cookie_header(req)  # type: ignore[arg-type]
 
                 try:
                     resp = self._urlopen(req)
                 except gevent.GreenletExit:
                     raise
                 except BaseException as e:  # noqa: BLE001
-                    e.request = req
+                    e.request = req  # type: ignore[attr-defined]
                     last_error = self._handle_error(e, url=req.url)
                     break  # Continue with next retry
 
@@ -405,16 +517,16 @@ class UserAgent:
                     )
 
                 if self.cookiejar is not None:
-                    self.cookiejar.extract_cookies(resp, req)
+                    self.cookiejar.extract_cookies(resp, req)  # type: ignore[arg-type]
 
                 try:
                     self._verify_status(resp.status_code, url=req.url)
                 except Exception as e:  # noqa: BLE001
                     # Basic transmission successful, but not the wished result
                     # Let's collect some debug info
-                    e.response = resp
-                    e.request = req
-                    e.http_log = self._conversation_str(req.url, resp, payload=req.payload)
+                    e.response = resp  # type: ignore[attr-defined]
+                    e.request = req  # type: ignore[attr-defined]
+                    e.http_log = self._conversation_str(req.url, resp, payload=req.payload)  # type: ignore[attr-defined]
                     resp.release()
                     last_error = self._handle_error(e, url=req.url)
                     break  # Continue with next retry
@@ -443,30 +555,39 @@ class UserAgent:
                         break
                     else:
                         if not ret:
-                            e = EmptyResponse(url, "Empty response body received")
-                            last_error = self._handle_error(e, url=req.url)
+                            # re-using the name bound by the except block above,
+                            # which python deletes once the handler is left
+                            e = EmptyResponse(url, "Empty response body received")  # type: ignore[misc]
+                            last_error = self._handle_error(e, url=req.url)  # type: ignore[misc]
                             break
                         else:
                             return ret
             else:
-                e = RetriesExceeded(url, f"Redirection limit reached ({self.max_redirects})")
-                last_error = self._handle_error(e, url=url)
+                e = RetriesExceeded(url, f"Redirection limit reached ({self.max_redirects})")  # type: ignore[misc]
+                last_error = self._handle_error(e, url=url)  # type: ignore[misc]
         return self._handle_retries_exceeded(url, last_error=last_error)
 
-    def _urlopen(self, request):
+    def _urlopen(self, request: CompatRequest) -> CompatResponse:
         client = self.clientpool.get_client(request.url_split)
         resp = client.request(
             request.method,
             request.url_split.quoted_uri,
-            body=request.payload,
+            # _make_request already normalised mappings and strings into bytes
+            body=request.payload,  # type: ignore[arg-type]
             headers=request.headers,
         )
         return self.response_type(resp, request=request, sent_request=resp._sent_request)
 
     @classmethod
-    def _conversation_str(cls, url, resp, payload=None, encoding="utf-8"):
+    def _conversation_str(
+        cls,
+        url: str,
+        resp: CompatResponse,
+        payload: Payload = None,
+        encoding: str = "utf-8",
+    ) -> str:
         header_str = "\n".join(f"{key}: {val}" for key, val in resp.headers.items())
-        ret = "REQUEST: " + url + "\n" + resp._sent_request
+        ret = "REQUEST: " + url + "\n" + resp._sent_request  # type: ignore[operator]
         if payload:
             if isinstance(payload, bytes):
                 try:
@@ -487,7 +608,14 @@ class UserAgent:
         )
         return ret
 
-    def download(self, url, fpath, chunk_size=16 * 1024, resume=False, **kw):
+    def download(
+        self,
+        url: str | URL,
+        fpath: str | os.PathLike[str],
+        chunk_size: int = 16 * 1024,
+        resume: bool = False,
+        **kw: Any,
+    ) -> CompatResponse:
         kw.pop("to_string", None)
         headers = kw.pop("headers", {})
         headers["Connection"] = "Keep-Alive"
@@ -531,15 +659,25 @@ class UserAgent:
             # All done, break outer loop
             break
         else:
-            self._handle_retries_exceeded(url, last_error=e)
+            # `e` is only ever bound by the handler above, which python deletes
+            # once it is left; reaching this branch therefore means `e` is gone
+            self._handle_retries_exceeded(url, last_error=e)  # type: ignore[misc]
         return resp
 
-    def _make_request(self, url, method="GET", headers=None, payload=None, params=None, files=None):
+    def _make_request(
+        self,
+        url: str | URL,
+        method: str = "GET",
+        headers: Headers | None = None,
+        payload: Payload = None,
+        params: ParamsDataType | None = None,
+        files: FilesInput | None = None,
+    ) -> CompatRequest:
         """Backwards compatibility for locust."""
         return _make_request(
             url,
             method=method,
-            headers=headers,
+            headers=headers,  # type: ignore[arg-type]
             payload=payload,
             params=params,
             files=files,
@@ -548,8 +686,14 @@ class UserAgent:
 
 
 def _make_request(
-    url, method, headers, payload=None, params=None, files=None, request_type=CompatRequest
-):
+    url: str | URL,
+    method: str,
+    headers: Headers,
+    payload: Payload = None,
+    params: ParamsDataType | None = None,
+    files: FilesInput | None = None,
+    request_type: type[CompatRequest] = CompatRequest,
+) -> CompatRequest:
     # Adjust headers depending on payload content
     content_type = headers.get("content-type", None)
     if files:
@@ -572,30 +716,30 @@ def _make_request(
     return request_type(url, method=method, headers=headers, payload=payload, params=params)
 
 
-def _guess_filename(file):
+def _guess_filename(file: Any) -> str | None:  # type: ignore[return]
     """Tries to guess the filename of the given object."""
     name = getattr(file, "name", None)
     if not name or not isinstance(name, (str, bytes)):
-        return
+        return  # type: ignore[return-value]
     if isinstance(name, bytes):
         name = name.decode()
     if name[0] != "<" and name[-1] != ">":
         return os.path.basename(name)
 
 
-def _quote_param(value):
+def _quote_param(value: Any) -> str:
     """Quote a Content-Disposition parameter value (HTML5 style)."""
     return str(value).replace('"', "%22")
 
 
 def _multipart_part(
-    boundary,
-    name,
-    data,
-    filename=None,
-    content_type=None,
-    extra_headers=None,
-):
+    boundary: bytes,
+    name: str,
+    data: str | bytes | bytearray,
+    filename: str | None = None,
+    content_type: str | None = None,
+    extra_headers: Mapping[str, Any] | None = None,
+) -> bytes:
     """Render a single multipart/form-data part."""
     disposition = f'Content-Disposition: form-data; name="{_quote_param(name)}"'
     if filename is not None:
@@ -612,7 +756,10 @@ def _multipart_part(
     )
 
 
-def _encode_multipart_formdata(files, data):
+def _encode_multipart_formdata(
+    files: FilesInput,
+    data: Payload,
+) -> tuple[bytes, str]:
     """
     Build the body for a multipart/form-data request.
 
@@ -647,7 +794,9 @@ def _encode_multipart_formdata(files, data):
     boundary_bytes = boundary.encode("ascii")
 
     parts = []
-    for field, val in to_key_val_list(data or {}):
+    # str and bytes payloads are rejected above, everything usable here is a
+    # mapping or a list of tuples; the remaining payload kinds fail in the loop
+    for field, val in to_key_val_list(data or {}):  # type: ignore[arg-type]
         if isinstance(val, (str, bytes)) or not hasattr(val, "__iter__"):
             val = [val]
         for v in val:

@@ -29,7 +29,9 @@ class URL:
 
     __slots__ = ("_parsed",)
 
-    def __init__(self, url: str | urlparse.ParseResult = "", params: ParamsDataType | None = None):
+    def __init__(
+        self, url: str | urlparse.ParseResult = "", params: ParamsDataType | None = None
+    ) -> None:
         if isinstance(url, str):
             parsed = urlparse.urlparse(url)
         else:

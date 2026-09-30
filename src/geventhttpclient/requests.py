@@ -1,44 +1,47 @@
 import json as jsonlib
 from http.cookiejar import CookieJar
+from typing import Any
 
 from geventhttpclient import useragent
+from geventhttpclient.response import HTTPSocketResponse
+from geventhttpclient.url import URL, ParamsDataType
 
 
 class RequestsRequest(useragent.CompatRequest):
     @property
-    def body(self):
+    def body(self) -> useragent.Payload:
         return self.payload
 
 
 class RequestsResponse(useragent.CompatResponse):
     @property
-    def request(self):
+    def request(self) -> useragent.CompatRequest | None:
         return self._request
 
     @property
-    def ok(self):
+    def ok(self) -> bool:
         return 100 <= self.status_code < 400
 
     @property
-    def reason(self):
+    def reason(self) -> str | None:
         return self._response.status_message
 
     @property
-    def url(self):
-        return self._request.url
+    def url(self) -> str:
+        return self._request.url  # type: ignore[union-attr]
 
     @property
-    def is_redirect(self):
+    def is_redirect(self) -> bool:
         """True if this Response is a well-formed HTTP redirect that could have
         been processed automatically (by :meth:`Session.resolve_redirects`).
         """
         return "location" in self.headers and self.status_code in range(300, 310)
 
     @property
-    def raw(self):
+    def raw(self) -> HTTPSocketResponse:
         return self.stream
 
-    def raise_for_status(self):
+    def raise_for_status(self) -> None:
         if 400 <= self.status_code < 600:
             raise useragent.BadStatusCode(self.url, code=self.status_code)
 
@@ -56,7 +59,7 @@ class Session(useragent.UserAgent):
     request_type = RequestsRequest
     response_type = RequestsResponse
 
-    def get(self, url, **kw):
+    def get(self, url: str | URL, **kw: Any) -> RequestsResponse:
         r"""Sends a GET request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -67,7 +70,7 @@ class Session(useragent.UserAgent):
         kw.setdefault("allow_redirects", True)
         return self.request("GET", url, **kw)
 
-    def options(self, url, **kw):
+    def options(self, url: str | URL, **kw: Any) -> RequestsResponse:
         r"""Sends a OPTIONS request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -78,7 +81,7 @@ class Session(useragent.UserAgent):
         kw.setdefault("allow_redirects", True)
         return self.request("OPTIONS", url, **kw)
 
-    def head(self, url, **kw):
+    def head(self, url: str | URL, **kw: Any) -> RequestsResponse:
         r"""Sends a HEAD request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -89,7 +92,9 @@ class Session(useragent.UserAgent):
         kw.setdefault("allow_redirects", False)
         return self.request("HEAD", url, **kw)
 
-    def post(self, url, data=None, json=None, **kw):
+    def post(
+        self, url: str | URL, data: useragent.Payload = None, json: Any = None, **kw: Any
+    ) -> RequestsResponse:
         r"""Sends a POST request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -102,7 +107,7 @@ class Session(useragent.UserAgent):
 
         return self.request("POST", url, data=data, json=json, **kw)
 
-    def put(self, url, data=None, **kw):
+    def put(self, url: str | URL, data: useragent.Payload = None, **kw: Any) -> RequestsResponse:
         r"""Sends a PUT request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -114,7 +119,7 @@ class Session(useragent.UserAgent):
 
         return self.request("PUT", url, data=data, **kw)
 
-    def patch(self, url, data=None, **kw):
+    def patch(self, url: str | URL, data: useragent.Payload = None, **kw: Any) -> RequestsResponse:
         r"""Sends a PATCH request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -126,7 +131,7 @@ class Session(useragent.UserAgent):
 
         return self.request("PATCH", url, data=data, **kw)
 
-    def delete(self, url, **kw):
+    def delete(self, url: str | URL, **kw: Any) -> RequestsResponse:
         r"""Sends a DELETE request. Returns a HTTP Response object.
 
         :param url: URL for the new a HTTP Request object.
@@ -138,23 +143,23 @@ class Session(useragent.UserAgent):
 
     def request(
         self,
-        method,
-        url,
-        params=None,
-        data=None,
-        headers=None,
-        cookies=None,
-        files=None,
-        auth=None,
-        timeout=None,
-        allow_redirects=True,
-        proxies=None,
-        hooks=None,
-        stream=None,
-        verify=None,
-        cert=None,
-        json=None,
-    ):
+        method: str,
+        url: str | URL,
+        params: ParamsDataType | None = None,
+        data: useragent.Payload = None,
+        headers: dict[str, Any] | None = None,
+        cookies: None = None,
+        files: useragent.FilesInput | None = None,
+        auth: None = None,
+        timeout: float | tuple[float, float] | None = None,
+        allow_redirects: bool = True,
+        proxies: None = None,
+        hooks: None = None,
+        stream: bool | None = None,
+        verify: bool | str | None = None,
+        cert: str | tuple[str, str] | None = None,
+        json: Any = None,
+    ) -> RequestsResponse:
         """Constructs and sends a HTTP request, returns a HTTP Response object.
 
         NOTE: Only a subset of these parameters is currently (fully) supported.
@@ -198,6 +203,9 @@ class Session(useragent.UserAgent):
             If Tuple, ('cert', 'key') pair.
         :rtype: CompatResponse
         """
+        # only ever used to report which keyword is unsupported, so the loops
+        # below share one deliberately wide annotation
+        param: Any
         for param in (timeout, cert, verify):
             if param is not None:
                 raise ValueError(
@@ -232,9 +240,11 @@ class Session(useragent.UserAgent):
         if stream is False:
             # preload the data
             _ = response.content
-        return response
+        # response_type is declared as type[CompatResponse] on the base
+        # class, so mypy cannot see that this session builds a RequestsResponse
+        return response  # type: ignore[return-value]
 
-    def __init__(self, *args, **kw):
+    def __init__(self, *args: Any, **kw: Any) -> None:
         """
         requests.Session has no arguments at all. Unfortunately, we're relying way more
         on configuring the Session / UserAgent, while requests focuses more on
@@ -245,6 +255,6 @@ class Session(useragent.UserAgent):
         if not self.cookiejar:
             self.cookiejar = CookieJar()
 
-    def _verify_status(self, status_code, url=None):
+    def _verify_status(self, status_code: int, url: str | URL | None = None) -> None:
         # Don't raise, whatever the status is
         pass

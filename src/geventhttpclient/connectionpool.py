@@ -137,7 +137,11 @@ class ConnectionPool:
     def after_connect(self, sock: gevent.socket.socket) -> None:
         pass
 
-    def _connect_socket(self, sock: gevent.socket.socket, address: Any) -> gevent.socket.socket:
+    def _connect_socket(
+        self,
+        sock: gevent.socket.socket,
+        address: tuple[str, int] | tuple[str, int, int, int] | bytes | str,
+    ) -> gevent.socket.socket:
         sock.connect(address)
         return sock
 
@@ -331,7 +335,11 @@ class SSLConnectionPool(ConnectionPool):
 
         super().__init__(connection_host, connection_port, request_host, request_port, **kw)
 
-    def _connect_socket(self, sock: gevent.socket.socket, address: Any) -> gevent.socket.socket:
+    def _connect_socket(
+        self,
+        sock: gevent.socket.socket,
+        address: tuple[str, int] | tuple[str, int, int, int] | bytes | str,
+    ) -> gevent.socket.socket:
         sock = super()._connect_socket(sock, address)
 
         if self._use_proxy:

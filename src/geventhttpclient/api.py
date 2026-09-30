@@ -8,10 +8,15 @@ Copyright of the original requests project:
 :license: Apache2, see LICENSE for more details.
 """
 
+from typing import Any
+
 import geventhttpclient.requests
+from geventhttpclient.requests import RequestsResponse
+from geventhttpclient.url import URL, ParamsDataType
+from geventhttpclient.useragent import Payload
 
 
-def request(method, url, **kw):
+def request(method: str, url: str | URL, **kw: Any) -> RequestsResponse:
     """Constructs and sends a HTTP request. WARNING: Only a subset of the following parameters is currently supported
 
     :param method: method for the new request object: ``GET``, ``OPTIONS``, ``HEAD``, ``POST``, ``PUT``, ``PATCH``, or ``DELETE``.
@@ -59,7 +64,7 @@ def request(method, url, **kw):
         return session.request(method=method, url=url, **kw)
 
 
-def get(url, params=None, **kw):
+def get(url: str | URL, params: ParamsDataType | None = None, **kw: Any) -> RequestsResponse:
     r"""Sends a GET request.
 
     :param url: URL for the new HTTP Request object.
@@ -73,7 +78,7 @@ def get(url, params=None, **kw):
     return request("get", url, params=params, **kw)
 
 
-def options(url, **kw):
+def options(url: str | URL, **kw: Any) -> RequestsResponse:
     r"""Sends an OPTIONS request.
 
     :param url: URL for the new HTTP Request object.
@@ -85,7 +90,7 @@ def options(url, **kw):
     return request("options", url, **kw)
 
 
-def head(url, **kw):
+def head(url: str | URL, **kw: Any) -> RequestsResponse:
     r"""Sends a HEAD request.
 
     :param url: URL for the new HTTP Request object.
@@ -100,7 +105,7 @@ def head(url, **kw):
     return request("head", url, **kw)
 
 
-def post(url, data=None, json=None, **kw):
+def post(url: str | URL, data: Payload = None, json: Any = None, **kw: Any) -> RequestsResponse:
     r"""Sends a POST request.
 
     :param url: URL for the new HTTP Request object.
@@ -115,7 +120,7 @@ def post(url, data=None, json=None, **kw):
     return request("post", url, data=data, json=json, **kw)
 
 
-def put(url, data=None, **kw):
+def put(url: str | URL, data: Payload = None, **kw: Any) -> RequestsResponse:
     r"""Sends a PUT request.
 
     :param url: URL for the new HTTP Request object.
@@ -130,7 +135,7 @@ def put(url, data=None, **kw):
     return request("put", url, data=data, **kw)
 
 
-def patch(url, data=None, **kw):
+def patch(url: str | URL, data: Payload = None, **kw: Any) -> RequestsResponse:
     r"""Sends a PATCH request.
 
     :param url: URL for the new HTTP Request object.
@@ -145,7 +150,7 @@ def patch(url, data=None, **kw):
     return request("patch", url, data=data, **kw)
 
 
-def delete(url, **kw):
+def delete(url: str | URL, **kw: Any) -> RequestsResponse:
     r"""Sends a DELETE request.
 
     :param url: URL for the new HTTP Request object.
