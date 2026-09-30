@@ -10,6 +10,7 @@ description = "HTTP client library for gevent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+license-files = ["LICENSE-MIT", "llhttp/LICENSE"]
 keywords = ["http", "gevent", "client"]
 authors = [{name = "Antonin Amand", email = "antonin.amand@gmail.com"}]
 classifiers = [
@@ -27,7 +28,11 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "gevent",
+    # Single floor for all supported interpreters, verified against the
+    # full test suite on Python 3.11-3.14: gevent 25.9 is the first
+    # release shipping wheels for Python 3.14. Older gevent releases are
+    # not supported.
+    "gevent>=25.9",
     "certifi",
     "brotli",
 ]
@@ -46,9 +51,9 @@ optional-dependencies.benchmarks = [
 
 
 [project.urls]
-homepage = "http://github.com/geventhttpclient/geventhttpclient"
-issues = "http://github.com/geventhttpclient/geventhttpclient/issues"
-download = "https://pypi.org/project/geventhttpclient/#files"
+homepage = "https://github.com/geventhttpclient/geventhttpclient"
+repository = "https://github.com/geventhttpclient/geventhttpclient"
+issues = "https://github.com/geventhttpclient/geventhttpclient/issues"
 
 
 [tool.setuptools]

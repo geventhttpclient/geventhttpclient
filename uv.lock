@@ -3,7 +3,10 @@ revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
-    "python_full_version < '3.15'",
+    "python_full_version == '3.14.*'",
+    "python_full_version == '3.13.*'",
+    "python_full_version == '3.12.*'",
+    "python_full_version < '3.12'",
 ]
 
 [[package]]
@@ -429,7 +432,7 @@ requires-dist = [
     { name = "brotli" },
     { name = "certifi" },
     { name = "dpkt", marker = "extra == 'dev'" },
-    { name = "gevent" },
+    { name = "gevent", specifier = ">=25.9" },
     { name = "httplib2", marker = "extra == 'benchmarks'" },
     { name = "httpx", marker = "extra == 'benchmarks'" },
     { name = "mypy", marker = "extra == 'dev'" },

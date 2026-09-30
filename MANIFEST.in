@@ -2,7 +2,7 @@ include src/geventhttpclient/*.py
 include src/geventhttpclient/py.typed
 include ext/*.c
 include ext/*.h
-recursive-include llhttp *.h *.c LICENSE-MIT
+recursive-include llhttp *.h *.c LICENSE LICENSE-MIT
 graft tests
 global-exclude __pycache__
 global-exclude *.py[co]
