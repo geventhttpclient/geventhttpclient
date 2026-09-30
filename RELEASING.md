@@ -31,6 +31,8 @@
      arch configuration in `pyproject.toml`): CPython 3.11-3.14 on
      manylinux and musllinux for x86_64, aarch64 and ppc64le, macOS for
      x86_64, arm64 and universal2, and Windows for x86_64 and ARM64.
+     Each built wheel is installed and smoke-tested (import of the
+     package and its C extension) before it is uploaded.
      Building requires the `llhttp` git submodule and the full tag
      history; the workflow checks out with `fetch-depth: 0` and
      `submodules: recursive`.

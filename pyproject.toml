@@ -78,6 +78,14 @@ fallback_version = "0.0.0"
 # CPython 3.11-3.14, no free-threaded variants (cp3xxt) and no unreleased
 # Python versions; musllinux is included via the cp3xx-* globs.
 build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*"]
+# Smoke test each built wheel: install it and import the package and the
+# C extension before upload. TOML line continuations keep the line length
+# in check; the resulting command is a single line.
+test-command = """\
+python -c 'import geventhttpclient, \
+geventhttpclient._parser; \
+print(geventhttpclient.__version__)'\
+"""
 
 [tool.cibuildwheel.linux]
 archs = ["x86_64", "aarch64", "ppc64le"]
