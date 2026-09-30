@@ -43,9 +43,6 @@ optional-dependencies.benchmarks = [
     "urllib3",
     "httplib2",
 ]
-optional-dependencies.examples = [
-    "oauth2",
-]
 
 
 [project.urls]
