@@ -21,13 +21,6 @@ if not _CA_CERTS or os.path.isdir(_CA_CERTS):
 
     _CA_CERTS = certifi.where()
 
-_DEFAULT_CIPHERS = (
-    "ECDH+AESGCM:DH+AESGCM:ECDH+AES256:DH+AES256:ECDH+AES128:DH+AES:ECDH+HIGH:"
-    "DH+HIGH:ECDH+3DES:DH+3DES:RSA+AESGCM:RSA+AES:RSA+HIGH:RSA+3DES:ECDH+RC4:"
-    "DH+RC4:RSA+RC4:!aNULL:!eNULL:!MD5"  # codespell-ignore
-)
-
-
 DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_NETWORK_TIMEOUT = 5.0
 
@@ -304,7 +297,6 @@ class SSLConnectionPool(ConnectionPool):
     """
 
     default_options: ClassVar[dict] = {
-        "ciphers": _DEFAULT_CIPHERS,
         "ca_certs": _CA_CERTS,
         "cert_reqs": gevent.ssl.CERT_REQUIRED,
         "ssl_version": PROTOCOL_TLS_CLIENT,

@@ -14,6 +14,7 @@ from gevent import joinall
 from gevent.socket import error as socket_error
 
 from geventhttpclient import HTTPClient
+from geventhttpclient.connectionpool import SSLConnectionPool
 from tests.common import LISTENER
 
 BASEDIR = os.path.dirname(__file__)
@@ -306,3 +307,25 @@ def test_fail_invalid_ca_certificate():
         client.get("/")
     assert e_info.value.reason == "CERTIFICATE_VERIFY_FAILED"
     check_client_cert_required(client)
+
+
+def _pool_context(**ssl_options):
+    """The TLS context a pool would use for a connection."""
+    pool = SSLConnectionPool("localhost", 443, "localhost", 443, ssl_options=ssl_options or None)
+    return pool.ssl_context
+
+
+def test_the_cipher_list_is_left_to_openssl():
+    """We ship no cipher list, so OpenSSL decides what is acceptable."""
+    reference = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    assert [c["name"] for c in _pool_context().get_ciphers()] == [
+        c["name"] for c in reference.get_ciphers()
+    ]
+    assert "ciphers" not in SSLConnectionPool.default_options
+
+
+def test_requested_ciphers_are_used():
+    """An explicit cipher list still reaches the context."""
+    names = [c["name"] for c in _pool_context(ciphers="AES256-GCM-SHA384").get_ciphers()]
+    assert "AES256-GCM-SHA384" in names
+    assert "AES128-SHA" not in names
