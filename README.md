@@ -5,9 +5,9 @@
 
 # geventhttpclient
 
-A [high performance](https://github.com/geventhttpclient/geventhttpclient/blob/master/README.md#Benchmarks),
+A [high performance](https://github.com/geventhttpclient/geventhttpclient/blob/master/README.md#benchmarks),
 concurrent HTTP client library for python using
-[gevent](http://gevent.org).
+[gevent](https://www.gevent.org).
 
 `gevent.httplib` support for patching `http.client` was removed in
 [gevent 1.0](https://github.com/surfly/gevent/commit/b45b83b1bc4de14e3c4859362825044b8e3df7d6),
@@ -18,12 +18,25 @@ written in C.
 
 `geventhttpclient` has been specifically designed for high concurrency,
 streaming and support HTTP 1.1 persistent connections. More generally it is
-designed for efficiently pulling from REST APIs and streaming APIs
-like Twitter's.
+designed for efficiently pulling from REST APIs and streaming APIs.
 
 Safe SSL support is provided by default. `geventhttpclient` depends on
 the certifi CA Bundle. This is the same CA Bundle which ships with the
 Requests codebase, and is derived from Mozilla Firefox's canonical set.
+
+## Installation
+
+Install the latest release from PyPI:
+
+```
+pip install geventhttpclient
+```
+
+It supports Python 3.11-3.14 and requires `gevent>=25.9`. The package
+ships with wheels for common platforms and falls back to a source build
+with a C compiler otherwise; it is fully type annotated (`py.typed`).
+
+## Requests-compatible interface
 
 Since version 2.3, `geventhttpclient` features a largely `requests`
 compatible interface. It covers basic HTTP usage including cookie
@@ -96,7 +109,7 @@ from geventhttpclient import HTTPClient
 from geventhttpclient.url import URL
 
 
-# go to http://developers.facebook.com/tools/explorer and copy the access token
+# go to https://developers.facebook.com/tools/explorer and copy the access token
 TOKEN = "<MY_DEV_TOKEN>"
 
 url = URL("https://graph.facebook.com/me/friends", params={"access_token": TOKEN})
@@ -139,28 +152,51 @@ client.close()
 
 ## Streaming
 
-`geventhttpclient` supports streaming. Response objects have a `read(n)` and
-`readline()` method that read the stream incrementally.
-See [examples/oauth2.py](https://github.com/geventhttpclient/geventhttpclient/blob/master/examples/oauth2.py)
-for an OAuth 2.0 client credentials example.
+Response objects read the body incrementally from the socket, so a large
+response never has to be held in memory. `read(n)` returns up to `n` bytes,
+`readline(sep)` returns one line. Pass `b"\n"` for line oriented payloads,
+as the default separator is the one that terminates HTTP headers. Iterating a
+response yields `block_size` sized chunks, not lines.
 
-Here is an example on how to download a big file chunk by chunk to save memory:
+Reading a streamed endpoint line by line:
+
+```python
+import json
+
+from geventhttpclient import HTTPClient, URL
+
+url = URL("http://httpbingo.org/stream/6")
+client = HTTPClient.from_url(url)
+response = client.get(url.request_uri)
+assert response.status_code == 200
+
+line = response.readline(b"\n")
+while line:
+    print(json.loads(line)["id"])
+    line = response.readline(b"\n")
+```
+
+Downloading a big file chunk by chunk keeps memory flat:
 
 ```python
 from geventhttpclient import HTTPClient, URL
 
-url = URL("http://127.0.0.1:80/100.dat")
+url = URL("https://proof.ovh.net/files/1Mb.dat")
 client = HTTPClient.from_url(url)
-response = client.get(url.query_string)
+response = client.get(url.request_uri)
 assert response.status_code == 200
 
 CHUNK_SIZE = 1024 * 16  # 16KB
-with open("/tmp/100.dat", "w") as f:
+with open("1Mb.dat", "wb") as f:  # binary mode, the body is raw bytes
     data = response.read(CHUNK_SIZE)
     while data:
         f.write(data)
         data = response.read(CHUNK_SIZE)
 ```
+
+See [examples/oauth2.py](https://github.com/geventhttpclient/geventhttpclient/blob/master/examples/oauth2.py)
+for an OAuth 2.0 client credentials example consuming a line delimited
+response while it streams.
 
 ## Chunked request bodies
 
@@ -212,25 +248,22 @@ client = HTTPClient(
 
 The same keyword arguments are accepted by `UserAgent` and `HTTPClientPool`.
 
-## Expect: 100-continue
+## Development
 
-Add an `Expect: 100-continue` header to let the server reject a request with a
-large body before the body is sent. The client sends the headers first, waits
-for an interim `100 Continue` response before sending the body, and returns
-the final response directly if the server rejects the request:
+The `llhttp` parser is vendored as a git submodule; clone with
+`--recurse-submodules` (or run `git submodule update --init`) and set up
+the test environment with:
 
-```python
-client = HTTPClient.from_url(url)
-response = client.post("/upload", body=data, headers={"Expect": "100-continue"})
 ```
-
-Note that servers not answering an `Expect: 100-continue` request block until
-the network timeout is reached.
+uv sync --extra dev
+uv run pytest                # gevent-monkey-patched (default)
+NON_GEVENT=1 uv run pytest   # without patching (see issue #241)
+```
 
 ## Benchmarks
 
 The benchmark runs 10000 `GET` requests against a local nginx server in the default
-configuration with a concurrency of 10. See `benchmarks` folder. The requests per
+configuration with a concurrency of 10. The requests per
 second for a couple of popular clients is given in the table below. Please read
 [benchmarks/README.md](https://github.com/geventhttpclient/geventhttpclient/blob/master/benchmarks/README.md)
 for more details. Also note, [HTTPX](https://www.python-httpx.org/) is better be
@@ -245,11 +278,3 @@ used with `asyncio`, not `gevent`.
 | Httpx              | 770.3  |
 
 *Linux(x86_64), Python 3.11.6 @ Intel i7-7560U*
-
-## License
-
-This package is distributed under the [MIT license](https://github.com/geventhttpclient/geventhttpclient/blob/master/LICENSE-MIT).
-Previous versions of geventhttpclient used `http_parser.c`, which in turn was
-based on `http/ngx_http_parse.c` from [NGINX](https://nginx.org), copyright Igor
-Sysoev, Joyent, Inc., and other Node contributors. For more information, see
-http://github.com/joyent/http-parser

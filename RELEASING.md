@@ -54,4 +54,5 @@
 Without a tag on the current commit, builds produce a PEP 440 dev version
 derived from the nearest tag (e.g. `2.5.2.dev3+g<hash>`). Builds without
 git metadata (shallow checkouts, downloaded source trees) fall back to
-`0.0.0` via `fallback_version`.
+`0.0.0` via `fallback_version`; importing directly from a source tree
+without a build step yields `0.0.0+unknown`.
