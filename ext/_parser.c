@@ -1,6 +1,5 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include "Python_compat.h"
 #include <llhttp.h>
 #include <stdio.h>
 
@@ -236,21 +235,12 @@ PyHTTPResponseParser_parser_failed(PyHTTPResponseParser* self)
     return PyBool_FromLong(self->error != HPE_OK || llhttp_get_errno(self->parser) != HPE_OK);
 }
 
-#if PY_MAJOR_VERSION >= 3
 static PyObject*
 PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
 {
     return PyUnicode_FromFormat("HTTP/%u.%u", self->parser->http_major,
         self->parser->http_minor);
 }
-#else
-static PyObject*
-PyHTTPResponseParser_get_http_version(PyHTTPResponseParser *self)
-{
-    return PyString_FromFormat("HTTP/%u.%u", self->parser->http_major,
-        self->parser->http_minor);
-}
-#endif
 
 static PyObject*
 PyHTTPResponseParser_get_remaining_content_length(PyHTTPResponseParser *self)
@@ -363,7 +353,6 @@ static PyMethodDef module_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-#if PY_MAJOR_VERSION >= 3
 static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
         "_parser",
@@ -379,42 +368,25 @@ static struct PyModuleDef moduledef = {
 #define INITERROR return NULL
 PyMODINIT_FUNC
 PyInit__parser(void)
-
-#else
-#define INITERROR return
-void
-init_parser(void)
-#endif
 {
-    PyObject *module, *httplib, *HTTPException;
+    PyObject *module, *http_client, *HTTPException;
 
     if (PyType_Ready(&HTTPParserType) < 0)
         INITERROR;
 
-    #if PY_MAJOR_VERSION >= 3
     module = PyModule_Create(&moduledef);
-    #else
-    module = Py_InitModule3("_parser", module_methods,
-                       "HTTP Parser from nginx/Joyent.");
-    #endif
 
     Py_INCREF(&HTTPParserType);
     PyModule_AddObject(module, "HTTPResponseParser", (PyObject *)&HTTPParserType);
 
-    #if PY_MAJOR_VERSION >= 3
-    httplib = PyImport_ImportModule("http.client");
-    #else
-    httplib = PyImport_ImportModule("httplib");
-    #endif
-    HTTPException = PyObject_GetAttrString(httplib, "HTTPException");
+    http_client = PyImport_ImportModule("http.client");
+    HTTPException = PyObject_GetAttrString(http_client, "HTTPException");
 
     PyExc_HTTPParseError = PyErr_NewException(
             "_parser.HTTPParseError", HTTPException, NULL);
     Py_INCREF(PyExc_HTTPParseError);
     PyModule_AddObject(module, "HTTPParseError", PyExc_HTTPParseError);
-    #if PY_MAJOR_VERSION >= 3
     return  module;
-    #endif
 }
 
 #undef PY_SSIZE_T_CLEAN

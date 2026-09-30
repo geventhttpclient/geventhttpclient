@@ -224,10 +224,6 @@ class CompatResponse:
         """Adaption to http.client."""
         return self.headers
 
-    def __nonzero__(self) -> bool:
-        """If we have an empty response body, we still don't want to evaluate as false"""
-        return True
-
     def __iter__(self) -> Iterator[bytes]:
         return iter(self._response)
 
