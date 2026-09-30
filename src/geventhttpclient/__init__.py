@@ -1,6 +1,6 @@
 # package
 
-__version__ = "2.5.0"  # don't forget to update version in pyproject.toml as well
+__version__ = "2.5.1"  # don't forget to update version in pyproject.toml as well
 
 from geventhttpclient.api import delete, get, head, options, patch, post, put, request
 from geventhttpclient.client import HTTPClient
