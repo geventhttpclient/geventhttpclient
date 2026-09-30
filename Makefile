@@ -25,6 +25,6 @@ dist:
 	python setup.py sdist upload
 
 release:
-	cat release.md
+	cat RELEASING.md
 
 .PHONY: develop dist release test test-nongevent

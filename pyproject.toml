@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=77"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 
 [project]
 name = "geventhttpclient"
-version = "2.5.1" # don't forget to update version __init__.py as well
+dynamic = ["version"]
 description = "HTTP client library for gevent"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -60,6 +60,14 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 geventhttpclient = ["py.typed"]
+
+# The package version is derived from git tags (bare format, e.g. "2.5.2",
+# no "v" prefix). The generated version file is created at build time and
+# must not be committed; the fallback applies to builds without git
+# metadata such as shallow CI checkouts or downloaded source trees.
+[tool.setuptools_scm]
+version_file = "src/geventhttpclient/_version.py"
+fallback_version = "0.0.0"
 
 [tool.cibuildwheel]
 # CPython 3.11-3.14, no free-threaded variants (cp3xxt) and no unreleased
