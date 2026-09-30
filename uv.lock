@@ -3,7 +3,10 @@ revision = 3
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.15'",
-    "python_full_version < '3.15'",
+    "python_full_version == '3.14.*'",
+    "python_full_version == '3.13.*'",
+    "python_full_version == '3.12.*'",
+    "python_full_version < '3.12'",
 ]
 
 [[package]]
@@ -403,7 +406,6 @@ wheels = [
 
 [[package]]
 name = "geventhttpclient"
-version = "2.5.0"
 source = { editable = "." }
 dependencies = [
     { name = "brotli" },
@@ -422,10 +424,8 @@ dev = [
     { name = "dpkt" },
     { name = "mypy" },
     { name = "pytest" },
+    { name = "pytest-rerunfailures" },
     { name = "requests" },
-]
-examples = [
-    { name = "oauth2" },
 ]
 
 [package.metadata]
@@ -433,17 +433,17 @@ requires-dist = [
     { name = "brotli" },
     { name = "certifi" },
     { name = "dpkt", marker = "extra == 'dev'" },
-    { name = "gevent" },
+    { name = "gevent", specifier = ">=25.9" },
     { name = "httplib2", marker = "extra == 'benchmarks'" },
     { name = "httpx", marker = "extra == 'benchmarks'" },
     { name = "mypy", marker = "extra == 'dev'" },
-    { name = "oauth2", marker = "extra == 'examples'" },
     { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-rerunfailures", marker = "extra == 'dev'" },
     { name = "requests", marker = "extra == 'benchmarks'" },
     { name = "requests", marker = "extra == 'dev'" },
     { name = "urllib3", marker = "extra == 'benchmarks'" },
 ]
-provides-extras = ["dev", "benchmarks", "examples"]
+provides-extras = ["dev", "benchmarks"]
 
 [[package]]
 name = "greenlet"
@@ -775,18 +775,6 @@ wheels = [
 ]
 
 [[package]]
-name = "oauth2"
-version = "1.9.0.post1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "httplib2" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/64/19/8b9066e94088e8d06d649e10319349bfca961e87768a525aba4a2627c986/oauth2-1.9.0.post1.tar.gz", hash = "sha256:c006a85e7c60107c7cc6da1b184b5c719f6dd7202098196dfa6e55df669b59bf", size = 21306, upload-time = "2015-09-12T12:44:37.392Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a0/6f/86db603912ecd04109af952c38bc08928886cf0e34c723481fa7db98b4b5/oauth2-1.9.0.post1-py2.py3-none-any.whl", hash = "sha256:15b5c42301f46dd63113f1214b0d81a8b16254f65a86d3c32a1b52297f3266e6", size = 25381, upload-time = "2015-09-12T12:47:02.67Z" },
-]
-
-[[package]]
 name = "packaging"
 version = "26.3"
 source = { registry = "https://pypi.org/simple" }
@@ -854,6 +842,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/24/25/1de2678b631f5a49215c6c96fff41ba892b0a34df68d6d80292b1b48aa7f/pytest-9.1.1-py3-none-any.whl", hash = "sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c", size = 386536, upload-time = "2026-06-19T10:58:31.347Z" },
+]
+
+[[package]]
+name = "pytest-rerunfailures"
+version = "16.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d1/b0/6b5337f9d59b26b0069ea3d5e863c31dc04b69e51bbfb1cf2ea6328fba87/pytest_rerunfailures-16.7.tar.gz", hash = "sha256:6956ddfb65ca1d07e7e3d99e2c5359d82300f4cb062e6049563bd2c106f72d5c", size = 59666, upload-time = "2026-09-17T07:08:48.871Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c1/d3/07ea35102cf2020ddaaac368d2a6f0bcc63d6523fb8918805bac3eb8b98f/pytest_rerunfailures-16.7-py3-none-any.whl", hash = "sha256:edf1886209c2b7dafe35b5bf1708d6ec40ccf6c6b357f0f02807efcec0204c99", size = 23952, upload-time = "2026-09-17T07:08:47.635Z" },
 ]
 
 [[package]]

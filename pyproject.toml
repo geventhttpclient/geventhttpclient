@@ -1,15 +1,16 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 
 [project]
 name = "geventhttpclient"
-version = "2.5.1" # don't forget to update version __init__.py as well
+dynamic = ["version"]
 description = "HTTP client library for gevent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
+license-files = ["LICENSE-MIT", "llhttp/LICENSE"]
 keywords = ["http", "gevent", "client"]
 authors = [{name = "Antonin Amand", email = "antonin.amand@gmail.com"}]
 classifiers = [
@@ -24,15 +25,21 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
 ]
 dependencies = [
-    "gevent",
+    # Single floor for all supported interpreters, verified against the
+    # full test suite on Python 3.11-3.14: gevent 25.9 is the first
+    # release shipping wheels for Python 3.14. Older gevent releases are
+    # not supported.
+    "gevent>=25.9",
     "certifi",
     "brotli",
 ]
 optional-dependencies.dev = [
     "mypy",
     "pytest",
+    "pytest-rerunfailures",
     "dpkt",
     "requests",
 ]
@@ -42,15 +49,12 @@ optional-dependencies.benchmarks = [
     "urllib3",
     "httplib2",
 ]
-optional-dependencies.examples = [
-    "oauth2",
-]
 
 
 [project.urls]
-homepage = "http://github.com/geventhttpclient/geventhttpclient"
-issues = "http://github.com/geventhttpclient/geventhttpclient/issues"
-download = "https://pypi.org/project/geventhttpclient/#files"
+homepage = "https://github.com/geventhttpclient/geventhttpclient"
+repository = "https://github.com/geventhttpclient/geventhttpclient"
+issues = "https://github.com/geventhttpclient/geventhttpclient/issues"
 
 
 [tool.setuptools]
@@ -61,10 +65,34 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-"*" = ["README.md", "release.md", "LICENSE-MIT"]
+geventhttpclient = ["py.typed"]
 
-[tool.setuptools.exclude-package-data]
-"*" = ["__pycache__", "*.pyc", "*.pyo"]
+# The package version is derived from git tags (bare format, e.g. "2.5.2",
+# no "v" prefix). The generated version file is created at build time and
+# must not be committed; the fallback applies to builds without git
+# metadata such as shallow CI checkouts or downloaded source trees.
+[tool.setuptools_scm]
+version_file = "src/geventhttpclient/_version.py"
+fallback_version = "0.0.0"
+
+[tool.cibuildwheel]
+# CPython 3.11-3.14, no free-threaded variants (cp3xxt) and no unreleased
+# Python versions; musllinux is included via the cp3xx-* globs.
+build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*"]
+# Smoke test each built wheel: install it and import the package and the
+# C extension before upload. TOML line continuations keep the line length
+# in check; the resulting command is a single line.
+test-command = """\
+python -c 'import geventhttpclient, \
+geventhttpclient._parser; \
+print(geventhttpclient.__version__)'\
+"""
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64", "ppc64le"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "universal2", "arm64"]
 
 
 [tool.pytest.ini_options]
