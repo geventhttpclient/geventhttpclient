@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 
@@ -24,6 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
 ]
 dependencies = [
     "gevent",
@@ -61,10 +62,18 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-"*" = ["README.md", "release.md", "LICENSE-MIT"]
+geventhttpclient = ["py.typed"]
 
-[tool.setuptools.exclude-package-data]
-"*" = ["__pycache__", "*.pyc", "*.pyo"]
+[tool.cibuildwheel]
+# CPython 3.11-3.14, no free-threaded variants (cp3xxt) and no unreleased
+# Python versions; musllinux is included via the cp3xx-* globs.
+build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*"]
+
+[tool.cibuildwheel.linux]
+archs = ["x86_64", "aarch64", "ppc64le"]
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "universal2", "arm64"]
 
 
 [tool.pytest.ini_options]

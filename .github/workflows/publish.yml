@@ -26,11 +26,8 @@ jobs:
         name: Set up QEMU
       - name: Install uv
         uses: astral-sh/setup-uv@v10.2.0
-      - run: uvx cibuildwheel --output-dir wheelhouse
+      - run: uvx cibuildwheel==4.2.1 --output-dir wheelhouse
         name: Run build wheel
-        env:
-          CIBW_ARCHS_MACOS: "x86_64 universal2 arm64"
-          CIBW_ARCHS_LINUX: "auto aarch64 ppc64le"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-wheels-${{ matrix.os }}
@@ -49,6 +46,10 @@ jobs:
         uses: astral-sh/setup-uv@v10.2.0
       - run: uv build --sdist
         name: Build source tarball
+      - name: Refuse to publish unless the sdist version matches the ref name
+        run: |
+          test "$(ls dist/*.tar.gz | wc -l)" = 1
+          test "geventhttpclient-${GITHUB_REF_NAME}.tar.gz" = "$(basename dist/*.tar.gz)"
       - uses: actions/upload-artifact@v4
         with:
           name: dist-source
