@@ -72,6 +72,9 @@ def _uses_chunked_transfer(header_fields: Mapping[str, Any], body: Any) -> bool:
             and TRANSFER_ENCODING_CHUNKED in str(value).lower()
         ):
             return True
+    if body is None:
+        # No body at all; unknown-length streams are chunked, None is not.
+        return False
     return not isinstance(body, (bytes, bytearray, memoryview)) and _get_body_length(body) is None
 
 
@@ -348,7 +351,10 @@ class HTTPClient:
         :return:
         """
 
-        if isinstance(body, str):
+        if body is None:
+            # None means "no body", not a body of unknown length.
+            body = b""
+        elif isinstance(body, str):
             body = body.encode("utf-8")
 
         # the same case-insensitive merge `_build_request` performs before
@@ -425,15 +431,16 @@ class HTTPClient:
                     response._sent_request = request
                     return response
                 if chunked:
-                    sock.sendall(_request)
                     # Note: on retry, file-like/iterable bodies continue
                     # from their current position or are exhausted, same
                     # as with `sendfile` before.
                     if body:
+                        sock.sendall(_request)
                         for block in _iter_chunked(body, self.block_size):
                             sock.sendall(block)
                     else:
-                        sock.sendall(b"0\r\n\r\n")
+                        # Single write: a separate small write stalls on Nagle.
+                        sock.sendall(_request + b"0\r\n\r\n")
                 elif body:
                     if isinstance(body, bytes):
                         sock.sendall(_request + body)

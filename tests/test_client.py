@@ -6,6 +6,7 @@ import sys
 import gevent.pool
 import gevent.queue
 import gevent.server
+import gevent.socket
 import pytest
 
 from geventhttpclient import __version__
@@ -237,6 +238,60 @@ def test_post_chunked_request_empty_body_with_header():
         client = HTTPClient(*LISTENER)
         response = client.post("/", body=b"", headers={"Transfer-Encoding": "chunked"})
         assert response.status_code == 200
+
+
+def test_request_body_none_is_not_chunked():
+    """Regression: body=None means "no body", not an unknown-length body (#248)."""
+
+    def handler(sock, addr):
+        # The request is complete after the headers; chunked would add `0\r\n\r\n`.
+        data = b""
+        while b"\r\n\r\n" not in data:
+            block = sock.recv(4096)
+            assert block, "connection closed before request was complete"
+            data += block
+        header, _, rest = data.partition(b"\r\n\r\n")
+        assert header.lower().startswith(b"get / http/1.1")
+        assert b"transfer-encoding" not in header.lower()
+        assert b"content-length" not in header.lower()
+        assert rest == b"", f"unexpected body bytes after headers: {rest!r}"
+        sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+
+    with server(handler):
+        client = HTTPClient(*LISTENER)
+        response = client.request(METHOD_GET, "/", body=None)
+        assert response.status_code == 200
+
+
+def test_chunked_empty_body_single_write(monkeypatch):
+    """An explicit chunked request without body must go out in a single write
+    (a second small write stalls on Nagle until the delayed ACK)."""
+
+    def handler(sock, addr):
+        data = b""
+        while not data.endswith(b"0\r\n\r\n"):
+            block = sock.recv(4096)
+            assert block, "connection closed before final chunk"
+            data += block
+        sock.sendall(b"HTTP/1.1 200 Ok\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+
+    client_writes = []
+    original_sendall = gevent.socket.socket.sendall
+
+    def recording_sendall(sock, data):
+        if data.startswith(b"POST"):
+            client_writes.append(bytes(data))
+        return original_sendall(sock, data)
+
+    monkeypatch.setattr(gevent.socket.socket, "sendall", recording_sendall)
+    with server(handler):
+        client = HTTPClient(*LISTENER)
+        response = client.post("/", body=b"", headers={"Transfer-Encoding": "chunked"})
+        assert response.status_code == 200
+
+    assert len(client_writes) == 1
+    assert client_writes[0].startswith(b"POST / HTTP/1.1\r\n")
+    assert client_writes[0].endswith(b"\r\n\r\n0\r\n\r\n")
 
 
 def test_chunked_request_rejects_http_1_0():
