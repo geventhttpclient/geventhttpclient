@@ -9,7 +9,7 @@ import zlib
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from http.cookiejar import CookieJar
 from types import TracebackType
-from typing import IO, Any, ClassVar, Literal, Never, Self, overload
+from typing import IO, Any, ClassVar, Final, Literal, Never, Self, overload
 from urllib.parse import urlencode
 
 import brotli
@@ -333,11 +333,16 @@ class CompatResponse:
         return self._response.message_complete
 
 
+# Status codes whose Location header the client follows. Same set requests
+# calls a redirect, and the default for UserAgent.redirect_response_codes.
+REDIRECT_RESPONSE_CODES: Final[frozenset[int]] = frozenset([301, 302, 303, 307, 308])
+
+
 class UserAgent:
     response_type: ClassVar[type[CompatResponse]] = CompatResponse
     request_type: ClassVar[type[CompatRequest]] = CompatRequest
     valid_response_codes: ClassVar[frozenset[int]] = frozenset([200, 206, 301, 302, 303, 307, 308])
-    redirect_response_codes: ClassVar[frozenset[int]] = frozenset([301, 302, 303, 307, 308])
+    redirect_response_codes: ClassVar[frozenset[int]] = REDIRECT_RESPONSE_CODES
 
     max_redirects: int
     max_retries: int

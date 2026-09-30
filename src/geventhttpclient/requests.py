@@ -32,10 +32,10 @@ class RequestsResponse(useragent.CompatResponse):
 
     @property
     def is_redirect(self) -> bool:
-        """True if this Response is a well-formed HTTP redirect that could have
-        been processed automatically (by :meth:`Session.resolve_redirects`).
+        """True if this Response is a well-formed HTTP redirect that
+        :meth:`UserAgent.urlopen` would have followed.
         """
-        return "location" in self.headers and self.status_code in range(300, 310)
+        return "location" in self.headers and self.status_code in useragent.REDIRECT_RESPONSE_CODES
 
     @property
     def raw(self) -> HTTPSocketResponse:
