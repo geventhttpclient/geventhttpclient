@@ -171,3 +171,30 @@ def test_ipv6_with_port():
     assert url.host == "2001:db8:85a3:8d3:1319:8a2e:370:7348"
     assert url.port == 8080
     assert url.user == ""
+
+
+def test_absent_parts_are_empty_strings():
+    """Parts the URL does not carry stay '', they are never None."""
+    url = URL("http://gevent.org/path")
+    assert url.user == ""
+    assert url.username == ""
+    assert url.password == ""
+    assert url.params == ""
+    assert url.query == ""
+    assert url.fragment == ""
+
+
+def test_userinfo_and_lowercased_host():
+    url = URL("http://USER:pw@Gevent.ORG/path")
+    assert url.user == "USER"
+    assert url.username == "USER"
+    assert url.password == "pw"
+    assert url.host == "gevent.org"
+    assert url.hostname == "gevent.org"
+
+
+def test_unknown_part_raises_attribute_error():
+    url = URL(url_full)
+    assert url.geturl() == url_full
+    with pytest.raises(AttributeError):
+        _ = url.nonexistent_part

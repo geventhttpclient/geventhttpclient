@@ -10,6 +10,11 @@ DEFAULT_PORTS = {"http": 80, "https": 443}
 ParamsDataType = Mapping[str, Any] | Iterable[tuple[str, Any]] | str | bytes
 
 
+def _or_empty(value: str | None) -> str:
+    """Backwards compatibility: never return None for URL parts."""
+    return value if value is not None else ""
+
+
 class URL:
     """Immutable URL class
 
@@ -58,18 +63,54 @@ class URL:
             other = type(self)(other)  # type: ignore[arg-type]
         return self._parsed == other._parsed
 
-    def __getattr__(self, attr: str) -> Any:
-        value = getattr(self._parsed, attr)
-        # backwards compatibility: never return None for URL parts
-        return value if value is not None else ""
+    # Each part of the URL is exposed as its own property. A single
+    # __getattr__ delegate used to forward everything to the parse result,
+    # which turned every part into Any for type checkers and silently passed
+    # unknown attribute names through.
 
     @property
-    def host(self) -> str:
-        return self.hostname
+    def scheme(self) -> str:
+        return self._parsed.scheme
+
+    @property
+    def netloc(self) -> str:
+        return self._parsed.netloc
+
+    @property
+    def path(self) -> str:
+        return self._parsed.path
+
+    @property
+    def params(self) -> str:
+        return self._parsed.params
+
+    @property
+    def query(self) -> str:
+        return self._parsed.query
+
+    @property
+    def fragment(self) -> str:
+        return self._parsed.fragment
+
+    @property
+    def username(self) -> str:
+        return _or_empty(self._parsed.username)
 
     @property
     def user(self) -> str:
         return self.username
+
+    @property
+    def password(self) -> str:
+        return _or_empty(self._parsed.password)
+
+    @property
+    def hostname(self) -> str:
+        return _or_empty(self._parsed.hostname)
+
+    @property
+    def host(self) -> str:
+        return self.hostname
 
     @property
     def port(self) -> int | None:
@@ -87,6 +128,10 @@ class URL:
         if not self.query:
             return self.path
         return self.path + "?" + self.query
+
+    def geturl(self) -> str:
+        """Alias of str(url), mirroring the parse result's own name for it."""
+        return self._parsed.geturl()
 
     def redirect(self, other: str | URL) -> URL:
         """Redirect to the other URL, relative to the current one."""
