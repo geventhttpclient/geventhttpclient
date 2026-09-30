@@ -30,7 +30,9 @@ jobs:
       matrix:
         include:
           - {name: Windows, python: '3.14', os: windows-latest}
-          - {name: Windows ARM64, python: '3.14', os: windows-11-arm}
+          # Windows ARM64 disabled: the windows-11-arm runner is chronically
+          # flaky (spurious test timeouts and socket permission errors on
+          # otherwise green runs). Re-enable once the runner is stable.
           - {name: Mac, python: '3.14', os: macos-latest}
           - {name: '3.14', python: '3.14', os: ubuntu-latest}
           - {name: '3.13', python: '3.13', os: ubuntu-latest}
