@@ -273,3 +273,33 @@ def test_or_merge_returns_headers_and_leaves_the_left_side_alone():
     assert list(merged.keys()) == ["x-a", "x-b"]
     assert merged.get("x-a") == "first"
     assert headers.get("x-b") is None
+
+
+def test_create_from_mapping_with_list_value():
+    """A list value is one field line per element (RFC 9110 section 5.2),
+    never a single line carrying the Python repr of the list."""
+    h = Headers({"X-Multi": ["a", "b"]})
+    assert h["x-multi"] == ["a", "b"]
+    assert h.getlist("x-multi") == ["a", "b"]
+    assert list(h.items()) == [("X-Multi", "a"), ("X-Multi", "b")]
+
+
+def test_add_with_list_value_appends_one_line_per_element():
+    h = Headers({"X-Multi": "a"})
+    h.add("X-Multi", ["b", "c"])
+    h.add("X-Multi", "d")
+    assert h.getlist("x-multi") == ["a", "b", "c", "d"]
+
+
+def test_update_with_list_value_replaces_previous_lines():
+    h = Headers({"X-Multi": "old"})
+    h.update({"X-Multi": ["a", "b"]})
+    assert h.getlist("x-multi") == ["a", "b"]
+    assert list(h.items()) == [("X-Multi", "a"), ("X-Multi", "b")]
+
+
+def test_setitem_with_tuple_value():
+    h = Headers()
+    h["X-Multi"] = ("a", "b")
+    assert h.getlist("x-multi") == ["a", "b"]
+    assert list(h.items()) == [("X-Multi", "a"), ("X-Multi", "b")]

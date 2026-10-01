@@ -581,3 +581,10 @@ class TestIsSocketAlive:
             assert pool._is_socket_alive(s1) is False
         finally:
             s1.close()
+
+
+def test_build_request_splits_list_header_values_into_field_lines():
+    client = HTTPClient("localhost", port=1)  # never connects
+    request = client._build_request("GET", "/", b"", {"X-Multi": ["a", "b"]})
+    assert "X-Multi: a\r\nX-Multi: b\r\n" in request
+    assert "['a', 'b']" not in request
