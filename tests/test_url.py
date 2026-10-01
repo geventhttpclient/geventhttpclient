@@ -139,6 +139,44 @@ def test_redirection_with_explicit_scheme_is_untouched():
         assert getattr(updated, attr) == getattr(url_full2, attr)
 
 
+def test_redirection_query_only_keeps_base_path():
+    """A reference with an empty path keeps the base path (RFC 3986 section
+    5.2.2); the merge must not turn /a/b into /a/b/."""
+    url = URL("https://example.com/a/b?old=1")
+    updated = url.redirect("?new=2")
+    assert updated.path == "/a/b"
+    assert updated.query == "new=2"
+    assert updated.fragment == ""
+
+
+def test_redirection_query_only_keeps_base_path_parameters():
+    """urlparse splits ``;p`` out of the last path segment into its own
+    field; RFC 3986 section 5.2.2 keeps the whole base path for references
+    with an empty path - parameters included, like urljoin does."""
+    url = URL("https://example.com/a/b/c/d;p?q")
+    updated = url.redirect("?new=2")
+    assert updated.path == "/a/b/c/d"
+    assert updated.params == "p"
+    assert updated.query == "new=2"
+    assert str(updated) == "https://example.com/a/b/c/d;p?new=2"
+
+
+def test_redirection_fragment_only_keeps_path_and_query():
+    """Without a reference path or query, the base path and base query both
+    survive; only the fragment is replaced."""
+    url = URL("https://example.com/a/b?old=1")
+    updated = url.redirect("#frag")
+    assert updated.path == "/a/b"
+    assert updated.query == "old=1"
+    assert updated.fragment == "frag"
+
+
+def test_redirection_empty_reference_resolves_to_base_without_fragment():
+    url = URL("https://example.com/a/b?old=1")
+    updated = url.redirect("")
+    assert updated == URL("https://example.com/a/b?old=1")
+
+
 def test_redirection_full_path():
     url_full2_plain = "http://google.de/index"
     url = URL(url_full)

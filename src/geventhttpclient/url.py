@@ -162,7 +162,19 @@ class URL:
         scheme, netloc, path, params, query, fragment = other
         scheme = self.scheme
         netloc = self.netloc
-        if not path.startswith("/"):
+        if not path and not params:
+            # RFC 3986 section 5.2.2: a reference with an empty path keeps
+            # the base path as-is and, unless it defines a query of its own,
+            # the base query. Running "?x=1" through the relative-path merge
+            # below turned /a/b into /a/b/?x=1, which path-sensitive servers
+            # and caches treat as a different resource. The path parameters
+            # (";p", split into their own field by urlparse) belong to the
+            # base path and are kept with it.
+            path = self.path
+            params = self.params
+            if not query:
+                query = self.query
+        elif not path.startswith("/"):
             if path.endswith("/"):
                 path = self.path + path
             else:
