@@ -1,11 +1,38 @@
 import json as jsonlib
+import re
 from http.cookiejar import CookieJar
 from typing import Any, cast
 
 from geventhttpclient import useragent
-from geventhttpclient.header import HeadersDataType
+from geventhttpclient.header import HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType
+
+# Split a Link header on commas that are not inside angle brackets. requests
+# uses the same shortcut; it is good enough for the headers servers actually
+# send, where link targets are always bracketed and relation attributes never
+# contain commas of their own.
+_LINK_HEADER_SPLIT = re.compile(r",\s*<")
+
+
+def _parse_link_header(value: str) -> list[dict[str, str]]:
+    """Parse a single Link header value into the list of links RFC 5988 describes."""
+    out: list[dict[str, str]] = []
+    if not value:
+        return out
+    for raw in _LINK_HEADER_SPLIT.split(value):
+        try:
+            url_part, params = raw.split(";", 1)
+        except ValueError:
+            url_part, params = raw, ""
+        link: dict[str, str] = {"url": url_part.strip(" <>\"'")}
+        for param in params.split(";"):
+            if "=" not in param:
+                continue
+            key, val = param.split("=", 1)
+            link[key.strip().lower()] = val.strip().strip("\"'")
+        out.append(link)
+    return out
 
 
 class RequestsRequest(useragent.CompatRequest):
@@ -23,6 +50,10 @@ class RequestsResponse(useragent.CompatResponse):
     def ok(self) -> bool:
         return 100 <= self.status_code < 400
 
+    def __bool__(self) -> bool:
+        """A Response is truthy when its status code is below 400."""
+        return self.ok
+
     @property
     def reason(self) -> str | None:
         return self._response.status_message
@@ -39,8 +70,58 @@ class RequestsResponse(useragent.CompatResponse):
         return "location" in self.headers and self.status_code in useragent.REDIRECT_RESPONSE_CODES
 
     @property
+    def is_permanent_redirect(self) -> bool:
+        """True if this Response is one of the permanent redirect codes (301 or 308)."""
+        return (
+            "location" in self.headers
+            and self.status_code in useragent.PERMANENT_REDIRECT_RESPONSE_CODES
+        )
+
+    @property
     def raw(self) -> HTTPSocketResponse:
         return self.stream
+
+    def close(self) -> None:
+        """Release the connection back to the pool. Alias for :meth:`release`."""
+        self.release()
+
+    @property
+    def encoding(self) -> str | None:
+        """The character set declared in the Content-Type header, if any.
+
+        Mirrors the read side of ``requests.Response.encoding``; no automatic
+        chardet / charset-normalizer fallback, since we have no such dep.
+        """
+        content_type = self.headers.get("content-type")
+        if not content_type:
+            return None
+        # multiple Content-Type lines only happen for malformed responses,
+        # use the first one and narrow away the list branch mypy would complain
+        # about otherwise
+        header = content_type if isinstance(content_type, str) else content_type[0]
+        return parse_content_type_charset(header)
+
+    @property
+    def links(self) -> dict[str, dict[str, str]]:
+        """The parsed ``Link`` header, keyed by the ``rel`` value of each link."""
+        out: dict[str, dict[str, str]] = {}
+        raw = self.headers.get("link")
+        if not raw:
+            return out
+        # ``headers.get`` joins duplicates into a single str; in the unlikely
+        # case of multiple Link header lines we still get a list back, narrow
+        # it here so the per-header parser only ever sees a str
+        headers_list: list[str]
+        if isinstance(raw, list):
+            headers_list = raw
+        else:
+            headers_list = [raw]
+        for header in headers_list:
+            for link in _parse_link_header(header):
+                key = link.get("rel") or link.get("url")
+                if key:
+                    out[key] = link
+        return out
 
     def raise_for_status(self) -> None:
         if 400 <= self.status_code < 600:
