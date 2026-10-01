@@ -588,3 +588,57 @@ def test_build_request_splits_list_header_values_into_field_lines():
     request = client._build_request("GET", "/", b"", {"X-Multi": ["a", "b"]})
     assert "X-Multi: a\r\nX-Multi: b\r\n" in request
     assert "['a', 'b']" not in request
+
+
+def test_build_request_allows_empty_and_tab_header_values():
+    client = HTTPClient("localhost", port=1)  # never connects
+    request = client._build_request("GET", "/", b"", {"X-Empty": "", "X-Tab": "a\tb"})
+    assert "X-Empty: \r\n" in request
+    assert "X-Tab: a\tb\r\n" in request
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["bar\r\nX-Evil: injected", "bar\nX-Evil: injected", "bar\rX-Evil: injected", "foo\x00bar"],
+)
+def test_build_request_rejects_header_value_injection(value):
+    """RFC 9110 section 5.5: field values carry no CR/LF; without the check
+    a value smuggles extra headers into the request head."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", "/", b"", {"X-Foo": value})
+
+
+@pytest.mark.parametrize("field", ["X-Foo\r\nBar", "X-Foo\nBar", "X: Foo", "X Foo"])
+def test_build_request_rejects_header_field_name_injection(field):
+    """RFC 9110 section 5.1: a header field name is a token."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", "/", b"", {field: "a"})
+
+
+@pytest.mark.parametrize("method", ["GET\r\nX-Smuggled: 1", "GET\n", "GE T", "GET:"])
+def test_build_request_rejects_method_injection(method):
+    """RFC 9110 section 9.1: methods are tokens; injection into the request
+    line smuggles a second request onto the connection."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request(method, "/", b"", {})
+
+
+@pytest.mark.parametrize("request_uri", ["/a\r\nX-Smuggled: 1", "/a\n", "/a b", "/a\x00"])
+def test_build_request_rejects_request_uri_injection(request_uri):
+    """RFC 9112 section 3: request targets carry no whitespace and no
+    control characters."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", request_uri, b"", {})
+
+
+def test_build_request_rejects_protocol_relative_request_uri():
+    """RFC 9112 section 3.2: origin-form has exactly one leading slash; a
+    '//host/path' target is a protocol-relative reference, not a path, and
+    used to be sent literally with an empty first segment."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", "//other.example.com/p", b"", {})

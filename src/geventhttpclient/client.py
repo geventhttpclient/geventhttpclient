@@ -1,6 +1,7 @@
 import base64
 import errno
 import os
+import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import IO, Any
 
@@ -16,6 +17,15 @@ from geventhttpclient.response import (
     HTTPSocketPoolResponse,
 )
 from geventhttpclient.url import URL
+
+# RFC 9110 section 9.1 and section 5.1: a method and a header field name
+# are tokens. Section 5.5: a field value carries no CR and no LF - request
+# smuggling builds on exactly those bytes (RFC 9112 section 5.2 deprecates
+# folding). Section 3: a request target carries no whitespace and no
+# control characters.
+_TOKEN_RE = re.compile(r"\A[!#$%&'*+\-.^_`|~0-9A-Za-z]+\Z")
+_FIELD_VALUE_RE = re.compile(r"\A[\t\x20-\x7e\x80-\xff]*\Z")
+_REQUEST_TARGET_RE = re.compile(r"\A[^\x00-\x20\x7f]*\Z")
 
 CRLF = "\r\n"
 WHITESPACE = " "
@@ -281,6 +291,18 @@ class HTTPClient:
         if headers is None:
             headers = {}
 
+        if not isinstance(method, str) or not _TOKEN_RE.fullmatch(method):
+            raise ValueError(f"invalid HTTP method {method!r}")
+        if not isinstance(request_uri, str) or not _REQUEST_TARGET_RE.fullmatch(request_uri):
+            raise ValueError(f"invalid request URI {request_uri!r}")
+        if request_uri.startswith("//"):
+            # origin-form has exactly one leading slash (RFC 9112 section
+            # 3.2); "//host/path" is a protocol-relative reference that would
+            # be sent as a literal path with an empty first segment
+            raise ValueError(
+                f"invalid request URI {request_uri!r}: protocol-relative targets are not origin-form"
+            )
+
         header_fields = self.headers_type()
         header_fields.update(self.default_headers)
         header_fields.update(headers)
@@ -334,6 +356,10 @@ class HTTPClient:
         request = method + WHITESPACE + request_url + WHITESPACE + self.version + CRLF
 
         for field, value in header_fields.items():
+            if not isinstance(field, str) or not _TOKEN_RE.fullmatch(field):
+                raise ValueError(f"invalid header field name {field!r}")
+            if isinstance(value, str) and not _FIELD_VALUE_RE.fullmatch(value):
+                raise ValueError(f"invalid value for header field {field!r}: {value!r}")
             request += field + FIELD_VALUE_SEP + str(value) + CRLF
         request += CRLF
         return request
