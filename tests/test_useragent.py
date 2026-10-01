@@ -11,6 +11,7 @@ from geventhttpclient.useragent import (
     BadStatusCode,
     CompatRequest,
     UnrewoundBodyError,
+    UnsupportedRedirectSchemeError,
     UserAgent,
     _encode_multipart_formdata,
 )
@@ -287,6 +288,24 @@ def test_redirect_307_resends_the_full_body():
         assert resp.status_code == 200
         assert resp.content == b"123456789"
         assert received == [b"123456789", b"123456789"]
+
+
+def test_redirect_refuses_foreign_schemes():
+    """A redirect must stay within http(s); HTTPClient.from_url would degrade
+    anything else to plain http. The request stays on the original URL."""
+    req = CompatRequest("https://example.com/", headers=Headers())
+    with pytest.raises(UnsupportedRedirectSchemeError):
+        req.redirect(302, "ftp://other.example.com/file")
+    assert req.url == "https://example.com/"
+
+
+def test_redirect_to_foreign_scheme_is_refused_end_to_end():
+    def handler(env, start_response):
+        start_response("302 Found", [("Location", "ftp://other.example.com/file")])
+        return []
+
+    with wsgiserver(handler), pytest.raises(UnsupportedRedirectSchemeError):
+        UserAgent().urlopen(LISTENER_URL)
 
 
 def test_redirect_308():

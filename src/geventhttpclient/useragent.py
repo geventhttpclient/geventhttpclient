@@ -90,6 +90,10 @@ class UnrewoundBodyError(ConnectionError):
     pass
 
 
+class UnsupportedRedirectSchemeError(ConnectionError):
+    pass
+
+
 class CompatRequest(urllib.request.Request):
     """urllib.request.Request compatible request class.
     See also: http://docs.python.org/library/cookielib.html
@@ -209,7 +213,17 @@ class CompatRequest(urllib.request.Request):
 
     def redirect(self, code: int, location: str) -> None:
         """Modify the request inplace to point to the new location"""
-        self.set_url(self.url_split.redirect(location))
+        new_url = self.url_split.redirect(location)
+        # RFC 9110 section 15.4 has the user agent resolve Location within
+        # the HTTP context it is already in; a redirect to ftp:, data: or a
+        # custom scheme is outside of it. HTTPClient.from_url would silently
+        # degrade anything but https to plain http, so refuse instead of
+        # downgrading.
+        if new_url.scheme not in ("http", "https"):
+            raise UnsupportedRedirectSchemeError(
+                self.url, f"refusing to follow redirect to {new_url.scheme!r} URL"
+            )
+        self.set_url(new_url)
         if code in (301, 302, 303):
             self._drop_payload()
         else:
