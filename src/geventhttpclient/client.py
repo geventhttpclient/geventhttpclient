@@ -432,7 +432,10 @@ class HTTPClient:
         while True:
             sock = self._connection_pool.get_socket()
             try:
-                _request = request.encode()
+                # the request head speaks latin-1, like the response header
+                # decoding and http.client; characters outside latin-1 fail
+                # loudly instead of leaving UTF-8 mojibake on the wire
+                _request = request.encode("latin-1")
                 if expect_continue:
                     sock.sendall(_request)
                     try:

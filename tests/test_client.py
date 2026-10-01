@@ -732,3 +732,29 @@ def test_requests_without_body_semantics_send_no_content_length():
         for body in (None, b""):
             request = client._build_request(method, "/", body, {})
             assert "Content-Length" not in request
+
+
+def test_request_head_is_encoded_as_latin1():
+    """Header values are latin-1 on the wire, symmetric with the response
+    header decoding and http.client - not UTF-8 mojibake."""
+    received = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        received.append(data)
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    with server(handle):
+        client = HTTPClient(LISTENER[0], port=LISTENER[1])
+        resp = client.request("GET", "/", headers={"X-City": "Köln"})
+        assert resp.status_code == 200
+    assert b"X-City: K\xf6ln\r\n" in received[0]
+    assert "Köln".encode() not in received[0]
