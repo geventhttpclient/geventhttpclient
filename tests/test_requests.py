@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from geventhttpclient.header import Headers
@@ -13,6 +15,43 @@ def test_no_form_encode_header():
     print(hdrs)
     assert "content-type" not in hdrs
     assert "content-length" not in hdrs
+
+
+def _response_with_body(body: bytes, headers: bytes = b"") -> RequestsResponse:
+    """A response with extra headers and a real body; ``read`` is then mocked
+    to drain that buffer.
+
+    The parser the rest of the tests use has ``Content-Length: 0`` and never
+    bothers with ``read``; the streaming tests here need a real body and a way
+    to consume it byte by byte.
+    """
+    response = HTTPResponse()
+    response.feed(
+        b"HTTP/1.1 200 OK\r\n"
+        + headers
+        + b"Content-Length: "
+        + str(len(body)).encode()
+        + b"\r\n\r\n"
+    )
+    for byte in body:
+        response.feed(bytes([byte]))
+    wrapped = RequestsResponse(response)
+    buf = bytearray(body)
+
+    def fake_read(n: int | None = None) -> bytes:
+        if n is None:
+            chunk = bytes(buf)
+            del buf[:]
+            return chunk
+        chunk = bytes(buf[:n])
+        del buf[:n]
+        return chunk
+
+    wrapped._response.read = fake_read  # type: ignore[attr-defined]
+    # the parser-only response has no socket-backed release(); useragent's
+    # content cache calls release() on the wrapped response, so stub it
+    wrapped._response.release = lambda: None  # type: ignore[attr-defined]
+    return wrapped
 
 
 def _response(raw: bytes) -> RequestsResponse:
@@ -92,16 +131,14 @@ def test_encoding_comes_from_content_type():
     )
     assert response.encoding == "utf-8"
     response = _response(
-        b"HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=\"ISO-8859-1\"\r\nContent-Length: 0\r\n\r\n"
+        b'HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset="ISO-8859-1"\r\nContent-Length: 0\r\n\r\n'
     )
     assert response.encoding == "iso-8859-1"
     response = _response(
         b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 0\r\n\r\n"
     )
     assert response.encoding is None
-    response = _response(
-        b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
-    )
+    response = _response(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
     assert response.encoding is None
 
 
@@ -142,3 +179,117 @@ def test_links_keys_by_url_when_no_rel_is_given():
         "title": "No rel",
     }
     assert links["next"] == {"url": "https://example.com/next", "rel": "next"}
+
+
+def test_iter_content_yields_chunks_of_requested_size():
+    body = b"abcdefghij"
+    response = _response_with_body(body)
+    chunks = list(response.iter_content(chunk_size=3))
+    assert chunks == [b"abc", b"def", b"ghi", b"j"]
+
+
+def test_iter_content_default_chunk_size_and_empty_body():
+    response = _response_with_body(b"")
+    assert list(response.iter_content()) == []
+
+
+def test_iter_content_decodes_with_content_type_charset():
+    body = "héllo".encode()
+    response = _response_with_body(body, headers=b"Content-Type: text/plain; charset=utf-8\r\n")
+    assert list(response.iter_content(chunk_size=64, decode_unicode=True)) == ["héllo"]
+
+
+def test_iter_content_decoded_reassembles_multibyte_characters_over_chunks():
+    """The incremental decoder must not replace characters split in half."""
+    body = "héllo".encode()  # the \xc3\xa9 straddles the size-2 boundary
+    response = _response_with_body(body, headers=b"Content-Type: text/plain; charset=utf-8\r\n")
+    assert list(response.iter_content(chunk_size=2, decode_unicode=True)) == ["h", "él", "lo"]
+
+
+def test_iter_content_chunk_size_must_be_positive():
+    """A non-positive chunk size is clamped to single-byte chunks."""
+    response = _response_with_body(b"abc")
+    assert list(response.iter_content(chunk_size=0)) == [b"a", b"b", b"c"]
+
+
+def test_iter_lines_splits_on_newline_by_default():
+    body = b"line1\nline2\nline3\n"
+    response = _response_with_body(body)
+    # trailing newline produces an empty trailing split, which we do not yield
+    assert list(response.iter_lines()) == [b"line1", b"line2", b"line3"]
+
+
+def test_iter_lines_reassembles_lines_that_span_chunks():
+    body = b"line1\nline"
+    response = _response_with_body(body)
+    assert list(response.iter_lines(chunk_size=4)) == [b"line1", b"line"]
+
+
+def test_iter_lines_yields_a_trailing_partial_line():
+    body = b"line1\nline2-partial"
+    response = _response_with_body(body)
+    assert list(response.iter_lines()) == [b"line1", b"line2-partial"]
+
+
+def test_iter_lines_custom_delimiter():
+    body = b"alpha|beta|gamma"
+    response = _response_with_body(body)
+    assert list(response.iter_lines(delimiter=b"|")) == [b"alpha", b"beta", b"gamma"]
+
+
+def test_iter_lines_decode_unicode():
+    response = _response_with_body(
+        "café\nça".encode(), headers=b"Content-Type: text/plain; charset=utf-8\r\n"
+    )
+    assert list(response.iter_lines(decode_unicode=True)) == ["café", "ça"]
+
+
+def test_iter_lines_decode_unicode_with_custom_delimiter():
+    response = _response_with_body(
+        b"a;b\nc", headers=b"Content-Type: text/plain; charset=utf-8\r\n"
+    )
+    assert list(response.iter_lines(decode_unicode=True, delimiter=b";")) == ["a", "b\nc"]
+
+
+def test_iter_lines_splits_crlf_terminated_lines():
+    response = _response_with_body(b"line1\r\nline2\r\n")
+    assert list(response.iter_lines()) == [b"line1", b"line2"]
+
+
+def test_iter_lines_chunk_boundaries_on_line_breaks_do_not_merge_lines():
+    """A chunk ending exactly on a line break must not glue that line to the
+    first line of the next chunk."""
+    response = _response_with_body(b"line1\r\nline2\r\n")
+    assert list(response.iter_lines(chunk_size=7)) == [b"line1", b"line2"]
+
+
+def test_iter_lines_crlf_straddling_a_chunk_boundary_is_one_terminator():
+    """A \\r that lands on the end of a chunk may pair with the \\n of the next
+    chunk; it must not produce a phantom empty line."""
+    response = _response_with_body(b"a\r\nb\r\n")
+    assert list(response.iter_lines(chunk_size=2)) == [b"a", b"b"]
+    response = _response_with_body(b"a\r\nb\r\n")
+    assert list(response.iter_lines(chunk_size=3, delimiter=b"x")) == [b"a\r\nb\r\n"]
+
+
+def test_json_decodes_a_valid_body():
+    body = b'{"a": 1, "b": 2}'
+    response = _response_with_body(body)
+    assert response.json() == {"a": 1, "b": 2}
+
+
+def test_json_forwards_kwargs_to_the_decoder():
+    """``**kw`` lands at ``json.loads``; our override adds the forwarding."""
+    body = b'{"a": 1, "b": 2}'
+    response = _response_with_body(body)
+    assert response.json(object_hook=lambda d: {k.upper(): v for k, v in d.items()}) == {
+        "A": 1,
+        "B": 2,
+    }
+
+
+def test_json_raises_jsondecodeerror_on_bad_input():
+    response = _response_with_body(b"not json")
+    with pytest.raises(json.JSONDecodeError) as excinfo:
+        response.json()
+    assert isinstance(excinfo.value, ValueError)
