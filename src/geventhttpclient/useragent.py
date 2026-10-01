@@ -16,7 +16,7 @@ import brotli
 import gevent
 
 from geventhttpclient.client import HTTPClient, HTTPClientPool
-from geventhttpclient.header import Headers, HeadersDataType
+from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
 
@@ -307,18 +307,13 @@ class CompatResponse:
             return ""
 
         try:
-            content_type = self.headers.getlist("content-type")[0].lower()
+            content_type = self.headers.getlist("content-type")[0]
         except IndexError:
-            # No content-encoding header set, let's hope for the best
+            # No content-type header set, let's hope for the best
             return self.content.decode()
 
-        if content_type.startswith("text"):
-            codec = "utf-8"  # default
-            if "charset" in content_type:
-                try:
-                    codec = content_type.split("charset=", 1)[1][:10]
-                except IndexError:
-                    pass
+        if content_type.lower().startswith("text"):
+            codec = parse_content_type_charset(content_type) or "utf-8"
             return self.content.decode(codec)
         return self.content
 
@@ -350,6 +345,11 @@ class CompatResponse:
 # Status codes whose Location header the client follows. Same set requests
 # calls a redirect, and the default for UserAgent.redirect_response_codes.
 REDIRECT_RESPONSE_CODES: Final[frozenset[int]] = frozenset([301, 302, 303, 307, 308])
+
+# Subset of REDIRECT_RESPONSE_CODES whose Location header marks a permanent
+# move rather than a temporary one. Used by the requests-style surface for
+# Response.is_permanent_redirect.
+PERMANENT_REDIRECT_RESPONSE_CODES: Final[frozenset[int]] = frozenset([301, 308])
 
 
 class UserAgent:

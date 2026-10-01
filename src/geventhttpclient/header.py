@@ -340,3 +340,19 @@ class Headers(dict[str, _StoredEntry]):
 # the header input the request surfaces accept: our own multimap or any
 # plain mapping with str fields and str or str list values
 HeadersDataType = Headers | Mapping[str, str | list[str]]
+
+
+def parse_content_type_charset(content_type: str) -> str | None:
+    """Extract the charset parameter of a Content-Type header value.
+
+    Returns None when the header carries no (or an empty) charset. The
+    parameter name match is case-insensitive, surrounding whitespace and
+    quotes are stripped; the returned codec name is lowercased, codec lookups
+    are case-insensitive anyway.
+    """
+    for parameter in content_type.split(";"):
+        parameter = parameter.strip().lower()
+        if parameter.startswith("charset="):
+            charset = parameter[len("charset=") :].strip().strip("\"'")
+            return charset or None
+    return None

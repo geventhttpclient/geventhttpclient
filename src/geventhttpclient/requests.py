@@ -1,11 +1,49 @@
 import json as jsonlib
+import re
+from codecs import getincrementaldecoder as _getincrementaldecoder
+from collections.abc import Iterator
 from http.cookiejar import CookieJar
 from typing import Any, cast
 
 from geventhttpclient import useragent
-from geventhttpclient.header import HeadersDataType
+from geventhttpclient.header import HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType
+
+# Split a Link header on commas that are not inside angle brackets. requests
+# uses the same shortcut; it is good enough for the headers servers actually
+# send, where link targets are always bracketed and relation attributes never
+# contain commas of their own.
+_LINK_HEADER_SPLIT = re.compile(r",\s*<")
+
+# Default read chunk for ``iter_lines``; requests reads 512 at a time, we
+# take a socket block worth of bytes.
+_ITER_LINES_CHUNK_SIZE = 8192
+
+# Line terminators for ``iter_lines``. HTTP allows \r\n, \r and \n; unlike
+# bytes.splitlines we do not split on exotic control characters.
+_LINE_TERMINATORS_BYTES = re.compile(rb"\r\n|\r|\n")
+_LINE_TERMINATORS_STR = re.compile(r"\r\n|\r|\n")
+
+
+def _parse_link_header(value: str) -> list[dict[str, str]]:
+    """Parse a single Link header value into the list of links RFC 5988 describes."""
+    out: list[dict[str, str]] = []
+    if not value:
+        return out
+    for raw in _LINK_HEADER_SPLIT.split(value):
+        try:
+            url_part, params = raw.split(";", 1)
+        except ValueError:
+            url_part, params = raw, ""
+        link: dict[str, str] = {"url": url_part.strip(" <>\"'")}
+        for param in params.split(";"):
+            if "=" not in param:
+                continue
+            key, val = param.split("=", 1)
+            link[key.strip().lower()] = val.strip().strip("\"'")
+        out.append(link)
+    return out
 
 
 class RequestsRequest(useragent.CompatRequest):
@@ -23,6 +61,10 @@ class RequestsResponse(useragent.CompatResponse):
     def ok(self) -> bool:
         return 100 <= self.status_code < 400
 
+    def __bool__(self) -> bool:
+        """A Response is truthy when its status code is below 400."""
+        return self.ok
+
     @property
     def reason(self) -> str | None:
         return self._response.status_message
@@ -39,12 +81,168 @@ class RequestsResponse(useragent.CompatResponse):
         return "location" in self.headers and self.status_code in useragent.REDIRECT_RESPONSE_CODES
 
     @property
+    def is_permanent_redirect(self) -> bool:
+        """True if this Response is one of the permanent redirect codes (301 or 308)."""
+        return (
+            "location" in self.headers
+            and self.status_code in useragent.PERMANENT_REDIRECT_RESPONSE_CODES
+        )
+
+    @property
     def raw(self) -> HTTPSocketResponse:
         return self.stream
+
+    def close(self) -> None:
+        """Release the connection back to the pool. Alias for :meth:`release`."""
+        self.release()
+
+    @property
+    def encoding(self) -> str | None:
+        """The character set declared in the Content-Type header, if any.
+
+        Mirrors the read side of ``requests.Response.encoding``; no automatic
+        chardet / charset-normalizer fallback, since we have no such dep.
+        """
+        content_type = self.headers.get("content-type")
+        if not content_type:
+            return None
+        # multiple Content-Type lines only happen for malformed responses,
+        # use the first one and narrow away the list branch mypy would complain
+        # about otherwise
+        header = content_type if isinstance(content_type, str) else content_type[0]
+        return parse_content_type_charset(header)
+
+    @property
+    def links(self) -> dict[str, dict[str, str]]:
+        """The parsed ``Link`` header, keyed by the ``rel`` value of each link."""
+        out: dict[str, dict[str, str]] = {}
+        raw = self.headers.get("link")
+        if not raw:
+            return out
+        # ``headers.get`` joins duplicates into a single str; in the unlikely
+        # case of multiple Link header lines we still get a list back, narrow
+        # it here so the per-header parser only ever sees a str
+        headers_list: list[str]
+        if isinstance(raw, list):
+            headers_list = raw
+        else:
+            headers_list = [raw]
+        for header in headers_list:
+            for link in _parse_link_header(header):
+                key = link.get("rel") or link.get("url")
+                if key:
+                    out[key] = link
+        return out
 
     def raise_for_status(self) -> None:
         if 400 <= self.status_code < 600:
             raise useragent.BadStatusCode(self.url, code=self.status_code)
+
+    def iter_content(
+        self,
+        chunk_size: int = 1,
+        decode_unicode: bool = False,
+    ) -> Iterator[bytes | str]:
+        """Iterate over the body in chunks of ``chunk_size`` bytes.
+
+        With ``decode_unicode=True`` chunks are decoded with the charset of
+        the Content-Type header, falling back to utf-8. Matches the
+        ``requests.Response.iter_content`` contract.
+        """
+        if decode_unicode:
+            return self._iter_content_decoded(chunk_size)
+        return self._iter_content_bytes(chunk_size)
+
+    def _iter_content_bytes(self, chunk_size: int) -> Iterator[bytes]:
+        chunk_size = max(int(chunk_size), 1)
+        while True:
+            chunk = self._response.read(chunk_size)
+            if not chunk:
+                return
+            yield chunk
+
+    def _iter_content_decoded(self, chunk_size: int) -> Iterator[str]:
+        """Decoded variant of ``iter_content``.
+
+        An incremental decoder reassembles multibyte characters that straddle
+        chunk boundaries, the way requests does; undecodable bytes are
+        replaced.
+        """
+        chunk_size = max(int(chunk_size), 1)
+        decoder = _getincrementaldecoder(self.encoding or "utf-8")(errors="replace")
+        while True:
+            chunk = self._response.read(chunk_size)
+            if not chunk:
+                return
+            yield decoder.decode(chunk)
+
+    def iter_lines(
+        self,
+        chunk_size: int = _ITER_LINES_CHUNK_SIZE,
+        decode_unicode: bool = False,
+        delimiter: bytes | None = None,
+    ) -> Iterator[bytes | str]:
+        """Iterate over the body split on ``delimiter``.
+
+        Without a delimiter, lines terminate on \r\n, \r or \n. Lines that
+        straddle chunk boundaries are reassembled; the last partial line,
+        if any, is yielded at end-of-stream. The two modes (raw bytes and
+        decoded str) split into helpers so each can keep its own clean types.
+        """
+        if decode_unicode:
+            return self._iter_lines_decoded(chunk_size, delimiter)
+        return self._iter_lines_bytes(chunk_size, delimiter)
+
+    def _iter_lines_bytes(self, chunk_size: int, delimiter: bytes | None) -> Iterator[bytes]:
+        pending = b""
+        for chunk in self._iter_content_bytes(chunk_size):
+            combined = pending + chunk
+            hold = delimiter is None and combined.endswith(b"\r")
+            if hold:
+                # a trailing \r may be the first half of a \r\n pair that
+                # straddles the chunk boundary; hold it back and decide in
+                # the next round
+                combined = combined[:-1]
+            lines = (
+                _LINE_TERMINATORS_BYTES.split(combined)
+                if delimiter is None
+                else combined.split(delimiter)
+            )
+            yield from lines[:-1]
+            pending = (lines[-1] if lines else b"") + (b"\r" if hold else b"")
+        if pending:
+            # a held-back \r at end of stream terminates the pending line
+            yield pending[:-1] if pending.endswith(b"\r") else pending
+
+    def _iter_lines_decoded(self, chunk_size: int, delimiter: bytes | None) -> Iterator[str]:
+        pending = ""
+        for chunk in self._iter_content_decoded(chunk_size):
+            combined = pending + chunk
+            hold = delimiter is None and combined.endswith("\r")
+            if hold:
+                combined = combined[:-1]
+            lines = (
+                _LINE_TERMINATORS_STR.split(combined)
+                if delimiter is None
+                else combined.split(delimiter.decode("ascii"))
+            )
+            yield from lines[:-1]
+            pending = (lines[-1] if lines else "") + ("\r" if hold else "")
+        if pending:
+            yield pending.removesuffix("\r")
+
+    def json(self, **kw: Any) -> Any:
+        """Decode the body as JSON.
+
+        Like the parent :meth:`useragent.CompatResponse.json` but forwards
+        ``**kw`` to ``json.loads`` (object_hook, parse_float, ...) and reads
+        from the cached ``self.content`` rather than streaming through the
+        socket response. ``json.loads`` auto-detects UTF-8/16/32, a charset
+        declared in the Content-Type is not applied. Raises
+        ``json.JSONDecodeError`` on bad input, which is already a
+        ``ValueError``.
+        """
+        return jsonlib.loads(self.content, **kw)
 
 
 class Session(useragent.UserAgent):
