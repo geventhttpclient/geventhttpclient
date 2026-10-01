@@ -1,3 +1,6 @@
+import traceback
+import urllib.request
+from email.message import Message
 from http.cookiejar import CookieJar
 from io import BytesIO
 
@@ -383,7 +386,7 @@ def test_make_request_still_describes_the_payload():
         "http://example.com/", method="POST", headers=None, payload={"a": "b"}
     )
     assert request.headers.get("content-type") == "application/x-www-form-urlencoded; charset=utf-8"
-    assert request.headers.get("content-length") == 3
+    assert request.headers.get("content-length") == "3"
     assert request.payload == b"a=b"
 
 
@@ -399,3 +402,76 @@ def test_make_request_uses_the_agents_request_type():
     made = CustomAgent()._make_request("http://example.com/", method="GET", headers=None)
     assert type(made) is CustomRequest
     assert type(UserAgent()._make_request("http://example.com/")) is CompatRequest
+
+
+def test_handle_error_keeps_the_traceback_of_the_error():
+    """The error hook must not lean on the ambient exception state.
+
+    From inside an ``except`` clause both spellings give the same traceback;
+    called once the clause is left, the frames the error came through have
+    to stay attached to it.
+    """
+
+    def failing():
+        raise ValueError("raised deep")
+
+    with pytest.raises(ValueError) as deep:
+        failing()
+
+    # the except clause above is left by now
+    with pytest.raises(ValueError) as raised:
+        UserAgent()._handle_error(deep.value)
+
+    assert "in failing" in "".join(traceback.format_tb(raised.value.__traceback__))
+
+
+class ResponseInfo:
+    """Enough of a response for the cookie jar: headers carrying a Set-Cookie."""
+
+    def __init__(self, set_cookie: str) -> None:
+        message = Message()
+        message["Set-Cookie"] = set_cookie
+        self._message = message
+
+    def info(self) -> Message:
+        return self._message
+
+
+def test_compat_request_is_a_urllib_request():
+    """The base class provides the urllib surface with our real values in it."""
+    request = CompatRequest("https://example.com:8443/p?a=1", method="post", payload=b"x=1")
+    assert isinstance(request, urllib.request.Request)
+    assert request.get_method() == "POST"
+    assert request.data == b"x=1"
+    assert (request.type, request.host, request.selector) == (
+        "https",
+        "example.com:8443",
+        "/p?a=1",
+    )
+    # get_host is our legacy reading, without the port; the host attribute
+    # of the base class carries the netloc
+    assert request.get_host() == "example.com"
+    assert request.get_type() == "https"
+
+
+def test_cookiejar_adds_its_cookies_into_the_headers():
+    """A secure cookie on https needs request.type, and it must land in the
+    headers our client sends, not in an unredirected dict it never reads."""
+    request = CompatRequest("https://example.com/p", headers=Headers())
+    jar = CookieJar()
+    jar.extract_cookies(ResponseInfo("k=v; Path=/; Domain=example.com; Secure"), request)
+    assert list(jar)
+    jar.add_cookie_header(request)
+    assert request.get_header("Cookie") == "k=v"
+    assert request.headers.get("cookie") == "k=v"
+
+
+def test_full_url_assignment_reparses_the_request():
+    """Assigning full_url updates url, the split, and the parsed attributes."""
+    request = CompatRequest("http://example.com/p")
+    request.full_url = "https://other.example:8443/q"
+    assert request.url == "https://other.example:8443/q"
+    assert request.url_split.host == "other.example"
+    # host is the netloc, the base class keeps the port in it
+    assert request.host == "other.example:8443"
+    assert (request.type, request.selector) == ("https", "/q")

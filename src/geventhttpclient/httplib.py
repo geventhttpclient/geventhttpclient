@@ -4,6 +4,7 @@ to use as drop-in replacements for their counterparts in http.client.
 """
 
 import http.client
+import socket
 from collections.abc import Iterator
 from contextlib import contextmanager
 from typing import Any
@@ -14,15 +15,17 @@ import gevent.ssl
 from geventhttpclient import connectionpool, header, response
 
 _UNKNOWN = getattr(http.client, "_UNKNOWN", "UNKNOWN")
+# the sentinel http.client uses for "inherit the global default timeout"
+_GLOBAL_DEFAULT_TIMEOUT: Any = getattr(socket, "_GLOBAL_DEFAULT_TIMEOUT", None)
 
 
 class HTTPLibHeaders(header.Headers):
-    def __getitem__(self, key: str | bytes) -> Any:
+    def __getitem__(self, key: str) -> str:  # type: ignore[override]
+        """http.client messages join duplicate fields into one line."""
         value = super().__getitem__(key)
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list):
             return ", ".join(value)
-        else:
-            return value
+        return value
 
 
 class HTTPResponse(response.HTTPSocketResponse):
@@ -114,10 +117,15 @@ class HTTPResponse(response.HTTPSocketResponse):
     def fileno(self) -> int:
         raise NotImplementedError()
 
-    def getheader(self, name: str, default: Any = None) -> Any:
-        return self.get(name.lower(), default)
+    def getheader(self, name: str, default: str | None = None) -> str | None:
+        value = self.get(name)
+        if value is None:
+            return default
+        if isinstance(value, list):
+            return ", ".join(value)
+        return value
 
-    def getheaders(self) -> list[tuple[str, Any]]:
+    def getheaders(self) -> list[tuple[str, str]]:
         return list(self._headers_index.items())
 
     @property
@@ -126,6 +134,15 @@ class HTTPResponse(response.HTTPSocketResponse):
 
     def _check_close(self) -> bool:
         return not self.should_keep_alive()
+
+    def items(self) -> Iterator[tuple[str, Any]]:
+        # Responses that are not stdlib http.client.HTTPResponse instances lose
+        # their status when code like httplib2.Response copies them from the
+        # items: it then defaults to 200 and never follows redirects or raises
+        # for error statuses. Yield the status line as a pseudo header so the
+        # status survives the copy.
+        yield "status", self.status_code
+        yield from super().items()
 
     # For compatibility with old-style urllib responses. cookielib etc.
 
@@ -137,7 +154,8 @@ class HTTPResponse(response.HTTPSocketResponse):
 
 
 class HTTPConnection(http.client.HTTPConnection):
-    response_class = HTTPResponse
+    # HTTPResponse here is ours, not http.client's, so no shared type
+    response_class: Any = HTTPResponse
     source_address: Any = None
     _hidden_socket: gevent.socket.socket | None = None
 
@@ -149,7 +167,7 @@ class HTTPConnection(http.client.HTTPConnection):
         if self._tunnel_host:  # type: ignore[attr-defined]
             self._tunnel()  # type: ignore[attr-defined]
 
-    def getresponse(self) -> HTTPResponse:
+    def getresponse(self) -> HTTPResponse:  # type: ignore[override]
         # For recent python versions urllib.request.AbstractHTTPHandler.do_open()
         # insists on closing the socket prematurely, right after receiving a response.
         # So in our case, right after just reading the HTTP headers, the socket gets
@@ -174,7 +192,40 @@ class HTTPConnection(http.client.HTTPConnection):
         super().close()
 
 
+def _create_https_context(http_vsn: int) -> gevent.ssl.SSLContext:
+    """Build the context a connection uses when the caller brings none.
+
+    Mirrors ``http.client._create_https_context``, which 3.12 and newer keep as
+    a module function while 3.10 and 3.11 built the same context inline.  The
+    one deviation is the trust store: ours points the context at
+    ``connectionpool._CA_CERTS``, which is the system bundle where there is one
+    and certifi where there is not.
+    """
+    context = connectionpool.init_ssl_context(
+        gevent.ssl.create_default_context,
+        connectionpool._CA_CERTS,
+        check_hostname=True,
+    )
+    # send ALPN extension to indicate HTTP/1.1 protocol
+    if http_vsn == 11:
+        context.set_alpn_protocols(["http/1.1"])
+    # enable PHA for TLS 1.3 connections if available
+    if context.post_handshake_auth is not None:
+        context.post_handshake_auth = True
+    return context
+
+
 class HTTPSConnection(HTTPConnection):
+    """A gevent powered ``http.client.HTTPSConnection``.
+
+    The keyword arguments and the attributes follow http.client as closely as
+    the supported CPython versions allow.  3.10 and 3.11 take ``key_file``,
+    ``cert_file`` and ``check_hostname`` here and deprecated them; 3.12 dropped
+    all three in favour of a context.  We accept every one of them, working, so
+    that code written against either shape keeps going once http.client is
+    patched, and behaves the same on every version in between.
+    """
+
     default_port = 443
 
     def __init__(
@@ -183,11 +234,20 @@ class HTTPSConnection(HTTPConnection):
         port: int | None = None,
         key_file: str | None = None,
         cert_file: str | None = None,
+        timeout: Any = _GLOBAL_DEFAULT_TIMEOUT,
+        source_address: tuple[str, int] | None = None,
+        *,
         context: gevent.ssl.SSLContext | None = None,
         check_hostname: bool | None = None,
         **kw: Any,
     ) -> None:
-        super().__init__(host, port, **kw)
+        super().__init__(
+            host,
+            port,
+            timeout=timeout,
+            source_address=source_address,
+            **kw,
+        )
         if key_file is not None or cert_file is not None or check_hostname is not None:
             import warnings
 
@@ -198,20 +258,25 @@ class HTTPSConnection(HTTPConnection):
                 2,
             )
         self.key_file = key_file
-        self.cert_file = cert_file or connectionpool._CA_CERTS
+        self.cert_file = cert_file
         if context is None:
-            context = connectionpool.init_ssl_context(
-                gevent.ssl.create_default_context,
-                self.cert_file,
-                check_hostname=check_hostname,  # type: ignore[arg-type]
+            context = _create_https_context(self._http_vsn)  # type: ignore[attr-defined]
+        will_verify = context.verify_mode != gevent.ssl.CERT_NONE
+        if check_hostname is None:
+            check_hostname = context.check_hostname
+        if check_hostname and not will_verify:
+            raise ValueError(
+                "check_hostname needs a SSL context with either CERT_OPTIONAL or CERT_REQUIRED"
             )
-            # send ALPN extension to indicate HTTP/1.1 protocol
-            if self._http_vsn == 11:  # type: ignore[attr-defined]
-                context.set_alpn_protocols(["http/1.1"])
-            # enable PHA for TLS 1.3 connections if available
+        if key_file or cert_file:
+            context.load_cert_chain(cert_file, key_file)
+            # cert and key file means the user wants to authenticate.
+            # enable TLS 1.3 PHA implicitly even for custom contexts.
             if context.post_handshake_auth is not None:
                 context.post_handshake_auth = True
         self._context = context
+        if check_hostname is not None:
+            self._context.check_hostname = check_hostname
 
     def connect(self) -> None:
         """Connect to a host on a given (SSL) port."""
@@ -222,12 +287,16 @@ class HTTPSConnection(HTTPConnection):
         if self._tunnel_host:  # type: ignore[attr-defined]
             self.sock = sock
             self._tunnel()  # type: ignore[attr-defined]
-        self.sock = gevent.ssl.SSLSocket(sock, _context=self._context, server_hostname=self.host)
+        # through a proxy the tunnel is what the certificate has to name
+        server_hostname: str = self._tunnel_host or self.host  # type: ignore[attr-defined]
+        self.sock = gevent.ssl.SSLSocket(
+            sock, _context=self._context, server_hostname=server_hostname
+        )
 
 
 def patch() -> None:
     http.client.HTTPConnection = HTTPConnection  # type: ignore[misc]
-    http.client.HTTPResponse = HTTPResponse  # type: ignore[misc]
+    http.client.HTTPResponse = HTTPResponse  # type: ignore[misc,assignment]
     try:
         http.client.HTTPSConnection = HTTPSConnection  # type: ignore[misc,assignment]
     except NameError:
@@ -245,7 +314,7 @@ def patched() -> Iterator[None]:
         pass
     try:
         http.client.HTTPConnection = HTTPConnection  # type: ignore[misc]
-        http.client.HTTPResponse = HTTPResponse  # type: ignore[misc]
+        http.client.HTTPResponse = HTTPResponse  # type: ignore[misc,assignment]
         try:
             http.client.HTTPSConnection = HTTPSConnection  # type: ignore[misc,assignment]
         except NameError:

@@ -5,7 +5,7 @@ import os
 import select
 from collections.abc import Callable
 from ssl import PROTOCOL_TLS_CLIENT, get_default_verify_paths
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import gevent.queue
 import gevent.socket
@@ -23,8 +23,6 @@ if not _CA_CERTS or os.path.isdir(_CA_CERTS):
 
 DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_NETWORK_TIMEOUT = 5.0
-
-IGNORED = object()
 
 
 class ConnectionPool:
@@ -62,7 +60,17 @@ class ConnectionPool:
         self.size = size
         self.disable_ipv6 = disable_ipv6
 
-    def _resolve(self) -> list[tuple[Any, ...]]:
+    def _resolve(
+        self,
+    ) -> list[
+        tuple[
+            gevent.socket.AddressFamily,
+            gevent.socket.SocketKind,
+            int,
+            str,
+            tuple[str, int] | tuple[str, int, int, int],
+        ]
+    ]:
         """resolve (dns) socket information needed to connect it."""
         family = 0
         if self.disable_ipv6:
@@ -75,7 +83,18 @@ class ConnectionPool:
             gevent.socket.SOL_TCP,
         )
         # family, socktype, proto, canonname, sockaddr = info[0]
-        return info
+        return cast(
+            list[
+                tuple[
+                    gevent.socket.AddressFamily,
+                    gevent.socket.SocketKind,
+                    int,
+                    str,
+                    tuple[str, int] | tuple[str, int, int, int],
+                ]
+            ],
+            info,
+        )
 
     def close(self) -> None:
         self._closed = True
@@ -246,7 +265,7 @@ def init_ssl_context(
     ssl_context_factory: Callable[..., gevent.ssl.SSLContext],
     ca_certs: str | None,
     check_hostname: bool = True,
-    ssl_options: dict | None = None,
+    ssl_options: dict[str, Any] | None = None,
 ) -> gevent.ssl.SSLContext:
     """
     Initializes an SSL context with additional SSL options.
@@ -296,7 +315,7 @@ class SSLConnectionPool(ConnectionPool):
         if provided. It must be a callable that returns a SSLContext.
     """
 
-    default_options: ClassVar[dict] = {
+    default_options: ClassVar[dict[str, Any]] = {
         "ca_certs": _CA_CERTS,
         "cert_reqs": gevent.ssl.CERT_REQUIRED,
         "ssl_version": PROTOCOL_TLS_CLIENT,
@@ -310,7 +329,7 @@ class SSLConnectionPool(ConnectionPool):
         request_port: int,
         insecure: bool = False,
         ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
-        ssl_options: dict | None = None,
+        ssl_options: dict[str, Any] | None = None,
         **kw: Any,
     ) -> None:
         self.insecure = insecure
