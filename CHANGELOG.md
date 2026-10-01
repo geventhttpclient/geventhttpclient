@@ -11,6 +11,21 @@ left out unless it affects users of the package.
 - `CompatRequest` derives from `urllib.request.Request` now: cookie jars
   work without workarounds, `full_url` is assignable
 - `UserAgent` accepts `headers=None` when building a request
+- `UserAgent(..., retry_on_non_idempotent=True)` opts back into automatic
+  retries of POST/PATCH after transmission errors (off by default now,
+  see Fixed)
+- `iter_content()`, `iter_lines()` and `json(**kw)` on `RequestsResponse`,
+  mirroring the `requests` API: chunked streaming with an incremental
+  unicode decoder, line splitting on `\r\n`/`\r`/`\n` across chunk
+  boundaries, and `json.loads` kwargs forwarded
+- `bool()`, `close()`, `is_permanent_redirect`, `encoding` and `links` on
+  `RequestsResponse`
+- `parse_content_type_charset()` in `geventhttpclient.header`, shared by
+  `RequestsResponse.encoding` and `CompatResponse.text`
+- `CompatRequest.is_unverifiable()` follows the redirect chain (RFC 2965
+  section 3.3): redirected requests report unverifiable, like urllib's
+  redirect handler, so strict cookie policies can refuse cookies set
+  along the chain - the permissive defaults are unaffected
 
 ### Changed
 
@@ -23,11 +38,57 @@ left out unless it affects users of the package.
   certificate, and `check_hostname` defaults to `True` (it was silently
   disabled before)
 - Require `gevent>=25.9`
+- A list or tuple header value becomes one field line per element:
+  `{'X-Multi': ['a', 'b']}` sends `X-Multi: a` and `X-Multi: b` (RFC 9110
+  section 5.2) instead of the Python repr of the list; `__setitem__` and
+  `update()` replace all lines of the field, `add()` and `extend()` append;
+  merging one `Headers` instance into another replaces a field as a whole
+  so multi line fields survive the merge
+- Redirect resolution follows RFC 3986 section 5.2: dot segments are
+  removed (`/a/b/c/../up` now resolves to `/a/b/up`), relative paths merge
+  against all but the last base path segment (`/dir/page` + `test.html`
+  resolves to `/dir/test.html`, not `/dir/page/test.html`), and a
+  protocol-relative `Location: //host/path` inherits the scheme instead of
+  downgrading an https connection to plain http
+- Redirects to schemes other than `http`/`https` raise
+  `UnsupportedRedirectSchemeError` instead of silently sending plain HTTP
+  to the redirect target
+- `HEAD` requests keep their method across 301/302/303 redirects, and a
+  body a server sends for a HEAD response despite the protocol no longer
+  breaks the client with a parse error: the response completes and the
+  connection is closed
+- Automatic retries after transmission errors are limited to idempotent
+  methods (GET, HEAD, OPTIONS, TRACE, PUT, DELETE); POST and PATCH are no
+  longer re-sent on timeout, EPIPE, ECONNRESET or empty responses. The
+  client-level resend after a broken connection (ECONNRESET/EPIPE) and
+  the retry when the response read fails after the request was sent in
+  full are idempotent-only as well
+- An empty or absent body on POST, PUT and PATCH carries a
+  `Content-Length: 0` (RFC 9112 section 6.3), like curl and http.client;
+  methods without body semantics send no Content-Length
 
 ### Fixed
 
 - The httplib2 wrapper lost the response status: error statuses came
   back as 200 through it and redirects were never followed
+- The request head is validated: methods, header field names, header
+  values and the request URI reject CR, LF and control characters with a
+  `ValueError` instead of smuggling extra headers or requests onto the
+  connection, and `//host/path` targets are rejected because they are
+  protocol-relative references, not origin-form paths (RFC 9112 section
+  3.2)
+- The request head is encoded as latin-1, matching the response header
+  decoding and `http.client`; characters outside latin-1 raise a
+  `UnicodeEncodeError` instead of silently sending UTF-8 bytes
+- 307/308 redirects resend the full body: seekable payloads are rewound
+  before the redirect is followed, payloads that cannot be rewound (also
+  streams whose seek fails, like a pipe) raise `UnrewoundBodyError`
+  instead of shipping an empty body under the original length
+- The `Authorization` header is dropped when a redirect leaves the
+  origin (scheme, host or port) of the original request
+- `URL.redirect` keeps the base path - with its `;parameters` - and the
+  base query for references without a path: `Location: "?x=1"` resolves
+  to `/a/b?x=1`, no longer to `/a/b/?x=1`
 
 ### Removed
 
