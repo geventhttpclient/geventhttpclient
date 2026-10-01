@@ -409,15 +409,19 @@ def mtls_server():
     def run() -> None:
         plain, _ = listener.accept()
         try:
-            conn = gevent.ssl.wrap_socket(
-                plain,
-                server_side=True,
-                keyfile=KEY,
-                certfile=CERT,
-                cert_reqs=ssl.CERT_REQUIRED,
-                ca_certs=CERT,
-                ssl_version=ssl.PROTOCOL_TLS_SERVER,
-            )
+            # build the context explicitly and force TLS 1.2: on Windows the
+            # wrap_socket shortcut with cert_reqs=CERT_REQUIRED finishes the
+            # TLS 1.3 handshake before the client cert ever gets asked for,
+            # so the connection dies with ConnectionAbortedError instead of
+            # completing; on 1.2 the cert is exchanged during the handshake
+            # itself, which the same code path on every platform agrees on
+            ctx = gevent.ssl.SSLContext(gevent.ssl.PROTOCOL_TLS_SERVER)
+            ctx.load_cert_chain(certfile=CERT, keyfile=KEY)
+            ctx.load_verify_locations(cafile=CERT)
+            ctx.verify_mode = ssl.CERT_REQUIRED
+            ctx.maximum_version = gevent.ssl.TLSVersion.TLSv1_2
+            ctx.minimum_version = gevent.ssl.TLSVersion.TLSv1_2
+            conn = gevent.ssl.SSLSocket(plain, server_side=True, _context=ctx)
             seen.put(conn.recv(1024))
             conn.close()
         except Exception as exc:
@@ -439,6 +443,11 @@ def _client_context() -> gevent.ssl.SSLContext:
     context = gevent.ssl.SSLContext(gevent.ssl.PROTOCOL_TLS_CLIENT)
     context.load_verify_locations(cafile=CERT)
     context.check_hostname = False
+    # keep the mTLS server and its client on the same TLS 1.2 line so the
+    # handshake cannot pick the 1.3 post-handshake auth path that Windows
+    # gevent.ssl does not negotiate reliably here
+    context.maximum_version = gevent.ssl.TLSVersion.TLSv1_2
+    context.minimum_version = gevent.ssl.TLSVersion.TLSv1_2
     return context
 
 
@@ -457,7 +466,12 @@ def test_server_without_client_certificate_is_refused():
     """The same connection without them gets no further than the handshake."""
     with mtls_server() as ((host, port), seen):
         conn = httplib.HTTPSConnection(host, port, context=_client_context())
-        conn.request("GET", "/")
+        # the handshake may be refused on either side, the platform decides
+        # which one notices first, and either side raising is enough
+        try:
+            conn.request("GET", "/")
+        except (gevent.ssl.SSLError, OSError):
+            pass
         conn.close()
         outcome = seen.get(timeout=10)
         assert isinstance(outcome, gevent.ssl.SSLError), outcome
