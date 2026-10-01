@@ -118,6 +118,27 @@ def test_redirection_rel_path(redirection):
     assert updated.fragment == ""
 
 
+def test_redirection_protocol_relative_keeps_base_scheme():
+    """``//host/path`` resolves against the base URI (RFC 3986 section 5.2.2):
+    the scheme must survive so an https connection is not downgraded to plain
+    http by a redirect."""
+    url = URL("https://example.com/dir/page")
+    updated = url.redirect("//other.example.com/p")
+    assert updated.scheme == "https"
+    assert updated.host == "other.example.com"
+    assert updated.port == 443
+    assert updated.path == "/p"
+    assert str(updated) == "https://other.example.com/p"
+
+
+def test_redirection_with_explicit_scheme_is_untouched():
+    url = URL("https://example.com/dir/page")
+    updated = url.redirect("http://other.example.com/p")
+    url_full2 = URL("http://other.example.com/p")
+    for attr in URL.__slots__:
+        assert getattr(updated, attr) == getattr(url_full2, attr)
+
+
 def test_redirection_full_path():
     url_full2_plain = "http://google.de/index"
     url = URL(url_full)

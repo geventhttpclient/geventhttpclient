@@ -139,7 +139,24 @@ class URL:
             other = URL(other)
 
         if other.netloc:
-            return other
+            if other.scheme:
+                return other
+            # protocol-relative reference ("//host/path"): RFC 3986 section
+            # 5.2.2 resolves it against the base URI, which keeps the base
+            # scheme. Returning `other` unchanged left the scheme empty and
+            # HTTPClient.from_url then opened a plain-HTTP connection - an
+            # https-to-http downgrade an attacker can force with a single
+            # Location header on a TLS connection.
+            return type(self)(
+                urlparse.ParseResult(
+                    self.scheme,
+                    other.netloc,
+                    other.path,
+                    other.params,
+                    other.query,
+                    other.fragment,
+                )
+            )
 
         # relative redirect
         scheme, netloc, path, params, query, fragment = other
