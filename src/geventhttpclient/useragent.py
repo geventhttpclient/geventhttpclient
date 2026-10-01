@@ -4,6 +4,7 @@ import json as jsonlib
 import os
 import socket
 import ssl
+import urllib.request
 import zlib
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from http.cookiejar import CookieJar
@@ -85,21 +86,23 @@ class EmptyResponse(ConnectionError):
     pass
 
 
-class CompatRequest:
+class CompatRequest(urllib.request.Request):
     """urllib.request.Request compatible request class.
     See also: http://docs.python.org/library/cookielib.html
+
+    Deliberate deviations from the base class: headers is our case-insensitive
+    Headers mapping instead of a plain dict, add_unredirected_header merges
+    into it so that cookies survive our in-place redirects, header_items reads
+    the joined values instead of the raw dict internals, and payload is the
+    single body store that data exposes.
     """
 
-    # TODO: Since we dropped all py2 dependencies, we could derive directly from
-    #       urllib.request.Request and only deviate when required. Not rebuild
-    #       the whole thing.
-
-    url: str
     url_split: URL
     original_host: str
-    method: str
     headers: Headers
     payload: Payload
+    # the base class allows None until the opener picks a method, ours is final
+    method: str
 
     def __init__(
         self,
@@ -115,12 +118,27 @@ class CompatRequest:
         # None is accepted for backwards compatibility with callers which never
         # touch the headers. Every path reading them requires a Headers object.
         self.headers = headers  # type: ignore[assignment]
+        self.unredirected_hdrs = {}
+        self.origin_req_host = self.original_host
+        self.unverifiable = False
+        self._tunnel_host = None
         self.payload = payload
 
     @property
     def full_url(self) -> str:
-        # new in python3.x
         return self.url
+
+    @full_url.setter
+    def full_url(self, url: str) -> None:
+        self.set_url(url)
+
+    @property  # type: ignore[override]
+    def data(self) -> Payload:
+        return self.payload
+
+    @data.setter
+    def data(self, value: Payload) -> None:
+        self.payload = value
 
     def set_url(self, url: str | URL, params: ParamsDataType | None = None) -> None:
         if isinstance(url, URL):
@@ -129,9 +147,12 @@ class CompatRequest:
         else:
             self.url = url
             self.url_split = URL(self.url, params=params)
-
-    def get_full_url(self) -> str:
-        return self.url
+        # the base class keeps these as plain attributes, parsed from the URL;
+        # host is the netloc there, port and userinfo included, get_host is our
+        # own reading and stays without both
+        self.type = self.url_split.scheme
+        self.host = self.url_split.netloc
+        self.selector = self.url_split.request_uri or "/"
 
     def get_host(self) -> str:
         return self.url_split.host
@@ -146,21 +167,15 @@ class CompatRequest:
         """See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!"""
         return False
 
-    @property
-    def unverifiable(self) -> bool:
-        return self.is_unverifiable()
-
-    def get_header(self, header_name: str, default: Any = None) -> Any:
-        return self.headers.get(header_name, default)
-
-    def has_header(self, header_name: str) -> bool:
-        return header_name in self.headers
+    def add_unredirected_header(self, key: str, val: Any) -> None:
+        # the base class parks these in a dict our client never reads, so they
+        # would silently vanish; ours go into the headers proper
+        self.headers.add(key, val)
 
     def header_items(self) -> list[tuple[str, Any]]:
+        # the base class merges the raw dict internals of Headers, which would
+        # leak the lowercased keys and the internal tuples
         return list(self.headers.items())
-
-    def add_unredirected_header(self, key: str, val: Any) -> None:
-        self.headers.add(key, val)
 
     def _drop_payload(self) -> None:
         self.method = "GET"
@@ -499,7 +514,7 @@ class UserAgent:
                 gevent.sleep(self.retry_delay)
             for _ in range(max_redirects + 1):
                 if self.cookiejar is not None:
-                    self.cookiejar.add_cookie_header(req)  # type: ignore[arg-type]
+                    self.cookiejar.add_cookie_header(req)
 
                 try:
                     resp = self._urlopen(req)
