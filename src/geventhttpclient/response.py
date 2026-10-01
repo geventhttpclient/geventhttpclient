@@ -27,6 +27,10 @@ class HTTPProtocolViolationError(HTTPParseError):
 
 
 class HTTPResponse(HTTPResponseParser):
+    #: the request line and headers HTTPClient.request sent us, kept for the
+    #: "REQUEST:" debug output that UserAgent prints on errors
+    _sent_request: str | None = None
+
     def __init__(self, method: str = "GET", headers_type: type[Headers] = Headers) -> None:
         super().__init__()
         self.method = method.upper()

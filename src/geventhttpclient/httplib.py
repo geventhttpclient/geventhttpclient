@@ -140,7 +140,8 @@ class HTTPResponse(response.HTTPSocketResponse):
 
 
 class HTTPConnection(http.client.HTTPConnection):
-    response_class = HTTPResponse
+    # HTTPResponse here is ours, not http.client's, so no shared type
+    response_class: Any = HTTPResponse
     source_address: Any = None
     _hidden_socket: gevent.socket.socket | None = None
 
@@ -152,7 +153,7 @@ class HTTPConnection(http.client.HTTPConnection):
         if self._tunnel_host:  # type: ignore[attr-defined]
             self._tunnel()  # type: ignore[attr-defined]
 
-    def getresponse(self) -> HTTPResponse:
+    def getresponse(self) -> HTTPResponse:  # type: ignore[override]
         # For recent python versions urllib.request.AbstractHTTPHandler.do_open()
         # insists on closing the socket prematurely, right after receiving a response.
         # So in our case, right after just reading the HTTP headers, the socket gets
@@ -281,7 +282,7 @@ class HTTPSConnection(HTTPConnection):
 
 def patch() -> None:
     http.client.HTTPConnection = HTTPConnection  # type: ignore[misc]
-    http.client.HTTPResponse = HTTPResponse  # type: ignore[misc]
+    http.client.HTTPResponse = HTTPResponse  # type: ignore[misc,assignment]
     try:
         http.client.HTTPSConnection = HTTPSConnection  # type: ignore[misc,assignment]
     except NameError:
@@ -299,7 +300,7 @@ def patched() -> Iterator[None]:
         pass
     try:
         http.client.HTTPConnection = HTTPConnection  # type: ignore[misc]
-        http.client.HTTPResponse = HTTPResponse  # type: ignore[misc]
+        http.client.HTTPResponse = HTTPResponse  # type: ignore[misc,assignment]
         try:
             http.client.HTTPSConnection = HTTPSConnection  # type: ignore[misc,assignment]
         except NameError:

@@ -65,7 +65,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-geventhttpclient = ["py.typed"]
+geventhttpclient = ["py.typed", "*.pyi"]
 
 # The package version is derived from git tags (bare format, e.g. "2.5.2",
 # no "v" prefix). The generated version file is created at build time and
