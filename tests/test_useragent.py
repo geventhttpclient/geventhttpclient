@@ -4,6 +4,7 @@ from email.message import Message
 from http.cookiejar import CookieJar
 from io import BytesIO
 
+import gevent.server
 import pytest
 
 from geventhttpclient.header import Headers
@@ -16,7 +17,7 @@ from geventhttpclient.useragent import (
     UserAgent,
     _encode_multipart_formdata,
 )
-from tests.common import HTTPBIN_HOST, LISTENER_URL, check_upload, wsgiserver
+from tests.common import HTTPBIN_HOST, LISTENER, LISTENER_URL, check_upload, wsgiserver
 
 
 @pytest.fixture
@@ -364,6 +365,38 @@ def test_redirect_keeps_head_method_end_to_end():
         resp = UserAgent().urlopen(LISTENER_URL, method="HEAD")
         assert resp.status_code == 200
     assert methods == ["HEAD", "HEAD"]
+
+
+def test_list_header_value_reaches_the_wire_as_two_field_lines():
+    """End to end through the UserAgent: a Mapping with a list value arrives
+    as two field lines on the wire, never as the Python repr of the list.
+    A raw socket server sees the actual request head - gevent's WSGI server
+    would silently keep only the last of the duplicate lines."""
+    received = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        received.append(data)
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    server = gevent.server.StreamServer(LISTENER, handle)
+    server.start()
+    try:
+        resp = UserAgent().urlopen(LISTENER_URL, headers={"X-Multi": ["a", "b"]})
+        assert resp.status_code == 200
+    finally:
+        server.stop()
+    head = received[0].decode("latin-1")
+    assert "X-Multi: a\r\nX-Multi: b\r\n" in head
+    assert "['a', 'b']" not in head
 
 
 def test_redirect_308():

@@ -252,8 +252,11 @@ class Headers(dict[str, _StoredEntry]):
         other = args[0] if len(args) >= 1 else ()
 
         if isinstance(other, type(self)):
-            for field, value in other.items():
-                self[field] = value
+            for field in other:
+                # copy the raw storage entry: items() yields multi line fields
+                # line by line, and the per-line overwrite would keep only the
+                # last line of the field
+                _dict_setitem(self, field, _dict_getitem(other, field))
         elif isinstance(other, Mapping) or hasattr(other, "keys"):
             for field in other:
                 self[field] = other[field]

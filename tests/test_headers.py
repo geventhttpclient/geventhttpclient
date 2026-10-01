@@ -275,6 +275,23 @@ def test_or_merge_returns_headers_and_leaves_the_left_side_alone():
     assert headers.get("x-b") is None
 
 
+def test_update_from_headers_replaces_whole_multi_line_fields():
+    """Updating from a Headers instance replaces the entire field content;
+    multi line fields must not collapse to their last line."""
+    target = Headers({"X-Other": "x"})
+    target.update(Headers({"X-Multi": ["a", "b"]}))
+    assert target.getlist("x-multi") == ["a", "b"]
+    assert target.getlist("x-other") == ["x"]
+    assert list(target.items()) == [("X-Other", "x"), ("X-Multi", "a"), ("X-Multi", "b")]
+
+
+def test_update_overwrites_a_field_with_a_multi_line_value():
+    target = Headers({"X-Multi": "old"})
+    target.update(Headers({"X-Multi": ["a", "b"]}))
+    assert target.getlist("x-multi") == ["a", "b"]
+    assert list(target.items()) == [("X-Multi", "a"), ("X-Multi", "b")]
+
+
 def test_create_from_mapping_with_list_value():
     """A list value is one field line per element (RFC 9110 section 5.2),
     never a single line carrying the Python repr of the list."""
