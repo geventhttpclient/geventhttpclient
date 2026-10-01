@@ -178,8 +178,12 @@ class CompatRequest(urllib.request.Request):
         return self.original_host
 
     def is_unverifiable(self) -> bool:
-        """See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!"""
-        return False
+        """RFC 2965 section 3.3: True once the request has been through a
+        redirect. urllib.request marks redirected requests the same way, so
+        the stdlib cookie policy treats cookies set along the chain as
+        unverifiable - blocked by strict policies, ignored by the
+        permissive defaults."""
+        return self.unverifiable
 
     def add_unredirected_header(self, key: str, val: str) -> None:
         # the base class parks these in a dict our client never reads, so they
@@ -252,6 +256,13 @@ class CompatRequest(urllib.request.Request):
         self._drop_cookies()
         if not self._is_same_origin():
             self.headers.discard("authorization")
+        # RFC 2965 section 3.3: a request produced by a server redirect is
+        # unverifiable from the user's perspective. urllib.request marks
+        # redirected requests the same way, and strict cookie policies use
+        # the flag to refuse cookies set along the chain. Cookies of the
+        # redirecting response itself were extracted before this point and
+        # stay verifiable.
+        self.unverifiable = True
 
     def _is_same_origin(self) -> bool:
         """The RFC 6454 origin (scheme, host, port) of the redirect target

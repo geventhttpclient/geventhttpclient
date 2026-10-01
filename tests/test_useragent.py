@@ -1,7 +1,7 @@
 import traceback
 import urllib.request
 from email.message import Message
-from http.cookiejar import CookieJar
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 from io import BytesIO
 
 import gevent.server
@@ -17,7 +17,7 @@ from geventhttpclient.useragent import (
     UserAgent,
     _encode_multipart_formdata,
 )
-from tests.common import HTTPBIN_HOST, LISTENER, LISTENER_URL, check_upload, wsgiserver
+from tests.common import HTTPBIN_HOST, LISTENER, LISTENER_URL, TEST_PORT, check_upload, wsgiserver
 
 
 @pytest.fixture
@@ -424,6 +424,43 @@ def test_list_header_value_reaches_the_wire_as_two_field_lines():
     head = received[0].decode("latin-1")
     assert "X-Multi: a\r\nX-Multi: b\r\n" in head
     assert "['a', 'b']" not in head
+
+
+def test_is_unverifiable_follows_the_redirect_chain():
+    """RFC 2965 section 3.3: any request produced by an automatic redirect
+    is unverifiable from the user's perspective - same origin or not, like
+    urllib.request's redirect handler."""
+    req = CompatRequest("https://example.com/", headers=Headers())
+    assert req.is_unverifiable() is False
+    req.redirect(302, "https://example.com/first-hop")
+    assert req.is_unverifiable() is True
+
+
+def test_strict_policy_skips_cookies_set_after_a_redirect():
+    """End to end: the cookie of the redirecting response stays verifiable
+    and is stored. The cookie of the redirect target is unverifiable AND
+    third-party (different host string), so a strict policy refuses to
+    store it. localhost and 127.0.0.1 are the same server here, but
+    different hosts for the policy."""
+
+    def handler(env, start_response):
+        if env["PATH_INFO"] == "/":
+            start_response(
+                "302 Found",
+                [
+                    ("Location", f"http://localhost:{TEST_PORT}/target"),
+                    ("Set-Cookie", "first=1; Path=/"),
+                ],
+            )
+            return []
+        start_response("200 OK", [("Set-Cookie", "second=2; Path=/")])
+        return [b""]
+
+    jar = CookieJar(policy=DefaultCookiePolicy(strict_ns_unverifiable=True))
+    with wsgiserver(handler):
+        resp = UserAgent(cookiejar=jar).urlopen(LISTENER_URL)
+        assert resp.status_code == 200
+    assert {cookie.name for cookie in jar} == {"first"}
 
 
 def test_redirect_308():
