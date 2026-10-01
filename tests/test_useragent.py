@@ -386,7 +386,7 @@ def test_make_request_still_describes_the_payload():
         "http://example.com/", method="POST", headers=None, payload={"a": "b"}
     )
     assert request.headers.get("content-type") == "application/x-www-form-urlencoded; charset=utf-8"
-    assert request.headers.get("content-length") == 3
+    assert request.headers.get("content-length") == "3"
     assert request.payload == b"a=b"
 
 

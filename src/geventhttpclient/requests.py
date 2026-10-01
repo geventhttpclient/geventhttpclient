@@ -3,6 +3,7 @@ from http.cookiejar import CookieJar
 from typing import Any
 
 from geventhttpclient import useragent
+from geventhttpclient.header import HeadersDataType
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType
 
@@ -147,7 +148,7 @@ class Session(useragent.UserAgent):
         url: str | URL,
         params: ParamsDataType | None = None,
         data: useragent.Payload = None,
-        headers: dict[str, Any] | None = None,
+        headers: HeadersDataType | None = None,
         cookies: None = None,
         files: useragent.FilesInput | None = None,
         auth: None = None,
@@ -224,8 +225,8 @@ class Session(useragent.UserAgent):
             if data:
                 raise ValueError("Can send either data or json, not both at once")
             data = jsonlib.dumps(json)
-            if headers is None:
-                headers = {}
+            # work on a copy, the caller keeps their own headers
+            headers = dict(headers) if headers else {}
             headers["Content-Type"] = "application/json"
 
         response = self.urlopen(

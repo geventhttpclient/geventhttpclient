@@ -16,7 +16,7 @@ import brotli
 import gevent
 
 from geventhttpclient.client import HTTPClient, HTTPClientPool
-from geventhttpclient.header import Headers
+from geventhttpclient.header import Headers, HeadersDataType
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
 
@@ -30,7 +30,7 @@ Payload = (
     | bytearray
     | memoryview
     | MutableMapping[str, Any]
-    | IO[Any]
+    | IO[bytes]
     | Iterable[bytes]
     | None
 )
@@ -99,7 +99,7 @@ class CompatRequest(urllib.request.Request):
 
     url_split: URL
     original_host: str
-    headers: Headers
+    headers: Headers  # type: ignore[assignment]
     payload: Payload
     # the base class allows None until the opener picks a method, ours is final
     method: str
@@ -167,12 +167,12 @@ class CompatRequest(urllib.request.Request):
         """See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!"""
         return False
 
-    def add_unredirected_header(self, key: str, val: Any) -> None:
+    def add_unredirected_header(self, key: str, val: str) -> None:
         # the base class parks these in a dict our client never reads, so they
         # would silently vanish; ours go into the headers proper
         self.headers.add(key, val)
 
-    def header_items(self) -> list[tuple[str, Any]]:
+    def header_items(self) -> list[tuple[str, str]]:
         # the base class merges the raw dict internals of Headers, which would
         # leak the lowercased keys and the internal tuples
         return list(self.headers.items())
@@ -371,7 +371,7 @@ class UserAgent:
         max_retries: int = 3,
         retry_delay: float = 0,
         cookiejar: CookieJarLike = None,
-        headers: Mapping[str, Any] | None = None,
+        headers: HeadersDataType | None = None,
         **kw: Any,
     ) -> None:
         self.max_redirects = int(max_redirects)
@@ -437,7 +437,7 @@ class UserAgent:
         url: str | URL,
         method: str = "GET",
         response_codes: frozenset[int] = valid_response_codes,
-        headers: Mapping[str, Any] | None = None,
+        headers: HeadersDataType | None = None,
         payload: Payload = None,
         to_string: Literal[False] = False,
         debug_stream: IO[str] | None = None,
@@ -454,7 +454,7 @@ class UserAgent:
         url: str | URL,
         method: str = "GET",
         response_codes: frozenset[int] = valid_response_codes,
-        headers: Mapping[str, Any] | None = None,
+        headers: HeadersDataType | None = None,
         payload: Payload = None,
         to_string: Literal[True] = True,
         debug_stream: IO[str] | None = None,
@@ -470,7 +470,7 @@ class UserAgent:
         url: str | URL,
         method: str = "GET",
         response_codes: frozenset[int] = valid_response_codes,
-        headers: Mapping[str, Any] | None = None,
+        headers: HeadersDataType | None = None,
         payload: Payload = None,
         to_string: bool = False,
         debug_stream: IO[str] | None = None,
@@ -547,8 +547,8 @@ class UserAgent:
                     break  # Continue with next retry
 
                 redirection = resp.headers.get("location")
-                if isinstance(redirection, bytes):
-                    redirection = redirection.decode("utf-8")
+                if not isinstance(redirection, str):
+                    redirection = None
                 if resp.status_code in self.redirect_response_codes and redirection:
                     resp.release()
                     try:
@@ -653,7 +653,8 @@ class UserAgent:
                     resp.release()
                     offset = 0
             if not offset:
-                headers.pop("Range", None)
+                if "Range" in headers:
+                    del headers["Range"]
                 resp = self.urlopen(url, headers=headers, **kw)
 
             with open(fpath, "ab" if offset else "wb") as f:
@@ -705,21 +706,21 @@ def _make_request(
         headers = Headers()
 
     # Adjust headers depending on payload content
-    content_type = headers.get("content-type", None)
+    content_type = headers.get("content-type")
     if files:
         payload, content_type = _encode_multipart_formdata(files, payload)
         headers["content-type"] = content_type
-        headers["content-length"] = len(payload)
+        headers["content-length"] = str(len(payload))
     elif payload:
         if isinstance(payload, dict):
             if not content_type:
                 headers["content-type"] = "application/x-www-form-urlencoded; charset=utf-8"
             payload = urlencode(payload).encode()
-            headers["content-length"] = len(payload)
+            headers["content-length"] = str(len(payload))
         elif not content_type and isinstance(payload, str):
             headers["content-type"] = "text/plain; charset=utf-8"
             payload = payload.encode()
-            headers["content-length"] = len(payload)
+            headers["content-length"] = str(len(payload))
         elif not content_type:
             headers["content-type"] = "application/octet-stream"
 
@@ -748,7 +749,7 @@ def _multipart_part(
     data: str | bytes | bytearray,
     filename: str | None = None,
     content_type: str | None = None,
-    extra_headers: Mapping[str, Any] | None = None,
+    extra_headers: HeadersDataType | None = None,
 ) -> bytes:
     """Render a single multipart/form-data part."""
     disposition = f'Content-Disposition: form-data; name="{_quote_param(name)}"'

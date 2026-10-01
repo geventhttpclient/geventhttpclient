@@ -14,6 +14,9 @@ left out unless it affects users of the package.
 
 ### Changed
 
+- Header field names and values are plain str: reads never return bytes,
+  content lengths are stored as strings, and the dict level writes
+  setdefault, |= and fromkeys lowercase their keys like every other write
 - The TLS arguments `check_hostname`, `cert_file` and `key_file` are
   deprecated in favour of a custom SSL context. Their semantics now
   follow `http.client`: `cert_file`/`key_file` hand over a client

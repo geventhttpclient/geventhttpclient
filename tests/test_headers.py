@@ -249,3 +249,27 @@ def test_keys_and_values_views():
     # the view itself must match case-insensitively, hence the noqa
     assert "ACCEPT" in headers.keys()  # noqa: SIM118
     assert list(headers.values()) == [["text/plain", "text/html"]]
+
+
+def test_dict_level_writes_lower_their_keys():
+    """Even the raw dict level APIs must not sneak unlowered keys into the
+    storage, and setdefault reads and writes through the accessors."""
+    headers = Headers()
+    assert headers.setdefault("X-A", "first") == "first"
+    assert headers.setdefault("X-A", "second") == "first"
+    headers |= {"X-B": "second"}
+    assert list(headers.keys()) == ["x-a", "x-b"]
+    assert headers.getlist("x-a") == ["first"]
+    assert headers.get("x-b") == "second"
+    from_keys = Headers.fromkeys(["X-D"], "fourth")
+    assert from_keys.get("x-d") == "fourth"
+    assert list(from_keys.keys()) == ["x-d"]
+
+
+def test_or_merge_returns_headers_and_leaves_the_left_side_alone():
+    headers = Headers({"X-A": "first"})
+    merged = headers | {"X-B": "second"}
+    assert isinstance(merged, Headers)
+    assert list(merged.keys()) == ["x-a", "x-b"]
+    assert merged.get("x-a") == "first"
+    assert headers.get("x-b") is None

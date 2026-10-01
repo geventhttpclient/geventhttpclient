@@ -8,7 +8,7 @@ import gevent.socket
 
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
-from geventhttpclient.header import Headers
+from geventhttpclient.header import Headers, HeadersDataType
 from geventhttpclient.response import (
     HTTPConnectionClosed,
     HTTPParseError,
@@ -59,7 +59,10 @@ def _get_body_length(body: Any) -> int | None:
             return None
 
 
-def _uses_chunked_transfer(header_fields: Mapping[str, Any], body: Any) -> bool:
+def _uses_chunked_transfer(
+    header_fields: HeadersDataType,
+    body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None,
+) -> bool:
     """Check whether the body must be sent with chunked transfer coding.
 
     That is the case when the user requested `Transfer-Encoding: chunked`, or
@@ -78,7 +81,7 @@ def _uses_chunked_transfer(header_fields: Mapping[str, Any], body: Any) -> bool:
     return not isinstance(body, (bytes, bytearray, memoryview)) and _get_body_length(body) is None
 
 
-def _requests_100_continue(header_fields: Mapping[str, Any]) -> bool:
+def _requests_100_continue(header_fields: HeadersDataType) -> bool:
     """Check whether the merged headers request `Expect: 100-continue`."""
     for field, value in header_fields.items():
         if field.lower() == HEADER_EXPECT.lower() and EXPECT_100_CONTINUE in str(value).lower():
@@ -153,14 +156,14 @@ class HTTPClient:
         self,
         host: str,
         port: int | None = None,
-        headers: Mapping[str, Any] | None = None,
+        headers: HeadersDataType | None = None,
         block_size: int = BLOCK_SIZE,
         connection_timeout: float = ConnectionPool.DEFAULT_CONNECTION_TIMEOUT,
         network_timeout: float = ConnectionPool.DEFAULT_NETWORK_TIMEOUT,
         disable_ipv6: bool = False,
         concurrency: int = 1,
         ssl: bool = False,
-        ssl_options: dict | None = None,
+        ssl_options: dict[str, Any] | None = None,
         ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
         insecure: bool = False,
         proxy_host: str | None = None,
@@ -254,8 +257,8 @@ class HTTPClient:
         self,
         method: str,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = b"",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = b"",
+        headers: HeadersDataType | None = None,
         chunked: bool | None = None,
     ) -> str:
         """
@@ -309,7 +312,7 @@ class HTTPClient:
         if body and not chunked and HEADER_CONTENT_LENGTH not in header_fields:
             body_length = _get_body_length(body)
             if body_length:
-                header_fields[HEADER_CONTENT_LENGTH] = body_length
+                header_fields[HEADER_CONTENT_LENGTH] = str(body_length)
 
         request_url = request_uri
         if self.use_proxy and not self.ssl:
@@ -339,8 +342,8 @@ class HTTPClient:
         self,
         method: str,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = b"",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = b"",
+        headers: HeadersDataType | None = None,
     ) -> HTTPSocketPoolResponse:
         """
 
@@ -496,7 +499,10 @@ class HTTPClient:
                 return response
 
     def _send_body_after_continue(
-        self, sock: gevent.socket.socket, body: Any, chunked: bool
+        self,
+        sock: gevent.socket.socket,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes],
+        chunked: bool,
     ) -> None:
         """Send the request body after an interim 100 Continue response."""
         if chunked:
@@ -554,40 +560,40 @@ class HTTPClient:
     def post(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = "",
+        headers: HeadersDataType | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_POST, request_uri, body=body, headers=headers)
 
     def put(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = "",
+        headers: HeadersDataType | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_PUT, request_uri, body=body, headers=headers)
 
     def delete(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = "",
+        headers: HeadersDataType | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_DELETE, request_uri, body=body, headers=headers)
 
     def patch(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = "",
+        headers: HeadersDataType | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_PATCH, request_uri, body=body, headers=headers)
 
     def trace(
         self,
         request_uri: str,
-        body: str | bytes | bytearray | memoryview | IO[Any] | Iterable[bytes] | None = "",
-        headers: Mapping[str, Any] | None = None,
+        body: str | bytes | bytearray | memoryview | IO[bytes] | Iterable[bytes] | None = "",
+        headers: HeadersDataType | None = None,
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_TRACE, request_uri, body=body, headers=headers)
 

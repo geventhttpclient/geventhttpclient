@@ -244,7 +244,7 @@ def init_ssl_context(
     ssl_context_factory: Callable[..., gevent.ssl.SSLContext],
     ca_certs: str | None,
     check_hostname: bool = True,
-    ssl_options: dict | None = None,
+    ssl_options: dict[str, Any] | None = None,
 ) -> gevent.ssl.SSLContext:
     """
     Initializes an SSL context with additional SSL options.
@@ -294,7 +294,7 @@ class SSLConnectionPool(ConnectionPool):
         if provided. It must be a callable that returns a SSLContext.
     """
 
-    default_options: ClassVar[dict] = {
+    default_options: ClassVar[dict[str, Any]] = {
         "ca_certs": _CA_CERTS,
         "cert_reqs": gevent.ssl.CERT_REQUIRED,
         "ssl_version": PROTOCOL_TLS_CLIENT,
@@ -308,7 +308,7 @@ class SSLConnectionPool(ConnectionPool):
         request_port: int,
         insecure: bool = False,
         ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
-        ssl_options: dict | None = None,
+        ssl_options: dict[str, Any] | None = None,
         **kw: Any,
     ) -> None:
         self.insecure = insecure

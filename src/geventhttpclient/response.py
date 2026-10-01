@@ -4,7 +4,8 @@ from typing import Any, Self
 
 import gevent.socket
 
-from geventhttpclient._parser import HTTPParseError, HTTPResponseParser
+from geventhttpclient._parser import HTTPParseError as HTTPParseError  # noqa: PLC0414
+from geventhttpclient._parser import HTTPResponseParser
 from geventhttpclient.connectionpool import ConnectionPool
 from geventhttpclient.header import Headers
 
@@ -45,13 +46,14 @@ class HTTPResponse(HTTPResponseParser):
         self._body_buffer = bytearray()
         self.status_message: str | None = None
 
-    def __getitem__(self, key: str) -> Any:
+    def __getitem__(self, key: str) -> str | list[str]:
         return self._headers_index[key]
 
-    def get(self, key: str, default: Any = None) -> Any:
-        return self._headers_index.get(key, default)
+    def get(self, key: str, default: str | None = None) -> str | list[str] | None:
+        value = self._headers_index.get(key)
+        return value if value is not None else default
 
-    def items(self) -> Iterator[tuple[str, Any]]:
+    def items(self) -> Iterator[tuple[str, str]]:
         return self._headers_index.items()
 
     headers = property(items)
@@ -77,8 +79,10 @@ class HTTPResponse(HTTPResponseParser):
 
     @property
     def content_length(self) -> int | None:
-        length = self.get("content-length", None)
-        if length is not None:
+        # a duplicated content length comes back as a list, that is a
+        # broken message and counts as no length
+        length = self.get("content-length")
+        if isinstance(length, str):
             return int(length)
         return None
 
@@ -137,7 +141,11 @@ class HTTPResponse(HTTPResponseParser):
 
     def _flush_header(self) -> None:
         if self._current_header_field is not None:
-            self._headers_index.add(self._current_header_field, self._current_header_value)
+            value = self._current_header_value
+            if value is None:
+                # a header line without a value, store the empty value
+                value = ""
+            self._headers_index.add(self._current_header_field, value)
             self._header_position += 1
             self._current_header_field = None
             self._current_header_value = None

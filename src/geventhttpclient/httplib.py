@@ -20,12 +20,12 @@ _GLOBAL_DEFAULT_TIMEOUT: Any = getattr(socket, "_GLOBAL_DEFAULT_TIMEOUT", None)
 
 
 class HTTPLibHeaders(header.Headers):
-    def __getitem__(self, key: str | bytes) -> Any:
+    def __getitem__(self, key: str) -> str:  # type: ignore[override]
+        """http.client messages join duplicate fields into one line."""
         value = super().__getitem__(key)
-        if isinstance(value, (list, tuple)):
+        if isinstance(value, list):
             return ", ".join(value)
-        else:
-            return value
+        return value
 
 
 class HTTPResponse(response.HTTPSocketResponse):
@@ -117,10 +117,15 @@ class HTTPResponse(response.HTTPSocketResponse):
     def fileno(self) -> int:
         raise NotImplementedError()
 
-    def getheader(self, name: str, default: Any = None) -> Any:
-        return self.get(name.lower(), default)
+    def getheader(self, name: str, default: str | None = None) -> str | None:
+        value = self.get(name)
+        if value is None:
+            return default
+        if isinstance(value, list):
+            return ", ".join(value)
+        return value
 
-    def getheaders(self) -> list[tuple[str, Any]]:
+    def getheaders(self) -> list[tuple[str, str]]:
         return list(self._headers_index.items())
 
     @property
