@@ -9,7 +9,7 @@ import zlib
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from http.cookiejar import CookieJar
 from types import TracebackType
-from typing import IO, Any, ClassVar, Final, Literal, Never, Self, overload
+from typing import IO, Any, ClassVar, Final, Literal, Never, Self, cast, overload
 from urllib.parse import urlencode
 
 import brotli
@@ -257,7 +257,7 @@ class CompatResponse:
         if gzip:
             return zlib.decompress(bodystr, 16 + zlib.MAX_WBITS)
         elif br:
-            return brotli.decompress(bodystr)
+            return cast(bytes, brotli.decompress(bodystr))
         else:
             # zlib only provides the zlib compress format, not the deflate format;
             # so on top of all there's this workaround:
@@ -678,7 +678,7 @@ class UserAgent:
             # `e` is only ever bound by the handler above, which python deletes
             # once it is left; reaching this branch therefore means `e` is gone
             self._handle_retries_exceeded(url, last_error=e)  # type: ignore[misc]
-        return resp
+        return cast(CompatResponse, resp)
 
     def _make_request(self, *args: Any, **kw: Any) -> CompatRequest:
         """Build a request for this agent, without sending it.

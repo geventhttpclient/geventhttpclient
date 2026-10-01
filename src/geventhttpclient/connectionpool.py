@@ -5,7 +5,7 @@ import os
 import select
 from collections.abc import Callable
 from ssl import PROTOCOL_TLS_CLIENT, get_default_verify_paths
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import gevent.queue
 import gevent.socket
@@ -60,7 +60,17 @@ class ConnectionPool:
         self.size = size
         self.disable_ipv6 = disable_ipv6
 
-    def _resolve(self) -> list[tuple[Any, ...]]:
+    def _resolve(
+        self,
+    ) -> list[
+        tuple[
+            gevent.socket.AddressFamily,
+            gevent.socket.SocketKind,
+            int,
+            str,
+            tuple[str, int] | tuple[str, int, int, int],
+        ]
+    ]:
         """resolve (dns) socket information needed to connect it."""
         family = 0
         if self.disable_ipv6:
@@ -73,7 +83,18 @@ class ConnectionPool:
             gevent.socket.SOL_TCP,
         )
         # family, socktype, proto, canonname, sockaddr = info[0]
-        return info
+        return cast(
+            list[
+                tuple[
+                    gevent.socket.AddressFamily,
+                    gevent.socket.SocketKind,
+                    int,
+                    str,
+                    tuple[str, int] | tuple[str, int, int, int],
+                ]
+            ],
+            info,
+        )
 
     def close(self) -> None:
         self._closed = True

@@ -133,7 +133,12 @@ class Headers(dict[str, _StoredEntry]):
     @overload
     def pop(self, field: str, default: str) -> str | list[str]: ...
 
-    def pop(self, field: str, default: Any = __marker) -> str | list[str] | None:
+    @overload
+    def pop(self, field: str, default: str | list[str] | None) -> str | list[str] | None: ...
+
+    def pop(
+        self, field: str, default: str | list[str] | None | object = __marker
+    ) -> str | list[str] | None:
         """D.pop(field[,default]) -> value, remove specified field and return the corresponding value.
         If field is not found, d is returned if given, otherwise KeyError is raised.
         """
@@ -145,7 +150,7 @@ class Headers(dict[str, _StoredEntry]):
         except KeyError:
             if default is self.__marker:
                 raise
-            return default
+            return default  # type: ignore[return-value]
         del self[field]
         return value
 

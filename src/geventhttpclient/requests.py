@@ -1,6 +1,6 @@
 import json as jsonlib
 from http.cookiejar import CookieJar
-from typing import Any
+from typing import Any, cast
 
 from geventhttpclient import useragent
 from geventhttpclient.header import HeadersDataType
@@ -241,9 +241,11 @@ class Session(useragent.UserAgent):
         if stream is False:
             # preload the data
             _ = response.content
-        # response_type is declared as type[CompatResponse] on the base
-        # class, so mypy cannot see that this session builds a RequestsResponse
-        return response  # type: ignore[return-value]
+        # to_string is False on every overload this surface accepts, so the
+        # bytes overload of urlopen cannot reach us; response_type is declared
+        # as type[CompatResponse] on the base class, but here it is
+        # type[RequestsResponse].
+        return cast(RequestsResponse, response)
 
     def __init__(self, *args: Any, **kw: Any) -> None:
         """
