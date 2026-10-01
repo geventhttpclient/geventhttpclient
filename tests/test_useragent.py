@@ -251,6 +251,28 @@ def test_redirect():
         assert b"redirected" == resp.content
 
 
+def test_redirect_drops_authorization_across_origins():
+    """A caller-supplied Authorization header must not travel to a redirect
+    target on a different origin (RFC 9110 section 15.4 asks implementations
+    to consider removing it; browsers and requests do the same)."""
+    req = CompatRequest("https://example.com/", headers=Headers({"authorization": "Basic x"}))
+    req.redirect(302, "https://other.example.com/sub")
+    assert "authorization" not in req.headers
+
+
+def test_redirect_keeps_authorization_for_same_origin():
+    req = CompatRequest("https://example.com/", headers=Headers({"authorization": "Basic x"}))
+    req.redirect(302, "https://example.com/sub")
+    assert req.headers["authorization"] == "Basic x"
+
+
+def test_redirect_drops_authorization_on_scheme_downgrade():
+    """Same host, but https -> http: a different origin, credentials out."""
+    req = CompatRequest("https://example.com/", headers=Headers({"authorization": "Basic x"}))
+    req.redirect(302, "http://example.com/sub")
+    assert "authorization" not in req.headers
+
+
 def test_redirect_307_rewinds_seekable_payload():
     payload = BytesIO(b"123456789")
     payload.read(3)

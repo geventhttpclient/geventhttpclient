@@ -107,6 +107,7 @@ class CompatRequest(urllib.request.Request):
 
     url_split: URL
     original_host: str
+    original_origin: tuple[str, str, int | None]
     headers: Headers  # type: ignore[assignment]
     payload: Payload
     # the base class allows None until the opener picks a method, ours is final
@@ -122,6 +123,11 @@ class CompatRequest(urllib.request.Request):
     ) -> None:
         self.set_url(url, params=params)
         self.original_host = self.url_split.host
+        self.original_origin = (
+            self.url_split.scheme,
+            self.url_split.host,
+            self.url_split.port,
+        )
         self.method = method.upper()
         # None is accepted for backwards compatibility with callers which never
         # touch the headers. Every path reading them requires a Headers object.
@@ -236,6 +242,14 @@ class CompatRequest(urllib.request.Request):
             # whole body belongs to the redirected request again
             self._rewind_payload()
         self._drop_cookies()
+        if not self._is_same_origin():
+            self.headers.discard("authorization")
+
+    def _is_same_origin(self) -> bool:
+        """The RFC 6454 origin (scheme, host, port) of the redirect target
+        against the origin this request was created with."""
+        url = self.url_split
+        return (url.scheme, url.host, url.port) == self.original_origin
 
 
 class CompatResponse:
