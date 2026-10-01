@@ -186,7 +186,12 @@ class CompatRequest(urllib.request.Request):
         return list(self.headers.items())
 
     def _drop_payload(self) -> None:
-        self.method = "GET"
+        if self.method != "HEAD":
+            # RFC 9110 section 15.4: an automatic redirect changes the
+            # request method according to the redirecting status code's
+            # semantics. That rewrites body-carrying methods to GET; HEAD
+            # stays HEAD, like requests and browsers keep it.
+            self.method = "GET"
         self.payload = None
         for item in ("content-length", "content-type", "content-encoding"):
             self.headers.discard(item)

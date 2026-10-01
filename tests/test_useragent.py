@@ -308,6 +308,41 @@ def test_redirect_to_foreign_scheme_is_refused_end_to_end():
         UserAgent().urlopen(LISTENER_URL)
 
 
+def test_redirect_keeps_head_method():
+    """RFC 9110 section 15.4: method changes follow the status code's
+    semantics; HEAD survives 301/302/303 like in requests and browsers."""
+    for code in (301, 302, 303):
+        req = CompatRequest("https://example.com/", method="HEAD", headers=Headers())
+        req.redirect(code, "/other")
+        assert req.method == "HEAD"
+        assert req.payload is None
+
+
+def test_redirect_rewrites_post_to_get():
+    for code in (301, 302, 303):
+        req = CompatRequest("https://example.com/", method="POST", headers=Headers(), payload=b"x")
+        req.redirect(code, "/other")
+        assert req.method == "GET"
+        assert req.payload is None
+
+
+def test_redirect_keeps_head_method_end_to_end():
+    methods = []
+
+    def handler(env, start_response):
+        methods.append(env["REQUEST_METHOD"])
+        if env["PATH_INFO"] == "/":
+            start_response("301 Moved Permanently", [("Location", "target")])
+            return []
+        start_response("200 OK", [])
+        return [b"done"]
+
+    with wsgiserver(handler):
+        resp = UserAgent().urlopen(LISTENER_URL, method="HEAD")
+        assert resp.status_code == 200
+    assert methods == ["HEAD", "HEAD"]
+
+
 def test_redirect_308():
     with wsgiserver(check_redirect_308()):
         resp = UserAgent().urlopen(LISTENER_URL)
