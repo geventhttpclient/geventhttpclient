@@ -287,8 +287,35 @@ def test_redirect_307_rewinds_seekable_payload():
 
 def test_redirect_307_rejects_unrewindable_payload():
     """A consumed iterator cannot be resent; failing loudly beats shipping a
-    truncated body under the original length."""
+    truncated body under the original length. The same holds for a partially
+    consumed generator."""
     req = CompatRequest("https://example.com/", method="POST", payload=iter([b"abc"]))
+    with pytest.raises(UnrewoundBodyError):
+        req.redirect(307, "/other")
+
+    def two_chunks():
+        yield b"a"
+        yield b"b"
+
+    generator = two_chunks()
+    next(generator)  # half of the body already consumed
+    req = CompatRequest("https://example.com/", method="POST", headers=Headers(), payload=generator)
+    with pytest.raises(UnrewoundBodyError):
+        req.redirect(307, "/other")
+
+
+def test_redirect_307_rejects_stream_whose_seek_fails():
+    """A BufferedReader on a pipe (subprocess.Popen.stdout) has a seek
+    attribute, but seek(0) raises OSError (ESPIPE) - not rewindable either,
+    and it must surface as UnrewoundBodyError, not as a raw OSError."""
+
+    class PipeLike:
+        def seek(self, offset: int, whence: int = 0) -> int:
+            raise OSError(29, "Illegal seek")
+
+    req = CompatRequest(
+        "https://example.com/", method="POST", headers=Headers(), payload=PipeLike()
+    )
     with pytest.raises(UnrewoundBodyError):
         req.redirect(307, "/other")
 

@@ -212,7 +212,15 @@ class CompatRequest(urllib.request.Request):
             return
         seek = getattr(self.payload, "seek", None)
         if seek is not None:
-            seek(0)
+            try:
+                seek(0)
+            except OSError as e:
+                # e.g. a BufferedReader on a pipe (subprocess.Popen.stdout):
+                # the seek attribute exists, seek(0) fails with ESPIPE - the
+                # body is not rewindable either
+                raise UnrewoundBodyError(
+                    self.url, "payload cannot be rewound and resent after a redirect"
+                ) from e
         elif not isinstance(self.payload, (bytes, bytearray, memoryview, str, Mapping)):
             raise UnrewoundBodyError(
                 self.url, "payload cannot be rewound and resent after a redirect"
