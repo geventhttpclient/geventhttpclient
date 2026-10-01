@@ -10,6 +10,7 @@ from geventhttpclient.header import Headers
 from geventhttpclient.useragent import (
     BadStatusCode,
     CompatRequest,
+    UnrewoundBodyError,
     UserAgent,
     _encode_multipart_formdata,
 )
@@ -247,6 +248,45 @@ def test_redirect():
         resp = UserAgent().urlopen(LISTENER_URL)
         assert resp.status_code == 200
         assert b"redirected" == resp.content
+
+
+def test_redirect_307_rewinds_seekable_payload():
+    payload = BytesIO(b"123456789")
+    payload.read(3)
+    # explicit empty Headers: redirect() drops cookies, which needs a real
+    # mapping (pre-existing requirement, unchecked before this change)
+    req = CompatRequest("https://example.com/", method="POST", headers=Headers(), payload=payload)
+    req.redirect(307, "/other")
+    assert payload.tell() == 0
+
+
+def test_redirect_307_rejects_unrewindable_payload():
+    """A consumed iterator cannot be resent; failing loudly beats shipping a
+    truncated body under the original length."""
+    req = CompatRequest("https://example.com/", method="POST", payload=iter([b"abc"]))
+    with pytest.raises(UnrewoundBodyError):
+        req.redirect(307, "/other")
+
+
+def test_redirect_307_resends_the_full_body():
+    received = []
+
+    def handler(env, start_response):
+        # the BytesIO payload has no fileno, so the client streams it chunked
+        # and CONTENT_LENGTH is absent; read() drains the de-chunked stream
+        body = env["wsgi.input"].read()
+        received.append(body)
+        if env["PATH_INFO"] == "/":
+            start_response("307 Temporary Redirect", [("Location", "target")])
+            return []
+        start_response("200 OK", [])
+        return [body]
+
+    with wsgiserver(handler):
+        resp = UserAgent().urlopen(LISTENER_URL, method="POST", payload=BytesIO(b"123456789"))
+        assert resp.status_code == 200
+        assert resp.content == b"123456789"
+        assert received == [b"123456789", b"123456789"]
 
 
 def test_redirect_308():

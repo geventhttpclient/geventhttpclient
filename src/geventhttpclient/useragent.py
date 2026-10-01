@@ -86,6 +86,10 @@ class EmptyResponse(ConnectionError):
     pass
 
 
+class UnrewoundBodyError(ConnectionError):
+    pass
+
+
 class CompatRequest(urllib.request.Request):
     """urllib.request.Request compatible request class.
     See also: http://docs.python.org/library/cookielib.html
@@ -183,6 +187,22 @@ class CompatRequest(urllib.request.Request):
         for item in ("content-length", "content-type", "content-encoding"):
             self.headers.discard(item)
 
+    def _rewind_payload(self) -> None:
+        """307/308 keep method and payload: a seekable body is rewound so the
+        resent request carries the full body again. After the first send the
+        stream sits at its end and the redirected request would ship an empty
+        body under the original length, leaving the server waiting for bytes
+        that never arrive."""
+        if self.payload is None:
+            return
+        seek = getattr(self.payload, "seek", None)
+        if seek is not None:
+            seek(0)
+        elif not isinstance(self.payload, (bytes, bytearray, memoryview, str, Mapping)):
+            raise UnrewoundBodyError(
+                self.url, "payload cannot be rewound and resent after a redirect"
+            )
+
     def _drop_cookies(self) -> None:
         for item in ("cookie", "cookie2"):
             self.headers.discard(item)
@@ -192,6 +212,10 @@ class CompatRequest(urllib.request.Request):
         self.set_url(self.url_split.redirect(location))
         if code in (301, 302, 303):
             self._drop_payload()
+        else:
+            # 307/308 keep the payload: rewind what was sent so far, the
+            # whole body belongs to the redirected request again
+            self._rewind_payload()
         self._drop_cookies()
 
 
