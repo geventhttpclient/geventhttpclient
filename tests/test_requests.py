@@ -272,6 +272,72 @@ def test_iter_lines_crlf_straddling_a_chunk_boundary_is_one_terminator():
     assert list(response.iter_lines(chunk_size=3, delimiter=b"x")) == [b"a\r\nb\r\n"]
 
 
+def test_iter_lines_empty_body_yields_nothing():
+    response = _response_with_body(b"")
+    assert list(response.iter_lines()) == []
+
+
+def test_iter_lines_bare_cr_at_end_of_body_terminates_the_last_line():
+    """A body ending in a bare \\r (no trailing \\n) terminates the final line;
+    the trailing \\r must not leak as an empty trailing line."""
+    response = _response_with_body(b"a\r")
+    assert list(response.iter_lines()) == [b"a"]
+    # same when the lone \\r lands on a chunk boundary of its own
+    response = _response_with_body(b"a\r")
+    assert list(response.iter_lines(chunk_size=1)) == [b"a"]
+    response = _response_with_body(b"a\r")
+    assert list(response.iter_lines(chunk_size=2)) == [b"a"]
+
+
+def test_iter_lines_lone_cr_body_is_one_empty_line():
+    response = _response_with_body(b"\r")
+    assert list(response.iter_lines()) == [b""]
+    response = _response_with_body(b"\r")
+    assert list(response.iter_lines(chunk_size=1)) == [b""]
+
+
+def test_iter_lines_leading_crlf_yields_a_leading_empty_line():
+    response = _response_with_body(b"\r\na")
+    assert list(response.iter_lines()) == [b"", b"a"]
+    response = _response_with_body(b"\r\na")
+    assert list(response.iter_lines(chunk_size=1)) == [b"", b"a"]
+    response = _response_with_body(b"\r\na")
+    assert list(response.iter_lines(chunk_size=2)) == [b"", b"a"]
+
+
+def test_iter_lines_double_bare_cr_yields_an_empty_line_in_the_middle():
+    response = _response_with_body(b"a\r\rb")
+    assert list(response.iter_lines()) == [b"a", b"", b"b"]
+
+
+def test_iter_lines_crlf_followed_by_bare_cr_yields_an_empty_trailing_line():
+    """A CRLF-terminated line followed by a bare CR is two terminators: an
+    empty trailing line on top of the line before."""
+    response = _response_with_body(b"a\r\n\r")
+    assert list(response.iter_lines()) == [b"a", b""]
+    response = _response_with_body(b"a\r\n\r")
+    assert list(response.iter_lines(chunk_size=2)) == [b"a", b""]
+    response = _response_with_body(b"a\r\n\r")
+    assert list(response.iter_lines(chunk_size=4)) == [b"a", b""]
+
+
+def test_iter_lines_decode_unicode_handles_bare_cr():
+    """The decoded path must apply the same \\r-hold logic as the bytes path."""
+    response = _response_with_body(b"a\r", headers=b"Content-Type: text/plain; charset=utf-8\r\n")
+    assert list(response.iter_lines(decode_unicode=True)) == ["a"]
+    response = _response_with_body(b"\r", headers=b"Content-Type: text/plain; charset=utf-8\r\n")
+    assert list(response.iter_lines(decode_unicode=True)) == [""]
+    response = _response_with_body(
+        b"\r\na\r", headers=b"Content-Type: text/plain; charset=utf-8\r\n"
+    )
+    assert list(response.iter_lines(decode_unicode=True)) == ["", "a"]
+
+
+def test_iter_lines_decode_unicode_empty_body():
+    response = _response_with_body(b"", headers=b"Content-Type: text/plain; charset=utf-8\r\n")
+    assert list(response.iter_lines(decode_unicode=True)) == []
+
+
 def test_json_decodes_a_valid_body():
     body = b'{"a": 1, "b": 2}'
     response = _response_with_body(body)
