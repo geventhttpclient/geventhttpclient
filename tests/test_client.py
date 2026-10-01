@@ -713,3 +713,22 @@ def test_broken_connection_after_full_send_is_retried_for_get():
         resp = client.request("GET", "/")
         assert resp.status_code == 200
     assert len(connections) == 2
+
+
+def test_bodyless_post_and_put_send_content_length_zero():
+    """RFC 9112 section 6.3: body-carrying methods SHOULD send
+    Content-Length. An empty or absent body is a zero, like curl and
+    http.client send it."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    for method in ("POST", "PUT", "PATCH"):
+        for body in (None, b""):
+            request = client._build_request(method, "/", body, {})
+            assert "Content-Length: 0\r\n" in request
+
+
+def test_requests_without_body_semantics_send_no_content_length():
+    client = HTTPClient("localhost", port=1)  # never connects
+    for method in ("GET", "HEAD", "OPTIONS", "DELETE", "TRACE"):
+        for body in (None, b""):
+            request = client._build_request(method, "/", body, {})
+            assert "Content-Length" not in request

@@ -32,6 +32,11 @@ _REQUEST_TARGET_RE = re.compile(r"\A[^\x00-\x20\x7f]*\Z")
 IDEMPOTENT_METHODS = frozenset(("GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"))
 
 
+# RFC 9110 sections 9.3.1 and 9.3.3 and RFC 5789: the methods whose
+# requests define a meaning for enclosed content.
+_BODY_CARRYING_METHODS = frozenset(("POST", "PUT", "PATCH"))
+
+
 def _may_retry_after_send_error(method: str) -> bool:
     """RFC 9110 section 9.2.2: a client SHOULD NOT automatically retry a
     request with a non-idempotent method once it may have been processed.
@@ -348,6 +353,12 @@ class HTTPClient:
             body_length = _get_body_length(body)
             if body_length:
                 header_fields[HEADER_CONTENT_LENGTH] = str(body_length)
+        elif not chunked and HEADER_CONTENT_LENGTH not in header_fields:
+            # RFC 9112 section 6.3: methods that define a meaning for
+            # enclosed content SHOULD carry Content-Length. An empty or
+            # absent body is a zero, like curl and http.client send it.
+            if method.upper() in _BODY_CARRYING_METHODS:
+                header_fields[HEADER_CONTENT_LENGTH] = "0"
 
         request_url = request_uri
         if self.use_proxy and not self.ssl:
