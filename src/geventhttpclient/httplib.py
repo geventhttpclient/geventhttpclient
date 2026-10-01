@@ -130,6 +130,15 @@ class HTTPResponse(response.HTTPSocketResponse):
     def _check_close(self) -> bool:
         return not self.should_keep_alive()
 
+    def items(self) -> Iterator[tuple[str, Any]]:
+        # Responses that are not stdlib http.client.HTTPResponse instances lose
+        # their status when code like httplib2.Response copies them from the
+        # items: it then defaults to 200 and never follows redirects or raises
+        # for error statuses. Yield the status line as a pseudo header so the
+        # status survives the copy.
+        yield "status", self.status_code
+        yield from super().items()
+
     # For compatibility with old-style urllib responses. cookielib etc.
 
     def geturl(self) -> str | None:
