@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 import brotli
 import gevent
 
-from geventhttpclient.client import HTTPClient, HTTPClientPool
+from geventhttpclient.client import IDEMPOTENT_METHODS, HTTPClient, HTTPClientPool
 from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
@@ -418,6 +418,7 @@ class UserAgent:
     max_redirects: int
     max_retries: int
     retry_delay: float
+    retry_on_non_idempotent: bool
     default_headers: Headers
     cookiejar: CookieJarLike
     clientpool: HTTPClientPool
@@ -427,6 +428,7 @@ class UserAgent:
         max_redirects: int = 3,
         max_retries: int = 3,
         retry_delay: float = 0,
+        retry_on_non_idempotent: bool = False,
         cookiejar: CookieJarLike = None,
         headers: HeadersDataType | None = None,
         **kw: Any,
@@ -434,6 +436,7 @@ class UserAgent:
         self.max_redirects = int(max_redirects)
         self.max_retries = int(max_retries)
         self.retry_delay = retry_delay
+        self.retry_on_non_idempotent = retry_on_non_idempotent
         self.default_headers = HTTPClient.DEFAULT_HEADERS.copy()
         if headers:
             self.default_headers.update(headers)
@@ -453,6 +456,13 @@ class UserAgent:
         exc_tb: TracebackType | None,
     ) -> None:
         self.close()
+
+    def _may_retry(self, request: CompatRequest) -> bool:
+        """RFC 9110 section 9.2.2: a client SHOULD NOT automatically retry a
+        request with a non-idempotent method - the previous behavior retried
+        POST and PATCH on timeout, EPIPE, ECONNRESET and empty responses,
+        which can execute such a request twice."""
+        return self.retry_on_non_idempotent or request.method in IDEMPOTENT_METHODS
 
     def _verify_status(self, status_code: int, url: str | URL | None = None) -> None:
         """Hook for subclassing"""
@@ -580,6 +590,9 @@ class UserAgent:
                 except BaseException as e:  # noqa: BLE001
                     e.request = req  # type: ignore[attr-defined]
                     last_error = self._handle_error(e, url=req.url)
+                    # _handle_error returning means it wants this retried
+                    if not self._may_retry(req):
+                        raise self._handle_retries_exceeded(url, last_error=last_error)
                     break  # Continue with next retry
 
                 # We received a response
@@ -630,6 +643,8 @@ class UserAgent:
                             # re-using the name bound by the except block above,
                             # which python deletes once the handler is left
                             e = EmptyResponse(url, "Empty response body received")  # type: ignore[misc]
+                            if not self._may_retry(req):
+                                raise self._handle_retries_exceeded(url, last_error=e)  # type: ignore[misc]
                             last_error = self._handle_error(e, url=req.url)  # type: ignore[misc]
                             break
                         else:

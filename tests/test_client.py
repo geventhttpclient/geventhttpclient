@@ -10,8 +10,14 @@ import gevent.socket
 import pytest
 
 from geventhttpclient import __version__
-from geventhttpclient.client import METHOD_GET, HTTPClient
+from geventhttpclient.client import (
+    IDEMPOTENT_METHODS,
+    METHOD_GET,
+    HTTPClient,
+    _may_retry_after_send_error,
+)
 from geventhttpclient.connectionpool import ConnectionPool
+from geventhttpclient.response import HTTPConnectionClosed
 from tests.common import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
 
 
@@ -642,3 +648,68 @@ def test_build_request_rejects_protocol_relative_request_uri():
     client = HTTPClient("localhost", port=1)  # never connects
     with pytest.raises(ValueError):
         client._build_request("GET", "//other.example.com/p", b"", {})
+
+
+def test_send_retry_is_limited_to_idempotent_methods():
+    """RFC 9110 section 9.2.1: exactly these methods are idempotent."""
+    assert IDEMPOTENT_METHODS == {"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"}
+    assert _may_retry_after_send_error("GET")
+    assert _may_retry_after_send_error("put")
+    assert not _may_retry_after_send_error("POST")
+    assert not _may_retry_after_send_error("PATCH")
+
+
+def test_broken_connection_after_full_send_is_not_retried_for_post():
+    """The body reached the server in full: a connection that dies at
+    response read time may not trigger a resend for non-idempotent
+    methods (RFC 9110 section 9.2.2)."""
+    connections: list = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        connections.append(1)
+        if len(connections) == 1:
+            # request received, but the server closes without a response
+            sock.close()
+            return
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    with server(handle):
+        client = HTTPClient(LISTENER[0], port=LISTENER[1])
+        with pytest.raises(HTTPConnectionClosed):
+            client.request("POST", "/", body=b"payload")
+    assert len(connections) == 1
+
+
+def test_broken_connection_after_full_send_is_retried_for_get():
+    connections = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        connections.append(1)
+        if len(connections) == 1:
+            sock.close()
+            return
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    with server(handle):
+        client = HTTPClient(LISTENER[0], port=LISTENER[1])
+        resp = client.request("GET", "/")
+        assert resp.status_code == 200
+    assert len(connections) == 2

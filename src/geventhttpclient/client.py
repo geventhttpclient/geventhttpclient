@@ -27,6 +27,19 @@ _TOKEN_RE = re.compile(r"\A[!#$%&'*+\-.^_`|~0-9A-Za-z]+\Z")
 _FIELD_VALUE_RE = re.compile(r"\A[\t\x20-\x7e\x80-\xff]*\Z")
 _REQUEST_TARGET_RE = re.compile(r"\A[^\x00-\x20\x7f]*\Z")
 
+# RFC 9110 section 9.2.1: GET, HEAD, OPTIONS, TRACE, PUT and DELETE are the
+# idempotent methods.
+IDEMPOTENT_METHODS = frozenset(("GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"))
+
+
+def _may_retry_after_send_error(method: str) -> bool:
+    """RFC 9110 section 9.2.2: a client SHOULD NOT automatically retry a
+    request with a non-idempotent method once it may have been processed.
+    After a send error part or all of the body may have reached the server,
+    so the retry is limited to idempotent methods."""
+    return method.upper() in IDEMPOTENT_METHODS
+
+
 CRLF = "\r\n"
 WHITESPACE = " "
 FIELD_VALUE_SEP = ": "
@@ -434,7 +447,7 @@ class HTTPClient:
                             )
                         except HTTPConnectionClosed:
                             # connection is released by the response itself
-                            if attempts_left > 0:
+                            if attempts_left > 0 and _may_retry_after_send_error(method):
                                 attempts_left -= 1
                                 continue
                             raise
@@ -453,7 +466,7 @@ class HTTPClient:
                         )
                     except HTTPConnectionClosed:
                         # connection is released by the response itself
-                        if attempts_left > 0:
+                        if attempts_left > 0 and _may_retry_after_send_error(method):
                             attempts_left -= 1
                             continue
                         raise
@@ -498,7 +511,7 @@ class HTTPClient:
                     )
                 except (gevent.socket.error, HTTPParseError):
                     # no pending (valid) response, socket is released already
-                    if attempts_left > 0:
+                    if attempts_left > 0 and _may_retry_after_send_error(method):
                         attempts_left -= 1
                         continue
                     raise
@@ -515,8 +528,10 @@ class HTTPClient:
                     headers_type=self.headers_type,
                 )
             except HTTPConnectionClosed:
-                # connection is released by the response itself
-                if attempts_left > 0:
+                # connection is released by the response itself; the request
+                # was sent in full, so the server may have processed it and
+                # the same RFC 9112 section 9.2.2 limit applies
+                if attempts_left > 0 and _may_retry_after_send_error(method):
                     attempts_left -= 1
                     continue
                 raise

@@ -10,6 +10,7 @@ from geventhttpclient.header import Headers
 from geventhttpclient.useragent import (
     BadStatusCode,
     CompatRequest,
+    RetriesExceeded,
     UnrewoundBodyError,
     UnsupportedRedirectSchemeError,
     UserAgent,
@@ -591,3 +592,37 @@ def test_full_url_assignment_reparses_the_request():
     # host is the netloc, the base class keeps the port in it
     assert request.host == "other.example:8443"
     assert (request.type, request.selector) == ("https", "/q")
+
+
+def empty_body_handler(attempts: list):
+    def handler(env, start_response):
+        attempts.append(1)
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b""]
+
+    return handler
+
+
+def test_post_is_not_retried_on_empty_response():
+    """RFC 9110 section 9.2.2: a non-idempotent request must not be retried
+    automatically - the first attempt may have been executed already."""
+    attempts: list = []
+    with wsgiserver(empty_body_handler(attempts)), pytest.raises(RetriesExceeded):
+        UserAgent(max_retries=3).urlopen(LISTENER_URL, method="POST", to_string=True)
+    assert len(attempts) == 1
+
+
+def test_get_is_still_retried_on_empty_response():
+    attempts: list = []
+    with wsgiserver(empty_body_handler(attempts)), pytest.raises(RetriesExceeded):
+        UserAgent(max_retries=2).urlopen(LISTENER_URL, to_string=True)
+    assert len(attempts) == 3
+
+
+def test_post_retries_when_explicitly_opted_in():
+    attempts: list = []
+    with wsgiserver(empty_body_handler(attempts)), pytest.raises(RetriesExceeded):
+        UserAgent(max_retries=2, retry_on_non_idempotent=True).urlopen(
+            LISTENER_URL, method="POST", to_string=True
+        )
+    assert len(attempts) == 3
