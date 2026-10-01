@@ -277,7 +277,7 @@ class CompatResponse:
 
     def _content(self) -> bytes:
         try:
-            content_encoding = self.headers.getheaders("content-encoding")[0].lower()
+            content_encoding = self.headers.getlist("content-encoding")[0].lower()
         except IndexError:
             # No content-encoding header set
             content_encoding = "identity"
@@ -307,7 +307,7 @@ class CompatResponse:
             return ""
 
         try:
-            content_type = self.headers.getheaders("content-type")[0].lower()
+            content_type = self.headers.getlist("content-type")[0].lower()
         except IndexError:
             # No content-encoding header set, let's hope for the best
             return self.content.decode()

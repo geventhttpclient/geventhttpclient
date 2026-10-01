@@ -92,6 +92,9 @@ class Headers(dict):
     # MutableMapping.values dispatches through self[field] and therefore returns
     # the header values instead of the raw stored field/value tuples.
     values = MutableMapping.values  # type: ignore[assignment]
+    # Keeping the MutableMapping view for keys too: iterating matches dict.keys(),
+    # but the view builds membership and set operations on our case-insensitive
+    # __contains__, so h.keys() & {...} stays case-insensitive like "field in h".
     keys = MutableMapping.keys  # type: ignore[assignment]
 
     def get(self, field: str | bytes, default: Any = None) -> Any:
@@ -277,25 +280,3 @@ class Headers(dict):
     # Compatibility with http.client
     getheaders = getlist
     getallmatchingheaders = getlist
-
-    def iteroriginal(self) -> Iterator[tuple[str, Any]]:
-        import warnings
-
-        warnings.warn(
-            "This is deprecated and will be removed in version v2.3.0. "
-            "Use Headers.items() instead.",
-            DeprecationWarning,
-            2,
-        )
-        return self.items()
-
-    def iget(self, field: str | bytes) -> list[tuple[str | bytes, Any]]:
-        import warnings
-
-        warnings.warn(
-            "This is deprecated and will be removed in version v2.3.0. "
-            "Use Headers.getlist() instead.",
-            DeprecationWarning,
-            2,
-        )
-        return self.getlist(field)
