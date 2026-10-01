@@ -247,8 +247,8 @@ class HTTPClient:
     def close(self) -> None:
         self._connection_pool.close()
 
-    # Like urllib2, try to treat the body as a file if we can't determine the
-    # file length with `len()`
+    # a body without a usable len() falls back to the size of its file in
+    # `_get_body_length`, and to chunked transfer when even that is unknown
 
     def _build_request(
         self,
@@ -598,9 +598,12 @@ class HTTPClient:
 
 
 class HTTPClientPool:
-    """Factory for maintaining a bunch of clients, one per host:port"""
+    """Factory for maintaining a bunch of clients, one per host:port.
 
-    # TODO: Add some housekeeping and cleanup logic
+    A client is created on first use and stays until :meth:`close`, which is the
+    only way to hand clients back; nothing expires on its own, so the pool grows
+    with the number of hosts it has talked to.
+    """
 
     def __init__(self, **kw: Any) -> None:
         self.clients: dict[tuple[str, int | None], HTTPClient] = {}

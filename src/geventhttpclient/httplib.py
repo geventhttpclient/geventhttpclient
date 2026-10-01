@@ -197,6 +197,10 @@ class HTTPSConnection(HTTPConnection):
                 DeprecationWarning,
                 2,
             )
+        # Kept for compatibility: code outside us sets these two attributes on
+        # the connection it is handed and reads them back, the same way it does
+        # for http.client connections. Neither is used to build the context, the
+        # certificate goes into it and the key never was read here.
         self.key_file = key_file
         self.cert_file = cert_file or connectionpool._CA_CERTS
         if context is None:

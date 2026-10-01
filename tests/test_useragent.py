@@ -1,3 +1,4 @@
+import traceback
 from http.cookiejar import CookieJar
 from io import BytesIO
 
@@ -399,3 +400,24 @@ def test_make_request_uses_the_agents_request_type():
     made = CustomAgent()._make_request("http://example.com/", method="GET", headers=None)
     assert type(made) is CustomRequest
     assert type(UserAgent()._make_request("http://example.com/")) is CompatRequest
+
+
+def test_handle_error_keeps_the_traceback_of_the_error():
+    """The error hook must not lean on the ambient exception state.
+
+    From inside an ``except`` clause both spellings give the same traceback;
+    called once the clause is left, the frames the error came through have
+    to stay attached to it.
+    """
+
+    def failing():
+        raise ValueError("raised deep")
+
+    with pytest.raises(ValueError) as deep:
+        failing()
+
+    # the except clause above is left by now
+    with pytest.raises(ValueError) as raised:
+        UserAgent()._handle_error(deep.value)
+
+    assert "in failing" in "".join(traceback.format_tb(raised.value.__traceback__))

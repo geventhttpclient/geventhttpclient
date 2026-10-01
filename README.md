@@ -83,8 +83,8 @@ by `geventhttpclient.httplib`.
 from geventhttpclient.httplib import HTTPConnection
 ```
 
-If you use `httplib2`, `urllib` or `urllib2`; you can patch `httplib` to
-use the wrappers from `geventhttpclient`. For `httplib2`, make sure you
+If you use `httplib2` or `urllib.request`; you can patch `httplib` to use
+the wrappers from `geventhttpclient`. For `httplib2`, make sure you
 patch before you import or the `super()` calls will fail.
 
 ```python

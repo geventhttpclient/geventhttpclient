@@ -24,8 +24,6 @@ if not _CA_CERTS or os.path.isdir(_CA_CERTS):
 DEFAULT_CONNECTION_TIMEOUT = 5.0
 DEFAULT_NETWORK_TIMEOUT = 5.0
 
-IGNORED = object()
-
 
 class ConnectionPool:
     DEFAULT_CONNECTION_TIMEOUT = 5.0

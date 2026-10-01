@@ -4,7 +4,6 @@ import json as jsonlib
 import os
 import socket
 import ssl
-import sys
 import zlib
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
 from http.cookiejar import CookieJar
@@ -409,7 +408,7 @@ class UserAgent:
             or isinstance(e, EmptyResponse)
         ):
             return e
-        raise e.with_traceback(sys.exc_info()[2])
+        raise e.with_traceback(e.__traceback__)
 
     def _handle_retries_exceeded(
         self, url: str | URL, last_error: BaseException | None = None
