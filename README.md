@@ -279,6 +279,6 @@ used with `asyncio`, not `gevent`.
 | Httplib2 (patched) | 1995.7 |
 | Urllib3            | 1665.8 |
 | Requests           | 941.2  |
-| Httpx              | 780.4  |
+| Httpx              | 753.5  |
 
 _Linux(x86_64), Python 3.14.7, gevent 26.9.0_

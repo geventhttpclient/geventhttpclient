@@ -3,7 +3,7 @@ import time
 import gevent.pool
 import httpx
 
-# TODO: This should all run using httpx async methods
+# For httpx in its native concurrency model, see httpx_async_bench.py.
 
 
 def main(n=1000, concurrency=10, url="http://127.0.0.1/"):
@@ -11,7 +11,12 @@ def main(n=1000, concurrency=10, url="http://127.0.0.1/"):
         response = client.get(url)
         assert response.status_code == 200
 
-    client = httpx.Client()
+    client = httpx.Client(
+        limits=httpx.Limits(
+            max_connections=concurrency,
+            max_keepalive_connections=concurrency,
+        )
+    )
     group = gevent.pool.Pool(size=concurrency)
 
     for i in range(5):

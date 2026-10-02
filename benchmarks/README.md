@@ -28,7 +28,7 @@ absolute numbers are machine-specific, the ratios are the point):
 | httplib2         |              1990 |                2000 |                    435 |
 | urllib3          |              1630 |                2510 |                    380 |
 | requests         |               957 |                1210 |                    322 |
-| httpx (sync)     |               783 |                1460 |                    434 |
+| httpx (sync)     |               757 |                1530 |                    440 |
 
 On loopback the client is the bottleneck and geventhttpclient's C parser
 (llhttp) puts it well ahead. Under simulated latency (20 ms added per
@@ -59,10 +59,16 @@ As a rule of thumb:
 ## httpx
 
 httpx is asyncio-native. Running its synchronous API under gevent monkey
-patching penalizes it disproportionately (see the loopback numbers above),
-and its native async mode on an asyncio event loop performs in a different
-range again (~600–680 requests/s in our setup). For a fair httpx comparison,
-benchmark it with its own async API rather than through this gevent harness.
+patching penalizes it disproportionately (see the loopback numbers above).
+For its native concurrency model, use the separate unpatched harness:
+
+```
+uv run python benchmarks/httpx_async_bench.py
+```
+
+In our setup that lands in the same order of magnitude as the patched sync
+client — httpx's per-request cost, not the concurrency model, dominates
+here.
 
 ## Reading the numbers
 

@@ -87,8 +87,15 @@ class HttpxBenchmark(Benchmark):
     client: httpx.Client
 
     def init_client(self):
-        # TODO: This should run async
-        self.client = httpx.Client()
+        # The sync client under gevent monkey patching: measurable, but
+        # penalized compared to httpx's native async mode - see
+        # httpx_async_bench.py and the notes in benchmarks/README.md.
+        self.client = httpx.Client(
+            limits=httpx.Limits(
+                max_connections=self.concurrency,
+                max_keepalive_connections=self.concurrency,
+            )
+        )
 
     def request(self):
         return self.client.get(self.url).content
