@@ -19,6 +19,7 @@ import gevent
 
 from geventhttpclient.client import IDEMPOTENT_METHODS, HTTPClient, HTTPClientPool
 from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
+from geventhttpclient.http2_response import HTTP2Response, HTTP2SocketResponseBridge
 from geventhttpclient.response import HTTPSocketPoolResponse, HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
 
@@ -809,11 +810,7 @@ class UserAgent:
         )
         # ``request_h2`` returns either an ``HTTP2ResponseHandle`` (the
         # h2 path) or an ``HTTPSocketPoolResponse`` (auto-fallback
-        # when the peer chose http/1.1 in the ALPN handshake). We
-        # distinguish them by class name to avoid a circular import
-        # at this point.
-        from geventhttpclient.http2_response import HTTP2Response, HTTP2SocketResponseBridge
-
+        # when the peer chose http/1.1 in the ALPN handshake).
         if isinstance(result, HTTPSocketPoolResponse):
             return self.response_type(
                 result,

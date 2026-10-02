@@ -20,10 +20,12 @@ from geventhttpclient.http2 import (
     HeadersReceived,
     HTTP2Connection,
     Http2Event,
+    InformationalResponseReceived,
     PingReceived,
     SettingsReceived,
     StreamLifecycle,
     StreamReset,
+    TrailerReceived,
 )
 
 
@@ -432,6 +434,91 @@ class TestEventTypes:
 # ---------------------------------------------------------------------------
 # State machine
 # ---------------------------------------------------------------------------
+
+
+class TestReviewHttp2_3:
+    """Regression tests for review_http2_3.md M7/M8 (RFC 9113 §8.1 / §8.1.1)."""
+
+    def test_1xx_informational_emits_typed_event(self):
+        """M8: an informational response (e.g. ``103 Early Hints``)
+        must surface as ``InformationalResponseReceived`` -- not
+        overwrite the eventual ``status_code`` and not end the
+        stream."""
+        c = HTTP2Connection()
+        s = session_server_new()
+        _pump(c, s)
+
+        sid = c.submit_request("GET", "/page", "example.com")
+        _pump(c, s, to_server=c.bytes_to_send())
+
+        # Server-side: 103 Early Hints first, then 200 OK.
+        early = s.submit_headers(sid, [
+            (":status", "103"),
+            ("link", "</style.css>; rel=preload"),
+        ], 0)
+        response = s.submit_response(sid, [(":status", "200"),
+                                          ("content-type", "text/plain")])
+        c_events, _ = _pump(c, s, to_client=early + response)
+
+        infos = [e for e in c_events if isinstance(e, InformationalResponseReceived)]
+        headers = [e for e in c_events if isinstance(e, HeadersReceived)]
+        assert len(infos) == 1
+        assert infos[0].stream_id == sid
+        assert infos[0].status_code == 103
+        assert ("link", "</style.css>; rel=preload") in infos[0].headers
+
+        # The *final* response is what callers will observe as
+        # ``status_code``: 200, not 103.
+        assert c.streams[sid].response_status_code == 200
+        assert len(headers) == 1
+        assert headers[0].stream_id == sid
+        assert ("content-type", "text/plain") in headers[0].headers
+
+    def test_trailer_headers_emits_typed_event(self):
+        """M7: a HEADERS frame carrying trailers must surface as
+        ``TrailerReceived`` and not overwrite the original response
+        headers."""
+        c = HTTP2Connection()
+        s = session_server_new()
+        _pump(c, s)
+
+        # Server-side: 200 + body + trailer (the ``nghttp2``
+        # server-side API explicitly distinguishes trailer via
+        # ``submit_trailer``).
+        # The C extension's ``submit_data`` requires the request to
+        # have shipped data itself, so we send the request with a
+        # body to give the server session a stream slot for
+        # response data.
+        sid = c.submit_request("GET", "/file", "example.com", body=b"")
+        _pump(c, s, to_server=c.bytes_to_send())
+        response = s.submit_response(sid, [
+            (":status", "200"),
+            ("content-type", "text/plain"),
+        ], with_body=True)
+        body = s.submit_data(sid, b"hello world", end_stream=False)
+        trailer = s.submit_trailer(sid, [
+            ("digest", "sha-256=..."),
+            ("server-timing", "cache;dur=12"),
+        ])
+        c_events, _ = _pump(c, s, to_client=response + body + trailer)
+
+        trailers = [e for e in c_events if isinstance(e, TrailerReceived)]
+        headers = [e for e in c_events if isinstance(e, HeadersReceived)]
+        assert len(headers) == 1
+        assert headers[0].stream_id == sid
+        # ``content-type`` must NOT be in the trailer section.
+        assert not any(name == "content-type" for name, _ in trailers[0].headers)
+        assert ("digest", "sha-256=...") in trailers[0].headers
+        assert ("server-timing", "cache;dur=12") in trailers[0].headers
+
+        # StreamState captures the trailer separately from the
+        # original headers.
+        state = c.streams[sid]
+        assert ("content-type", "text/plain") in state.response_headers
+        assert state.trailer_headers is not None
+        assert ("digest", "sha-256=...") in state.trailer_headers
+        # ``:status`` must not appear in either.
+        assert not any(name == ":status" for name, _ in trailers[0].headers)
 
 
 class TestStreamStateMachine:

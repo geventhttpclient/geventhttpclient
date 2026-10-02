@@ -16,53 +16,22 @@ We exercise this against a local nginx that listens on
 
 from __future__ import annotations
 
-import os
-import socket
-import subprocess
-import time
-
-import gevent
 import pytest
 
 from geventhttpclient.client import HTTPClient
 
-NGINX_HOST = "127.0.0.1"
-NGINX_H2_PORT = 8443
+# Reuse the shared nginx lifecycle from the live-suite module: same
+# daemon, same skip semantics, and the session finalizer stops nginx
+# again when this run was the one that started it.
+from tests.test_http2_session_live import (
+    NGINX_HOST,
+    _start_nginx,
+)
+from tests.test_http2_session_live import (
+    NGINX_PORT as NGINX_H2_PORT,
+)
+
 NGINX_H1_PORT = 8444
-NGINX_PID_FILE = "/tmp/pi/nginx/nginx.pid"
-NGINX_CONFIG = "/tmp/pi/nginx/nginx.conf"
-NGINX_PREFIX = "/tmp/pi/nginx"
-STARTUP_TIMEOUT = 5.0
-
-
-def _port_open(host: str, port: int) -> bool:
-    try:
-        with socket.create_connection((host, port), timeout=0.5):
-            return True
-    except OSError:
-        return False
-
-
-def _start_nginx() -> None:
-    if _port_open(NGINX_HOST, NGINX_H2_PORT) and _port_open(NGINX_HOST, NGINX_H1_PORT):
-        return
-    if not os.path.exists(NGINX_CONFIG):
-        pytest.skip(f"{NGINX_CONFIG} missing")
-    try:
-        subprocess.Popen(
-            ["nginx", "-c", NGINX_CONFIG, "-p", NGINX_PREFIX],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-    except FileNotFoundError:
-        pytest.skip("nginx binary not available")
-    deadline = time.time() + STARTUP_TIMEOUT
-    while time.time() < deadline:
-        if _port_open(NGINX_HOST, NGINX_H2_PORT) and _port_open(NGINX_HOST, NGINX_H1_PORT):
-            return
-        gevent.sleep(0.05)
-    pytest.skip("nginx did not bind both ports in time")
 
 
 @pytest.fixture(autouse=True)
