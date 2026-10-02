@@ -8,6 +8,7 @@ protocol library (llhttp-Muster: sources directly, no CMake):
 """
 
 import os
+import sys
 
 from setuptools import setup
 from setuptools.extension import Extension
@@ -79,13 +80,34 @@ http_parser = Extension(
 
 # Feature macros for nghttp2's lib/ sources on POSIX. HAVE_CONFIG_H is
 # deliberately NOT defined: the source guards include config.h only when
-# it is set, and we provide the needed flags directly instead.
-NGHTTP2_DEFINES = [
-    ("HAVE_ARPA_INET_H", "1"),
-    ("HAVE_NETINET_IN_H", "1"),
-    ("HAVE_CLOCK_GETTIME", "1"),
-    ("HAVE_DECL_CLOCK_MONOTONIC", "1"),
-]
+# it is set, and we provide the needed flags directly instead. The
+# HAVE_* headers exist only on POSIX -- defining them on Windows would
+# pull in missing headers (arpa/inet.h et al).
+NGHTTP2_DEFINES = []
+
+if sys.platform == "win32":
+    # MSVC has no ``ssize_t``. Upstream handles this in the CMake build
+    # via cmakeconfig.h (``#cmakedefine ssize_t @ssize_t@`` -> int,
+    # mirroring autoconf's AC_TYPE_SSIZE_T fallback); our direct-C build
+    # replicates the same macro here. MSVC's headers never typedef
+    # ssize_t, so the macro cannot collide. NGHTTP2_STATICLIB keeps the
+    # headers from emitting dllimport attributes (the lib is compiled
+    # into this extension, not a DLL).
+    NGHTTP2_DEFINES.extend(
+        [
+            ("ssize_t", "int"),
+            ("NGHTTP2_STATICLIB", "1"),
+        ],
+    )
+else:
+    NGHTTP2_DEFINES.extend(
+        [
+            ("HAVE_ARPA_INET_H", "1"),
+            ("HAVE_NETINET_IN_H", "1"),
+            ("HAVE_CLOCK_GETTIME", "1"),
+            ("HAVE_DECL_CLOCK_MONOTONIC", "1"),
+        ],
+    )
 
 http2_parser = Extension(
     "geventhttpclient._http2_parser",
