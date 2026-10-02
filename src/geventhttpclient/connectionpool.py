@@ -285,6 +285,12 @@ def init_ssl_context(
     ssl_context.check_hostname = check_hostname
     if check_hostname:
         ssl_context.verify_mode = gevent.ssl.CERT_REQUIRED
+    else:
+        # ``insecure`` mode: turn certificate verification off
+        # entirely. ``create_default_context`` defaults to
+        # ``CERT_REQUIRED`` regardless of ``check_hostname``, so we
+        # must override explicitly.
+        ssl_context.verify_mode = gevent.ssl.CERT_NONE
 
     if "certfile" in ssl_options and "keyfile" in ssl_options:
         ssl_context.load_cert_chain(
@@ -306,11 +312,14 @@ class SSLConnectionPool(ConnectionPool):
     """SSLConnectionPool creates connections wrapped with SSL/TLS.
 
     :param host: hostname
-    :param port: port
-    :param ssl_options: additional SSL options such as certfile, keyfile,
+    :param port: ssl_options: additional SSL options such as certfile, keyfile,
         ciphers, options and verify_flags
     :param ssl_context_factory: use `ssl.create_default_context` by default
         if provided. It must be a callable that returns a SSLContext.
+    :param alpn_protocols: ALPN protocol list passed to the SSL
+        context via ``set_alpn_protocols``. The default
+        ``["h2", "http/1.1"]`` advertises HTTP/2 first; passing an
+        empty list disables ALPN negotiation.
     """
 
     default_options: ClassVar[dict[str, Any]] = {
@@ -328,6 +337,8 @@ class SSLConnectionPool(ConnectionPool):
         insecure: bool = False,
         ssl_context_factory: Callable[..., gevent.ssl.SSLContext] | None = None,
         ssl_options: dict[str, Any] | None = None,
+        *,
+        alpn_protocols: list[str] | None = None,
         **kw: Any,
     ) -> None:
         self.insecure = insecure
@@ -341,6 +352,25 @@ class SSLConnectionPool(ConnectionPool):
             check_hostname=not self.insecure,
             ssl_options=ssl_options,
         )
+        # Default ALPN: ``["h2", "http/1.1"]`` -- advertise h2 first so
+        # HTTP/2-capable servers prefer it. Pass ``alpn_protocols=[]``
+        # to disable ALPN entirely (older OpenSSL builds, or when the
+        # peer does not speak ALPN).
+        if alpn_protocols is None:
+            alpn_protocols = ["h2", "http/1.1"]
+        # ALPN must be set on the SSLContext *before* the handshake.
+        # ``set_alpn_protocols`` raises ``NotImplementedError`` on
+        # platforms without OpenSSL 1.0.2+; we surface that as a
+        # clear RuntimeError so callers know to disable ALPN by
+        # passing ``alpn_protocols=[]``.
+        if alpn_protocols:
+            try:
+                self.ssl_context.set_alpn_protocols(list(alpn_protocols))
+            except (AttributeError, NotImplementedError) as exc:
+                raise RuntimeError(
+                    "ALPN not available on this OpenSSL build; "
+                    "create the SSLContext with alpn_protocols=[] to opt out"
+                ) from exc
 
         super().__init__(connection_host, connection_port, request_host, request_port, **kw)
 
