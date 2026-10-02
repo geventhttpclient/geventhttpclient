@@ -318,8 +318,13 @@ class SSLConnectionPool(ConnectionPool):
         if provided. It must be a callable that returns a SSLContext.
     :param alpn_protocols: ALPN protocol list passed to the SSL
         context via ``set_alpn_protocols``. The default
-        ``["h2", "http/1.1"]`` advertises HTTP/2 first; passing an
-        empty list disables ALPN negotiation.
+        ``["http/1.1"]`` keeps the pool HTTP/1.1-only: HTTP/2 is
+        opt-in (``HTTPClient(http2=True)``) and negotiated by its
+        own transport, so offering ``h2`` here would let the server
+        select h2 via ALPN (RFC 7301) and break every subsequent
+        HTTP/1.1 request on that connection. Pass
+        ``["h2", "http/1.1"]`` explicitly to allow an h2 upgrade on
+        this pool, or ``[]`` to disable ALPN negotiation.
     """
 
     default_options: ClassVar[dict[str, Any]] = {
@@ -352,12 +357,13 @@ class SSLConnectionPool(ConnectionPool):
             check_hostname=not self.insecure,
             ssl_options=ssl_options,
         )
-        # Default ALPN: ``["h2", "http/1.1"]`` -- advertise h2 first so
-        # HTTP/2-capable servers prefer it. Pass ``alpn_protocols=[]``
-        # to disable ALPN entirely (older OpenSSL builds, or when the
-        # peer does not speak ALPN).
+        # Default ALPN: ``["http/1.1"]``. HTTP/2 is opt-in and its
+        # transport lives in ``HTTP2ConnectionPool``, which advertises
+        # ``["h2", "http/1.1"]`` on its own sockets. See the
+        # ``alpn_protocols`` docs above for the protocol-violation
+        # rationale.
         if alpn_protocols is None:
-            alpn_protocols = ["h2", "http/1.1"]
+            alpn_protocols = ["http/1.1"]
         # ALPN must be set on the SSLContext *before* the handshake.
         # ``set_alpn_protocols`` raises ``NotImplementedError`` on
         # platforms without OpenSSL 1.0.2+; we surface that as a

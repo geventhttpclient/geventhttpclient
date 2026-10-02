@@ -9,7 +9,7 @@ ephemeral port.
 
 The tests verify:
 
-* ``UserAgent.urlopen(..., enable_http2=True)`` round-trips through
+* ``UserAgent.urlopen(..., http2=True)`` round-trips through
   the HTTP/2 stack and returns a ``CompatResponse`` (``HTTP2Response``
   wrapped in the bridge).
 * The bridge's ``headers`` object is a real ``Headers`` instance
@@ -47,7 +47,7 @@ def _ua_server():
     """Spin up an ephemeral h2 server and yield ``(UserAgent,
     server_port)`` -- cleanup is automatic."""
     with H2TestServer(config=H2ServerConfig(handler=_json_echo)) as server:
-        ua = UserAgent(enable_http2=True, insecure=True)
+        ua = UserAgent(http2=True, insecure=True)
         try:
             yield ua, server.port
         finally:
@@ -125,7 +125,7 @@ class TestUserAgentH2:
         with H2TestServer(
             config=H2ServerConfig(handler=handler),
         ) as server:
-            ua = UserAgent(enable_http2=True, insecure=True)
+            ua = UserAgent(http2=True, insecure=True)
             try:
                 r = ua.urlopen(
                     f"https://127.0.0.1:{server.port}/upload",
@@ -143,7 +143,7 @@ class TestUserAgentH2FailureModes:
     needed nginx to run."""
 
     def test_connection_refused_raises(self) -> None:
-        ua = UserAgent(enable_http2=True, insecure=True)
+        ua = UserAgent(http2=True, insecure=True)
         try:
             with pytest.raises(Exception):
                 # Closed port -> connection refused.

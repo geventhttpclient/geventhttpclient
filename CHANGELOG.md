@@ -7,6 +7,7 @@ left out unless it affects users of the package.
 
 ### Added
 
+<<<<<<< HEAD
 - Type annotations across the package, with a `py.typed` marker
 - Basic auth added: `BasicAuth("user", "pass")`, or the `requests`-style
   `("user", "pass")` tuple, on a `Session` or a single request
@@ -17,6 +18,57 @@ left out unless it affects users of the package.
 - `insecure` on `UserAgent`, for TLS targets without a verified chain
 - `CompatRequest` derives from `urllib.request.Request`, so cookie jars
   work without workarounds
+=======
+- Type annotations across the whole package, with a `py.typed` marker
+- `CompatRequest` derives from `urllib.request.Request` now: cookie jars
+  work without workarounds, `full_url` is assignable
+- `UserAgent` accepts `headers=None` when building a request
+- `geventhttpclient.BasicAuth` is a first-class authentication object:
+  instantiate `BasicAuth("user", "pass")` and pass it to a Session
+  or a single request to set the `Authorization` header. The
+  requests-style 2-tuple `auth=("user", "pass")` and a pre-built
+  header value are also accepted; the requests interface adds
+  session-level `Session(auth=...)` (overridable per request)
+
+- `geventhttpclient.httpx` is an httpx-compatible drop-in surface
+  on the same engine: `Client(base_url, auth, params,
+follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
+  `num_bytes_downloaded`/`iter_bytes`/`iter_text` Response helpers, an
+  httpx-named exception hierarchy (`HTTPError`/`RequestError`/
+  `HTTPStatusError`/`TooManyRedirects`/`ConnectError`/...) and
+  `raise_for_status` carrying the failing request and response
+- `UserAgent(..., follow_redirects=True)` and
+  `raise_for_status` are also available on the requests surface:
+  `response.history` collects the redirect chain (oldest first),
+  `response.elapsed` is a `datetime.timedelta`, `response.cookies`
+  parses the response's `Set-Cookie` headers into an
+  `http.cookiejar.CookieJar`, and `raise_for_status` raises with
+  the failing response and request attached; per-request `auth`
+  accepts the requests-style `(username, password)` tuple and
+  sets the `Authorization` header for that request
+- `iter_content()`, `iter_lines()` and `json(**kw)` on `RequestsResponse`,
+  mirroring the `requests` API: chunked streaming with an incremental
+  unicode decoder, line splitting on `\r\n`/`\r`/`\n` across chunk
+  boundaries, and `json.loads` kwargs forwarded
+- `bool()`, `close()`, `is_permanent_redirect`, `encoding` and `links` on
+  `RequestsResponse`
+- `parse_content_type_charset()` in `geventhttpclient.header`, shared by
+  `RequestsResponse.encoding` and `CompatResponse.text`
+- `CompatRequest.is_unverifiable()` follows the redirect chain (RFC 2965
+  section 3.3): redirected requests report unverifiable, like urllib's
+  redirect handler, so strict cookie policies can refuse cookies set
+  along the chain - the permissive defaults are unaffected
+- Experimental HTTP/2 support (RFC 9113) backed by a vendored
+  nghttp2 v1.70.0 C extension with a sans-IO core. Opt-in per client
+  with `HTTPClient(..., http2=True)` or
+  `UserAgent(..., http2=True)`; the default stays HTTP/1.1.
+  The h2 transport negotiates ALPN and falls back to HTTP/1.1
+  transparently when the peer picks `http/1.1`. 1xx informational
+  responses are collected on `response.informational`, trailers on
+  `response.trailers` (RFC 9113 §8.1.1 / §8.1); h2 transport errors
+  raise `HTTP2Error` (a `ConnectionError` subclass) so callers can
+  catch both protocol versions uniformly
+>>>>>>> b81cbd5 (Rename enable_http2 to http2 and keep the h1 pool ALPN-safe)
 
 ### Changed
 

@@ -113,19 +113,37 @@ with httpx.Client() as client:
         ...
 ```
 
+<<<<<<< HEAD
 Limitations: per-request options are not plumbed through (the engine is configured at session level); HTTP/2 and mounts
 are out of scope.
+=======
+Per-request options are not plumbed through (the engine is
+session-level configured); mounts are out of scope. HTTP/2 is
+available session-level: pass `http2=True` to `httpx.Client()` for
+the same opt-in upgrade semantics as `UserAgent(http2=True)` below.
+>>>>>>> b81cbd5 (Rename enable_http2 to http2 and keep the h1 pool ALPN-safe)
 
 ### http.client / httplib
 
 `geventhttpclient.httplib` contains drop-in replacements for the `http.client` connection and response classes:
 
 ```python
+<<<<<<< HEAD
 # from http.client import HTTPConnection
 from geventhttpclient.httplib import HTTPConnection
 ```
 
 ### httplib2 and urllib monkey patching
+=======
+from geventhttpclient.useragent import UserAgent
+
+ua = UserAgent(http2=True, insecure=True)
+response = ua.urlopen("https://nghttp2.org/")
+print(response.status_code, response.content)
+```
+
+Behaviour when `http2=True`:
+>>>>>>> b81cbd5 (Rename enable_http2 to http2 and keep the h1 pool ALPN-safe)
 
 Libraries built on `http.client` (`httplib2`, `urllib.request`) can be patched to use the `geventhttpclient` wrappers.
 For `httplib2`, patch **before** importing it, otherwise its `super()` calls will fail.

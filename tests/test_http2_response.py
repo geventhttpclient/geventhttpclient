@@ -343,7 +343,7 @@ def _make_http_client(
     client.port = port
     client.ssl = True
     client._h2_pool = pool
-    client.enable_http2 = True
+    client.http2 = True
     client.headers_type = Headers
     client.default_headers = Headers()
     client.DEFAULT_HEADERS = Headers()
