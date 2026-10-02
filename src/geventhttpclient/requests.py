@@ -1,5 +1,7 @@
+import base64
 import json as jsonlib
 import re
+import time
 from codecs import getincrementaldecoder as _getincrementaldecoder
 from collections.abc import Iterator
 from http.cookiejar import CookieJar
@@ -25,6 +27,32 @@ _ITER_LINES_CHUNK_SIZE = 8192
 # bytes.splitlines we do not split on exotic control characters.
 _LINE_TERMINATORS_BYTES = re.compile(rb"\r\n|\r|\n")
 _LINE_TERMINATORS_STR = re.compile(r"\r\n|\r|\n")
+
+
+class _CookieHeadersInfo:
+    """The ``get_all()`` view http.cookiejar expects from a response's
+    ``info()``."""
+
+    def __init__(self, headers: Any) -> None:
+        self._headers = headers
+
+    def get_all(self, name: str, default: list[str] | None = None) -> list[str] | None:
+        values = self._headers.get(name)
+        if values is None:
+            return default
+        if isinstance(values, str):
+            return [values]
+        return list(values)
+
+
+class _CookieJarResponse:
+    """http.client-like response view for ``CookieJar.extract_cookies``."""
+
+    def __init__(self, headers: Any) -> None:
+        self._headers = headers
+
+    def info(self) -> _CookieHeadersInfo:
+        return _CookieHeadersInfo(self._headers)
 
 
 def _parse_link_header(value: str) -> list[dict[str, str]]:
@@ -137,7 +165,24 @@ class RequestsResponse(useragent.CompatResponse):
 
     def raise_for_status(self) -> None:
         if 400 <= self.status_code < 600:
-            raise useragent.BadStatusCode(self.url, code=self.status_code)
+            # requests' HTTPError carries the response and request that caused
+            # it - mirror that so callers can inspect them after catching
+            error = useragent.BadStatusCode(self.url)
+            error.code = self.status_code
+            error.text = f"{self.status_code} {self.reason} Error for url: {self.url}"
+            error.response = self
+            error.request = self._request
+            raise error
+
+    @property
+    def cookies(self) -> CookieJar:
+        """The cookies set by this response (its Set-Cookie headers) as a
+        fresh ``http.cookiejar.CookieJar``."""
+        jar = CookieJar()
+        request = self._request
+        if request is not None:
+            jar.extract_cookies(cast(Any, _CookieJarResponse(self.headers)), request)
+        return jar
 
     def iter_content(
         self,
@@ -437,6 +482,7 @@ class Session(useragent.UserAgent):
             headers = dict(headers) if headers else {}
             headers["Content-Type"] = "application/json"
 
+        started = time.monotonic()
         response = self.urlopen(
             url,
             method=method.upper(),
@@ -446,6 +492,7 @@ class Session(useragent.UserAgent):
             params=params,
             max_redirects=None if allow_redirects else 0,
         )
+        response._elapsed = time.monotonic() - started
         if stream is False:
             # preload the data
             _ = response.content
