@@ -750,10 +750,6 @@ class HTTPClient:
         # retry of an idempotent request.
         body_bytes = bytes(body) if body is not None else None
 
-        # ALPN-based version dispatch (Phase 6). When ``version="1.1"``
-        # we short-circuit to the HTTP/1.1 path; for ``"auto"`` we
-        # connect via the h2 pool and re-route to HTTP/1.1 if the peer
-        # did not negotiate ``h2``; for ``"2"`` the h2 pool raises
         # httpx-style auto-fallback (review_http2_3.md H1 + Phase 6):
         # we always try h2 first because the user opted into the h2
         # pool, but if the peer's ALPN chose http/1.1 we close that
@@ -767,18 +763,12 @@ class HTTPClient:
                 session = self._h2_pool.get_session(self.host, port, scheme=scheme)
                 negotiated = self._alpn_negotiated(session)
                 if negotiated and negotiated != "h2":
-                    # Peer chose HTTP/1.1: drop the h2 session
+                    # Peer chose HTTP/1.1: drop exactly this session
                     # (its preface has already been written to the
                     # socket -- the connection is unusable for h1 so
-                    # we close the socket and start fresh).
-                    try:
-                        sock = session._sock  # type: ignore[attr-defined]
-                        sock.close()
-                    except Exception:  # noqa: BLE001,S110
-                        pass
-                    self._h2_pool._sessions.pop(  # type: ignore[attr-defined]
-                        next(iter(self._h2_pool._sessions)), None  # type: ignore[attr-defined]
-                    )
+                    # we close the socket and start fresh). Review N1:
+                    # drop by identity, not "any pooled session".
+                    self._h2_pool.drop_session(session)  # type: ignore[attr-defined]
                     return self._http1_fallback(method, request_uri, body_bytes, headers)
                 handle = session.submit_request(
                     method, path, str(authority), h2_headers,
@@ -793,17 +783,30 @@ class HTTPClient:
                 raise HTTP2Error(f"HTTP/2 connection failed: {e}") from e
 
             try:
+                # N3 (review): yield with escalating backoff when the
+                # peer sends nothing -- a bare ``gevent.sleep(0)``
+                # busy-spins the hub against trickle servers.
+                stall = 0.0
                 while not handle.is_closed:
                     if deadline is not None and time.monotonic() > deadline:
-                        raise TimeoutError(
-                            f"HTTP/2 response did not arrive in {timeout}s"
+                        # K2 (review): timeouts surface as HTTP2Error
+                        # (a ConnectionError) -- a bare TimeoutError
+                        # escaped the ``except ConnectionError``
+                        # contract locust-style callers rely on. Never
+                        # retried: the peer may have processed the
+                        # request (RFC 9110 §9.2.2).
+                        raise HTTP2Error(
+                            f"HTTP/2 response did not arrive in {timeout}s",
                         )
                     progressed = session.drive_once()
-                    if not progressed:
-                        gevent.sleep(0)
-            except TimeoutError:
-                # Always surface immediately -- we never retry on
-                # timeout, regardless of method.
+                    if progressed:
+                        stall = 0.0
+                    else:
+                        stall = min(stall + 0.001, 0.05) if stall else 0.001
+                        gevent.sleep(stall)
+            except HTTP2Error:
+                # Timeouts and mapped transport failures surface as-is;
+                # retrying a timeout risks double execution.
                 raise
             except Exception as e:
                 last_exc = e
@@ -833,8 +836,8 @@ class HTTPClient:
                         headers: HeadersDataType | None) -> "HTTPSocketPoolResponse":
         """Route an HTTP/2 attempt over the HTTP/1.1 pool instead.
 
-        Used by ``request_h2(version="auto")`` when the peer chose
-        ``http/1.1`` in the ALPN handshake. The HTTP/1.1 path returns
+        Used by :meth:`request_h2` when the peer chose ``http/1.1``
+        in the ALPN handshake. The HTTP/1.1 path returns
         a synchronous ``HTTPSocketPoolResponse``; the caller is
         expected to handle either return type via duck-typing.
         """

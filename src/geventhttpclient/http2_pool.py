@@ -29,8 +29,14 @@ from geventhttpclient.http2 import HTTP2Connection
 from geventhttpclient.http2_session import HTTP2Session
 
 
-class HTTP2ConnectionPoolError(RuntimeError):
-    """Raised when a session lookup or handshake fails."""
+class HTTP2ConnectionPoolError(ConnectionError):
+    """Raised when a session lookup or handshake fails.
+
+    ``ConnectionError`` base so ``except ConnectionError`` catches it
+    uniformly with the h1 transport (review K2). The ALPN-mismatch
+    message is matched by ``HTTPClient.request_h2`` for the
+    transparent HTTP/1.1 fallback.
+    """
 
 
 @dataclass(frozen=True)
@@ -106,6 +112,30 @@ class HTTP2ConnectionPool:
         Kept on the API for parity with :class:`ConnectionPool`. Sprint
         3c may revisit this to drain half-closed streams on shutdown.
         """
+
+    def drop_session(self, session: HTTP2Session) -> None:
+        """Remove exactly ``session`` from the pool and close its socket.
+
+        Used by ``HTTPClient.request_h2`` when a session turns out to
+        be unusable (ALPN resolved to ``http/1.1`` after the preface
+        was already written). Review N1: the previous code popped
+        ``next(iter(self._sessions))`` -- an arbitrary session when
+        more than one host is pooled. This method removes by identity
+        via a reverse lookup under the pool lock.
+        """
+        with self._lock:
+            key = next(
+                (k for k, s in self._sessions.items() if s is session),
+                None,
+            )
+            if key is None:
+                return
+            del self._sessions[key]
+        try:
+            sock = session._sock  # type: ignore[attr-defined]
+            sock.close()
+        except Exception:  # noqa: BLE001,S110
+            pass
 
     def close(self) -> None:
         """Close every session. The pool refuses further requests after."""

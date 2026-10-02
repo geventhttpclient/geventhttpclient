@@ -37,8 +37,14 @@ from geventhttpclient.http2 import (
 )
 
 
-class HTTP2WireError(RuntimeError):
-    """Raised when the wire pump encounters a fatal socket error."""
+class HTTP2WireError(ConnectionError):
+    """Raised when the wire pump encounters a fatal socket error.
+
+    Subclasses :class:`ConnectionError` so the ``except
+    ConnectionError`` contract holds across the h1 and h2 transports
+    (review K2: a peer aborting mid-stream is the most common live
+    failure and used to surface as a bare ``RuntimeError``).
+    """
 
 
 # ---------------------------------------------------------------------------
