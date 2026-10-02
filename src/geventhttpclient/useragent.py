@@ -4,9 +4,11 @@ import json as jsonlib
 import os
 import socket
 import ssl
+import time
 import urllib.request
 import zlib
 from collections.abc import Iterable, Iterator, Mapping, MutableMapping
+from datetime import timedelta
 from http.cookiejar import CookieJar
 from types import TracebackType
 from typing import IO, Any, ClassVar, Final, Literal, Never, Self, cast, overload
@@ -51,7 +53,7 @@ class ConnectionError(Exception):
         self.url = url
         self.__dict__.update(kw)
         if args and isinstance(args[0], str):
-            self.text = args[0] + ": " + str(args[1:])
+            self.text = args[0] if len(args) == 1 else args[0] + ": " + str(args[1:])
         else:
             self.text = str(args[0]) if len(args) == 1 else ""
         if kw:
@@ -59,7 +61,8 @@ class ConnectionError(Exception):
             self.kw_text = ", ".join(f"{key}={val}" for key, val in kw.items())
             self.text += self.kw_text
         else:
-            self.text = ""
+            # keep a message carried in args intact; only the kw appendix is empty
+            self.kw_text = ""
 
     def __str__(self) -> str:
         if self.text:
@@ -79,7 +82,11 @@ class RetriesExceeded(ConnectionError):
 
 
 class BadStatusCode(ConnectionError):
-    pass
+    # populated by raise_for_status() and the urlopen status check: the
+    # failing status code plus the response/request that caused it
+    code: int
+    response: Any
+    request: Any
 
 
 class EmptyResponse(ConnectionError):
@@ -274,13 +281,23 @@ class CompatRequest(urllib.request.Request):
 class CompatResponse:
     """Adapter for urllib3-style responses."""
 
-    __slots__ = "_cached_content", "_request", "_response", "_sent_request", "headers"
+    __slots__ = (
+        "_cached_content",
+        "_elapsed",
+        "_history",
+        "_request",
+        "_response",
+        "_sent_request",
+        "headers",
+    )
 
     _response: HTTPSocketResponse
     _request: CompatRequest | None
     _sent_request: str | None
     headers: Headers
     _cached_content: bytes
+    _elapsed: float | None
+    _history: list["CompatResponse"]
 
     def __init__(
         self,
@@ -292,6 +309,8 @@ class CompatResponse:
         self._request = request
         self._sent_request = sent_request
         self.headers = self._response._headers_index
+        self._elapsed = None
+        self._history = []
 
     def __enter__(self) -> Self:
         return self
@@ -303,6 +322,20 @@ class CompatResponse:
     def status_code(self) -> int:
         """HTTP status code as plain integer"""
         return self._response.get_code()
+
+    @property
+    def elapsed(self) -> timedelta | None:
+        """Time between sending the request and receiving the response
+        headers, as measured by the session layer (``None`` when unset)."""
+        if self._elapsed is None:
+            return None
+        return timedelta(seconds=self._elapsed)
+
+    @property
+    def history(self) -> list["CompatResponse"]:
+        """The responses of the redirect chain that led to this response,
+        oldest first (empty when the request was served directly)."""
+        return self._history
 
     def __len__(self) -> int:
         """The content lengths as declared from the headers"""
@@ -590,6 +623,7 @@ class UserAgent:
         )
         max_retries = int(max_retries) if max_retries is not None else self.max_retries
         max_redirects = int(max_redirects) if max_redirects is not None else self.max_redirects
+        history: list[CompatResponse] = []
 
         for retry in range(max_retries + 1):
             if retry > 0 and self.retry_delay:
@@ -600,7 +634,9 @@ class UserAgent:
                     self.cookiejar.add_cookie_header(req)
 
                 try:
+                    started = time.monotonic()
                     resp = self._urlopen(req)
+                    resp._elapsed = time.monotonic() - started
                 except gevent.GreenletExit:
                     raise
                 except BaseException as e:  # noqa: BLE001
@@ -636,6 +672,7 @@ class UserAgent:
                 if not isinstance(redirection, str):
                     redirection = None
                 if resp.status_code in self.redirect_response_codes and redirection:
+                    history.append(resp)
                     resp.release()
                     try:
                         req.redirect(resp.status_code, redirection)
@@ -645,6 +682,7 @@ class UserAgent:
                         break
 
                 if not to_string:
+                    resp._history = history
                     return resp
                 else:
                     # to_string added as parameter, to handle empty response

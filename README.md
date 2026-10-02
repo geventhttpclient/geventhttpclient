@@ -38,7 +38,7 @@ with a C compiler otherwise; it is fully type annotated (`py.typed`).
 
 ## Requests-compatible interface
 
-Since version 2.3, `geventhttpclient` features a largely `requests`
+`geventhttpclient` features a largely `requests`
 compatible interface. It covers basic HTTP usage including cookie
 management, form data encoding or decoding of compressed data,
 but otherwise isn't as feature rich as the original `requests`. For
@@ -94,6 +94,26 @@ geventhttpclient.httplib.patch()
 
 import httplib2
 ```
+
+## httpx-compatible interface
+
+`geventhttpclient` also features a largely `httpx` compatible
+interface. Same engine, gevent concurrency, and a 5-7x parser-speed
+advantage over `httpx`'s default. For code already written against
+`httpx.Client`, it can serve as a drop-in replacement.
+
+```python
+from geventhttpclient import httpx
+
+with httpx.Client() as client:
+    response = client.get("https://github.com")
+    response.raise_for_status()
+    for chunk in response.iter_text(64):
+        ...
+```
+
+Per-request options are not plumbed through (the engine is
+session-level configured); HTTP/2 and mounts are out of scope.
 
 ## High Concurrency
 

@@ -460,3 +460,77 @@ def test_session_auth_end_to_end():
         response = session.get(f"https://{HTTPBIN_HOST}/basic-auth/user/pass")
     assert response.status_code == 200
     assert response.json()["authenticated"] is True
+
+
+# ---------------------------------------------------------------------------
+# Surface shared with the new httpx drop-in (see geventhttpclient.httpx)
+# ---------------------------------------------------------------------------
+
+from datetime import timedelta as _timedelta
+from http.cookiejar import CookieJar as _CookieJar
+
+from geventhttpclient.useragent import BadStatusCode as _BadStatusCode
+from tests.common import wsgiserver as _wsgiserver_httpx
+
+_BASE_HTTPX = f"http://127.0.0.1:{_LISTENER[1]}"
+
+
+def _shared_app(environ, start_response):
+    path = environ["PATH_INFO"]
+    if path == "/redirect":
+        start_response("301 Moved Permanently", [("Location", "/target")])
+        return [b"moved"]
+    if path == "/target":
+        start_response(
+            "200 OK",
+            [
+                ("Content-Type", "text/plain"),
+                ("Set-Cookie", "a=1; Path=/"),
+                ("Set-Cookie", "b=2; Path=/"),
+            ],
+        )
+        return [b"done"]
+    if path == "/notfound":
+        start_response("404 Not Found", [("Content-Type", "text/plain")])
+        return [b"nope"]
+    if path == "/auth":
+        if environ.get("HTTP_AUTHORIZATION") == _EXPECTED_AUTH:
+            start_response("200 OK", [("Content-Type", "text/plain")])
+            return [b"ok"]
+        start_response("401 Unauthorized", [])
+        return [b"no auth"]
+    start_response("200 OK", [("Content-Type", "text/plain")])
+    return [b"ok"]
+
+
+def test_history_captures_the_redirect_chain():
+    with _wsgiserver_httpx(_shared_app), _Session() as session:
+        response = session.get(f"{_BASE_HTTPX}/redirect", allow_redirects=True)
+    assert response.status_code == 200
+    assert len(response.history) == 1
+    assert response.history[0].status_code == 301
+
+
+def test_elapsed_is_a_timedelta():
+    with _wsgiserver_httpx(_shared_app), _Session() as session:
+        response = session.get(f"{_BASE_HTTPX}/target")
+    assert isinstance(response.elapsed, _timedelta)
+    assert response.elapsed.total_seconds() >= 0
+
+
+def test_response_cookies_collects_set_cookie():
+    with _wsgiserver_httpx(_shared_app), _Session() as session:
+        response = session.get(f"{_BASE_HTTPX}/target")
+    assert isinstance(response.cookies, _CookieJar)
+    assert {cookie.name for cookie in response.cookies} == {"a", "b"}
+
+
+def test_raise_for_status_attaches_response_and_request():
+    with _wsgiserver_httpx(_shared_app), _Session() as session:
+        response = session.get(f"{_BASE_HTTPX}/notfound")
+    with pytest.raises(_BadStatusCode) as exc_info:
+        response.raise_for_status()
+    assert exc_info.value.code == 404
+    assert exc_info.value.response is response
+    assert exc_info.value.request is not None
+    assert exc_info.value.request.method == "GET"
