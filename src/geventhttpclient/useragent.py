@@ -437,7 +437,6 @@ class UserAgent:
     max_redirects: int
     max_retries: int
     retry_delay: float
-    retry_on_non_idempotent: bool
     default_headers: Headers
     cookiejar: CookieJarLike
     clientpool: HTTPClientPool
@@ -447,7 +446,6 @@ class UserAgent:
         max_redirects: int = 3,
         max_retries: int = 3,
         retry_delay: float = 0,
-        retry_on_non_idempotent: bool = False,
         cookiejar: CookieJarLike = None,
         headers: HeadersDataType | None = None,
         **kw: Any,
@@ -455,7 +453,6 @@ class UserAgent:
         self.max_redirects = int(max_redirects)
         self.max_retries = int(max_retries)
         self.retry_delay = retry_delay
-        self.retry_on_non_idempotent = retry_on_non_idempotent
         self.default_headers = HTTPClient.DEFAULT_HEADERS.copy()
         if headers:
             self.default_headers.update(headers)
@@ -481,7 +478,7 @@ class UserAgent:
         request with a non-idempotent method - the previous behavior retried
         POST and PATCH on timeout, EPIPE, ECONNRESET and empty responses,
         which can execute such a request twice."""
-        return self.retry_on_non_idempotent or request.method in IDEMPOTENT_METHODS
+        return request.method in IDEMPOTENT_METHODS
 
     def _verify_status(self, status_code: int, url: str | URL | None = None) -> None:
         """Hook for subclassing"""

@@ -11,9 +11,6 @@ left out unless it affects users of the package.
 - `CompatRequest` derives from `urllib.request.Request` now: cookie jars
   work without workarounds, `full_url` is assignable
 - `UserAgent` accepts `headers=None` when building a request
-- `UserAgent(..., retry_on_non_idempotent=True)` opts back into automatic
-  retries of POST/PATCH after transmission errors (off by default now,
-  see Fixed)
 - `iter_content()`, `iter_lines()` and `json(**kw)` on `RequestsResponse`,
   mirroring the `requests` API: chunked streaming with an incremental
   unicode decoder, line splitting on `\r\n`/`\r`/`\n` across chunk

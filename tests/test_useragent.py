@@ -714,12 +714,3 @@ def test_get_is_still_retried_on_empty_response():
     with wsgiserver(empty_body_handler(attempts)), pytest.raises(RetriesExceeded):
         UserAgent(max_retries=2).urlopen(LISTENER_URL, to_string=True)
     assert len(attempts) == 3
-
-
-def test_post_retries_when_explicitly_opted_in():
-    attempts: list = []
-    with wsgiserver(empty_body_handler(attempts)), pytest.raises(RetriesExceeded):
-        UserAgent(max_retries=2, retry_on_non_idempotent=True).urlopen(
-            LISTENER_URL, method="POST", to_string=True
-        )
-    assert len(attempts) == 3
