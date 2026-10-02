@@ -689,6 +689,7 @@ class HTTPClient:
         headers: HeadersDataType | None = None,
         *,
         timeout: float | None = None,
+        max_retries: int = 0,
     ) -> HTTP2ResponseHandle:
         """Submit a request over HTTP/2 and block until the response
         handle is closed.
@@ -696,6 +697,10 @@ class HTTPClient:
         Synchronous convenience over the pull-API of
         :class:`HTTP2ResponseHandle`: spins the pump until the stream
         becomes closed or the timeout expires.
+
+        ``max_retries`` (Sprint 3c) limits automatic retries of
+        connection errors for idempotent methods. RFC 9110 §9.2.2
+        forbids retries of POST/PATCH after a network error.
         """
         if self._h2_pool is None:
             raise RuntimeError(
@@ -712,35 +717,45 @@ class HTTPClient:
         )
         scheme = PROTO_HTTPS if self.ssl else PROTO_HTTP
         port = self.port or (443 if self.ssl else 80)
-        try:
-            session = self._h2_pool.get_session(self.host, port, scheme=scheme)
-        except HTTP2ConnectionPoolError as e:
-            raise RuntimeError(f"HTTP/2 connection failed: {e}") from e
+        # Buffer the body once (in-Memory MVP — Phase 5 may switch to
+        # tempfile for large uploads). The buffer is replayed on every
+        # retry of an idempotent request.
+        body_bytes = bytes(body) if body is not None else None
 
-        handle = session.submit_request(
-            method, path, str(authority), h2_headers, scheme=scheme, body=body,
-        )
-        # Drive the pump until the stream closes. The HTTPClient
-        # exposes the synchronous API for Sprint 3b; Sprint 3c adds
-        # an async-friendly HTTP2Response wrapper.
-        import time as _time
-        deadline = (_time.monotonic() + timeout) if timeout is not None else None
-        while not handle.is_closed:
-            if deadline is not None and _time.monotonic() > deadline:
-                raise TimeoutError(f"HTTP/2 response did not arrive in {timeout}s")
+        attempts = max_retries + 1
+        last_exc: Exception | None = None
+        for attempt in range(attempts):
             try:
-                progressed = session.drive_once()
+                session = self._h2_pool.get_session(self.host, port, scheme=scheme)
+                handle = session.submit_request(
+                    method, path, str(authority), h2_headers,
+                    scheme=scheme, body=body_bytes,
+                )
+            except HTTP2ConnectionPoolError as e:
+                last_exc = e
+                if attempt + 1 < attempts and _may_retry_after_send_error(method):
+                    continue
+                raise RuntimeError(f"HTTP/2 connection failed: {e}") from e
+
+            import time as _time
+            deadline = (_time.monotonic() + timeout) if timeout is not None else None
+            try:
+                while not handle.is_closed:
+                    if deadline is not None and _time.monotonic() > deadline:
+                        raise TimeoutError(f"HTTP/2 response did not arrive in {timeout}s")
+                    progressed = session.drive_once()
+                    if not progressed:
+                        import gevent
+                        gevent.sleep(0)
             except Exception as e:
-                raise RuntimeError(f"HTTP/2 wire error: {e}") from e
-            if not progressed:
-                # No inbound data yet — yield to the scheduler. We
-                # deliberately avoid ``gevent.sleep(0)`` because the
-                # caller may be running inside a greenlet that has
-                # not yet spawned; cooperative scheduling is provided
-                # by gevent when the importer is.
-                import gevent
-                gevent.sleep(0)
-        return handle
+                last_exc = e
+                if attempt + 1 < attempts and _may_retry_after_send_error(method):
+                    continue
+                raise
+            return handle
+        # All attempts failed.
+        assert last_exc is not None
+        raise RuntimeError(f"HTTP/2 request failed after {attempts} attempts: {last_exc}")
 
     def _merge_headers(self, headers: HeadersDataType | None) -> Headers:
         merged = self.headers_type()
