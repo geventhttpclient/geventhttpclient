@@ -66,6 +66,15 @@ left out unless it affects users of the package.
 
 ### Fixed
 
+- `requests` and `urllib3` read empty bodies and empty header dicts through
+  the `httplib` shim: a response that completes within one read hands its
+  socket back while the body is still buffered, which urllib3's
+  `is_fp_closed()` mistook for a finished stream; `msg.items()` was a
+  one-shot iterator that urllib3 exhausted while rebuilding its header
+  dict, dropping e.g. `Content-Encoding` (compressed bodies arrived
+  undecoded); the shim exposed an `fp` attribute that made urllib3 treat
+  the already-dechunked payload as raw chunked wire format, and lacked the
+  `_method` attribute its chunked reader inspects
 - The httplib2 wrapper lost the response status: error statuses came
   back as 200 through it and redirects were never followed
 - The request head is validated: methods, header field names, header

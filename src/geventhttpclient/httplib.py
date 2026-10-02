@@ -27,6 +27,16 @@ class HTTPLibHeaders(header.Headers):
             return ", ".join(value)
         return value
 
+    def items(self) -> list[tuple[str, str]]:  # type: ignore[override]
+        """http.client.HTTPMessage.items() returns a re-iterable list.
+
+        urllib3 walks msg.items() twice when rebuilding its header dict
+        (normalize, then consume): a one-shot iterator would exhaust on the
+        first walk and silently drop every header, including
+        Content-Encoding.
+        """
+        return list(super().items())
+
 
 class HTTPResponse(response.HTTPSocketResponse):
     # declared (annotation only) to break the getter/setter inference cycle
@@ -42,6 +52,9 @@ class HTTPResponse(response.HTTPSocketResponse):
     ) -> None:
         method = "GET" if method is None else method.upper()
         super().__init__(sock, method=method, **kw)
+        # urllib3's read_chunked() inspects the request method through
+        # is_response_to_head(self._original_response)
+        self._method = method
         self.url = url
         self.chunked = _UNKNOWN
         self.chunk_left = _UNKNOWN
@@ -58,9 +71,14 @@ class HTTPResponse(response.HTTPSocketResponse):
         # required by do_open()
         self._msg = headers
 
-    @property
-    def fp(self) -> "HTTPResponse":
-        return self
+    # NOTE: deliberately no `fp` attribute. urllib3's supports_chunked_reads()
+    # only checks hasattr(fp, "fp") and would then read our already-dechunked
+    # payload as raw chunked wire format through read_chunked(). Without it,
+    # urllib3 falls back to plain read() calls, which is the contract our
+    # parser fulfills. Nothing else reads it: httplib2 never touches it, the
+    # modern urllib.request paths do not, and the only remaining consumer is
+    # the deprecated URLopener's non-2xx error body on Python 3.11-3.13,
+    # which loses that error body (it used to receive the response itself).
 
     @property
     def version(self) -> int:  # type: ignore[override]
@@ -98,7 +116,17 @@ class HTTPResponse(response.HTTPSocketResponse):
         self.release()
 
     def isclosed(self) -> bool:
-        return self._sock is None
+        # urllib3's is_fp_closed() calls isclosed() first. The underlying
+        # socket is handed back to the pool as soon as the message completes,
+        # while the body stays readable from the buffer - report the response
+        # as closed only once nothing is left to read, so consumers draining
+        # the stream (urllib3/requests) do not stop at an empty body.
+        return self._sock is None and not self._body_buffer
+
+    @property
+    def closed(self) -> bool:
+        # io.IOBase-style convenience attribute, kept consistent with isclosed()
+        return self.isclosed()
 
     def read(self, amt: int | None = None) -> bytes:
         # the parameter is named amt to match http.client.HTTPResponse, our

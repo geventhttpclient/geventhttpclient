@@ -262,19 +262,23 @@ NON_GEVENT=1 uv run pytest   # without patching (see issue #241)
 
 ## Benchmarks
 
-The benchmark runs 10000 `GET` requests against a local nginx server in the default
-configuration with a concurrency of 10. The requests per
-second for a couple of popular clients is given in the table below. Please read
+The benchmark runs 10000 `GET` requests against a local nginx server in the
+default configuration with a concurrency of 10. The requests per second for
+a couple of popular clients is given in the table below. Please read
 [benchmarks/README.md](https://github.com/geventhttpclient/geventhttpclient/blob/master/benchmarks/README.md)
-for more details. Also note, [HTTPX](https://www.python-httpx.org/) is better be
+for more details. Note that this setup is client-CPU-bound (the loopback
+server answers in microseconds): it compares parsing and per-request client
+efficiency. Over real network connections, latency dominates and the
+differences between clients largely disappear. Also note,
+[HTTPX](https://www.python-httpx.org/) is better be
 used with `asyncio`, not `gevent`.
 
 | HTTP Client        | RPS    |
-|--------------------|--------|
-| GeventHTTPClient   | 7268.9 |
-| Httplib2 (patched) | 2323.9 |
-| Urllib3            | 2242.5 |
-| Requests           | 1046.1 |
-| Httpx              | 770.3  |
+| ------------------ | ------ |
+| GeventHTTPClient   | 5063.4 |
+| Httplib2 (patched) | 1995.7 |
+| Urllib3            | 1665.8 |
+| Requests           | 941.2  |
+| Httpx              | 753.5  |
 
-*Linux(x86_64), Python 3.11.6 @ Intel i7-7560U*
+_Linux(x86_64), Python 3.14.7, gevent 26.9.0_
