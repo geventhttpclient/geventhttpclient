@@ -2,9 +2,11 @@ import base64
 import errno
 import os
 import re
+import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import IO, Any
 
+import gevent
 import gevent.socket
 
 from geventhttpclient import __version__
@@ -293,7 +295,7 @@ class HTTPClient:
             else None
         )
 
-    def close(self) -> None:  # type: ignore[override]
+    def close(self) -> None:
         if self._h2_pool is not None:
             self._h2_pool.close()
         self._connection_pool.close()
@@ -699,8 +701,11 @@ class HTTPClient:
         becomes closed or the timeout expires.
 
         ``max_retries`` (Sprint 3c) limits automatic retries of
-        connection errors for idempotent methods. RFC 9110 §9.2.2
-        forbids retries of POST/PATCH after a network error.
+        **connection errors only** for idempotent methods. RFC 9110
+        §9.2.2 forbids retries of POST/PATCH after a network error,
+        and **timeouts are never retried** -- they indicate that the
+        peer may have processed the request but we never saw its
+        response, so silently replaying it is unsafe.
         """
         if self._h2_pool is None:
             raise RuntimeError(
@@ -722,6 +727,7 @@ class HTTPClient:
         # retry of an idempotent request.
         body_bytes = bytes(body) if body is not None else None
 
+        deadline = (time.monotonic() + timeout) if timeout is not None else None
         attempts = max_retries + 1
         last_exc: Exception | None = None
         for attempt in range(attempts):
@@ -737,16 +743,19 @@ class HTTPClient:
                     continue
                 raise RuntimeError(f"HTTP/2 connection failed: {e}") from e
 
-            import time as _time
-            deadline = (_time.monotonic() + timeout) if timeout is not None else None
             try:
                 while not handle.is_closed:
-                    if deadline is not None and _time.monotonic() > deadline:
-                        raise TimeoutError(f"HTTP/2 response did not arrive in {timeout}s")
+                    if deadline is not None and time.monotonic() > deadline:
+                        raise TimeoutError(
+                            f"HTTP/2 response did not arrive in {timeout}s"
+                        )
                     progressed = session.drive_once()
                     if not progressed:
-                        import gevent
                         gevent.sleep(0)
+            except TimeoutError:
+                # Always surface immediately -- we never retry on
+                # timeout, regardless of method.
+                raise
             except Exception as e:
                 last_exc = e
                 if attempt + 1 < attempts and _may_retry_after_send_error(method):

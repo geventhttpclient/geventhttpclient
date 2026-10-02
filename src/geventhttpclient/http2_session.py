@@ -19,6 +19,7 @@ import errno
 from collections.abc import Iterable
 
 import gevent.event
+import gevent.lock
 import gevent.socket
 import gevent.ssl
 
@@ -46,8 +47,8 @@ class HTTP2WireError(RuntimeError):
 class HTTP2ResponseHandle:
     """Per-stream response state.
 
-    Lives until the stream becomes :attr:`StreamState.CLOSED` (clean
-    end of both sides) or :attr:`StreamState.RESET` (RST_STREAM).
+    Lives until the stream becomes :attr:`StreamLifecycle.CLOSED`
+    (clean end of both sides) or is reset via RST_STREAM.
     ``ready.wait(timeout)`` blocks until the response headers have
     arrived; ``body`` accumulates DATA frames.
     """
@@ -148,12 +149,27 @@ class HTTP2Wire:
     ) -> None:
         self._sock = sock
         self._connection = connection
+        # Drive/flush are serialised across greenlets. The lock lives
+        # on the base class so the helper ``flush_outbound`` /
+        # ``drive_once`` methods can guard the socket without knowing
+        # whether the subclass extended it.
+        self._drive_lock = gevent.lock.RLock()
 
     def flush_outbound(self) -> int:
         """Push all queued outbound bytes to the socket.
 
         Returns the number of bytes written. The HTTP/2 preface +
         initial SETTINGS frame are sent here on the first call.
+        """
+        with self._drive_lock:
+            return self._flush_outbound_locked()
+
+    def _flush_outbound_locked(self) -> int:
+        """``flush_outbound`` body, but the lock is *already* held.
+
+        Internal helper for callers that are inside ``drive_once``'s
+        locked region -- re-acquiring the lock from there would
+        block forever.
         """
         data = self._connection.bytes_to_send()
         if not data:
@@ -170,22 +186,28 @@ class HTTP2Wire:
         or outbound bytes were written). Returns False if the socket
         would block. Raises :exc:`HTTP2WireError` if the peer has
         closed the socket.
-        """
-        try:
-            inbound = self._sock.recv(max_bytes)
-        except gevent.socket.timeout:
-            return False
-        except gevent.socket.error as e:
-            if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
-                return False
-            raise HTTP2WireError(str(e)) from e
-        if not inbound:
-            raise HTTP2WireError("peer closed the connection")
 
-        events = self._connection.feed(inbound)
-        self._dispatch(events)
-        self.flush_outbound()
-        return True
+        ``drive_once`` is serialised against ``flush_outbound`` via
+        ``self._drive_lock``; concurrent greenlets calling into the
+        same session wait on the lock instead of interleaving a recv
+        and a sendall on the same underlying socket.
+        """
+        with self._drive_lock:
+            try:
+                inbound = self._sock.recv(max_bytes)
+            except gevent.socket.timeout:
+                return False
+            except gevent.socket.error as e:
+                if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                    return False
+                raise HTTP2WireError(str(e)) from e
+            if not inbound:
+                raise HTTP2WireError("peer closed the connection")
+
+            events = self._connection.feed(inbound)
+            self._dispatch(events)
+            self._flush_outbound_locked()
+            return True
 
     # Subclasses (HTTP2Session) override to do per-event work.
     def _dispatch(self, events: list[Http2Event]) -> None:
@@ -207,6 +229,8 @@ class HTTP2Session(HTTP2Wire):
             connection = HTTP2Connection()
         super().__init__(sock, connection)
         self._handles: dict[int, HTTP2ResponseHandle] = {}
+        # ``_drive_lock`` is set on the base ``HTTP2Wire`` -- the
+        # comment there explains why we serialise drive and flush.
 
     @property
     def connection(self) -> HTTP2Connection:
@@ -265,7 +289,17 @@ class HTTP2Session(HTTP2Wire):
         if event.stream_id == CONNECTION_STREAM_ID:
             return
         handle = self._handle_for(event.stream_id)
-        if handle is not None:
+        if handle is None:
+            return
+        # Distinguish the leading response HEADERS from trailer
+        # HEADERS (RFC 9113 §8.1): a second HEADERS block on a stream
+        # whose body already started is treated as trailers. The C
+        # extension emits both as ``_kind="headers"``; the only
+        # signal we have here is the underlying ``StreamState``'s
+        # ``data_received`` flag.
+        if handle.state is not None and handle.state.data_received:
+            handle._on_trailer(list(event.headers))
+        else:
             handle._on_headers(event)
 
     def _on_data(self, event: DataReceived) -> None:
@@ -281,6 +315,10 @@ class HTTP2Session(HTTP2Wire):
         handle = self._handle_for(event.stream_id)
         if handle is not None:
             handle._on_reset(event)
+        # Drop the handle so the body buffer is collected. The
+        # ``HTTP2ResponseHandle`` already received its ``on_reset``
+        # notification above and closed its ``AsyncResult``.
+        self._handles.pop(event.stream_id, None)
 
     def _on_closed(self, event: StreamClosed) -> None:
         if event.stream_id == CONNECTION_STREAM_ID:
@@ -288,6 +326,7 @@ class HTTP2Session(HTTP2Wire):
         handle = self._handle_for(event.stream_id)
         if handle is not None:
             handle._on_closed(event)
+        self._handles.pop(event.stream_id, None)
 
 
 __all__ = [

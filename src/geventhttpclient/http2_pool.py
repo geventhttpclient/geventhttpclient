@@ -19,9 +19,9 @@ concurrent sessions or enforce a maximum. Sprint 3c adds eviction
 and pool-level locking if needed.
 """
 
-import threading
 from dataclasses import dataclass
 
+import gevent.lock
 import gevent.socket
 import gevent.ssl
 
@@ -62,7 +62,12 @@ class HTTP2ConnectionPool:
         insecure: bool = False,
     ) -> None:
         self._sessions: dict[_PoolKey, HTTP2Session] = {}
-        self._lock = threading.Lock()
+        # ``gevent.lock.Lock`` cooperates with the gevent hub; a plain
+        # ``threading.Lock`` would deadlock if the section between
+        # ``acquire`` and ``release`` yields (e.g. during DNS or TLS).
+        # ``gevent.lock`` keeps the API identical so the call sites
+        # do not change.
+        self._lock = gevent.lock.RLock()
         self.connection_timeout = connection_timeout
         self.network_timeout = network_timeout
         self.insecure = insecure
