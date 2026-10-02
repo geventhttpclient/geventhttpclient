@@ -4,7 +4,7 @@ import os
 import re
 import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
-from typing import IO, Any
+from typing import IO, Any, Union
 
 import gevent
 import gevent.socket
@@ -13,7 +13,7 @@ from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
 from geventhttpclient.header import Headers, HeadersDataType
 from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
-from geventhttpclient.http2_session import HTTP2ResponseHandle
+from geventhttpclient.http2_session import HTTP2ResponseHandle, HTTP2Session
 from geventhttpclient.response import (
     HTTPConnectionClosed,
     HTTPParseError,
@@ -692,7 +692,8 @@ class HTTPClient:
         *,
         timeout: float | None = None,
         max_retries: int = 0,
-    ) -> HTTP2ResponseHandle:
+        version: str = "auto",
+    ) -> Union["HTTP2ResponseHandle", "HTTPSocketPoolResponse"]:
         """Submit a request over HTTP/2 and block until the response
         handle is closed.
 
@@ -706,6 +707,19 @@ class HTTPClient:
         and **timeouts are never retried** -- they indicate that the
         peer may have processed the request but we never saw its
         response, so silently replaying it is unsafe.
+
+        ``version`` controls ALPN-based dispatch (Phase 6):
+
+        * ``"auto"`` (default) reads the negotiated ALPN protocol from
+          the h2 connection's underlying socket and returns an
+          :class:`HTTP2ResponseHandle` when the peer picked ``h2``;
+          when the peer picked ``http/1.1`` we fall back to a normal
+          :class:`HTTPSocketPoolResponse` over the HTTP/1.1 pool.
+        * ``"2"`` forces HTTP/2 and raises if the peer did not
+          negotiate ``h2`` (transparent fallback is the caller's
+          option via ``version="auto"``).
+        * ``"1.1"`` raises immediately -- use :meth:`request` for
+          HTTP/1.1 traffic.
         """
         if self._h2_pool is None:
             raise RuntimeError(
@@ -727,17 +741,50 @@ class HTTPClient:
         # retry of an idempotent request.
         body_bytes = bytes(body) if body is not None else None
 
+        # ALPN-based version dispatch (Phase 6). When ``version="1.1"``
+        # we short-circuit to the HTTP/1.1 path; for ``"auto"`` we
+        # connect via the h2 pool and re-route to HTTP/1.1 if the peer
+        # did not negotiate ``h2``; for ``"2"`` the h2 pool raises
+        # ``HTTP2ConnectionPoolError`` when ALNG does not match.
+        if version == "1.1":
+            return self._http1_fallback(method, request_uri, body_bytes, headers)
+
         deadline = (time.monotonic() + timeout) if timeout is not None else None
         attempts = max_retries + 1
         last_exc: Exception | None = None
         for attempt in range(attempts):
             try:
                 session = self._h2_pool.get_session(self.host, port, scheme=scheme)
+                # ALPN check: when ``version="auto"`` we honour the
+                # peer's ALPN choice and silently fall back to HTTP/1.1
+                # if the server did not negotiate ``h2``. The h2 pool
+                # itself raises ``HTTP2ConnectionPoolError`` when the
+                # ALPN-selected protocol is ``http/1.1``; we catch that
+                # specific failure and re-route. For ``version="2"``
+                # we want the error to surface.
+                if version == "auto":
+                    negotiated = self._alpn_negotiated(session)
+                    if negotiated and negotiated != "h2":
+                        # Peer chose HTTP/1.1: drop the h2 session
+                        # (its preface has already been written to the
+                        # socket -- the connection is unusable for h1
+                        # so we close the socket and start fresh).
+                        try:
+                            sock = session._sock  # type: ignore[attr-defined]
+                            sock.close()
+                        except Exception:  # noqa: BLE001,S110
+                            pass
+                        self._h2_pool._sessions.pop(  # type: ignore[attr-defined]
+                            next(iter(self._h2_pool._sessions)), None  # type: ignore[attr-defined]
+                        )
+                        return self._http1_fallback(method, request_uri, body_bytes, headers)
                 handle = session.submit_request(
                     method, path, str(authority), h2_headers,
                     scheme=scheme, body=body_bytes,
                 )
             except HTTP2ConnectionPoolError as e:
+                if version == "auto" and "did not negotiate h2" in str(e):
+                    return self._http1_fallback(method, request_uri, body_bytes, headers)
                 last_exc = e
                 if attempt + 1 < attempts and _may_retry_after_send_error(method):
                     continue
@@ -765,6 +812,39 @@ class HTTPClient:
         # All attempts failed.
         assert last_exc is not None
         raise RuntimeError(f"HTTP/2 request failed after {attempts} attempts: {last_exc}")
+
+    def _alpn_negotiated(self, session: HTTP2Session) -> str | None:
+        """Return the ALPN protocol the TLS handshake negotiated.
+
+        Reads from the underlying socket of an :class:`HTTP2Session`.
+        Returns ``None`` for plaintext sessions or when the peer did
+        not advertise ALPN (RFC 7301 says the responder may leave the
+        protocol list empty).
+        """
+        try:
+            sock = session._sock  # type: ignore[attr-defined]
+        except AttributeError:
+            return None
+        return getattr(sock, "selected_alpn_protocol", lambda: None)()
+
+    def _http1_fallback(self, method: str, request_uri: str, body: bytes | None,
+                        headers: HeadersDataType | None) -> "HTTPSocketPoolResponse":
+        """Route an HTTP/2 attempt over the HTTP/1.1 pool instead.
+
+        Used by ``request_h2(version="auto")`` when the peer chose
+        ``http/1.1`` in the ALPN handshake. The HTTP/1.1 path returns
+        a synchronous ``HTTPSocketPoolResponse``; the caller is
+        expected to handle either return type via duck-typing.
+        """
+        # Convert a request_uri-with-leading-slash into the form
+        # ``request()`` expects (origin form, no scheme).
+        path = request_uri
+        if path.startswith(("http://", "https://")):
+            # ``request()`` accepts absolute URLs; pass through.
+            pass
+        elif not path.startswith("/"):
+            path = "/" + path
+        return self.request(method, path, body=body, headers=headers)
 
     def _merge_headers(self, headers: HeadersDataType | None) -> Headers:
         merged = self.headers_type()

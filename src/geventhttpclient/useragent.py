@@ -19,7 +19,7 @@ import gevent
 
 from geventhttpclient.client import IDEMPOTENT_METHODS, HTTPClient, HTTPClientPool
 from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
-from geventhttpclient.response import HTTPSocketResponse
+from geventhttpclient.response import HTTPSocketPoolResponse, HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
 
 # Request payloads are passed through to the client untouched, which accepts
@@ -718,8 +718,12 @@ class UserAgent:
 
     def _urlopen(self, request: CompatRequest) -> CompatResponse:
         client = self.clientpool.get_client(request.url_split)
+        # ``version`` overrides dispatch. ``CompatRequest`` does not
+        # carry it explicitly; callers can set it via ``request.version``
+        # (Sprint 6) -- if absent we default to ``"auto"``.
+        version = getattr(request, "version", "auto")
         if client.enable_http2 and client.ssl:
-            return self._urlopen_h2(request, client)
+            return self._urlopen_h2(request, client, version=version)
         resp = client.request(
             request.method,
             request.url_split.quoted_uri,
@@ -729,16 +733,25 @@ class UserAgent:
         )
         return self.response_type(resp, request=request, sent_request=resp._sent_request)
 
-    def _urlopen_h2(self, request: CompatRequest, client: HTTPClient) -> CompatResponse:
+    def _urlopen_h2(
+        self,
+        request: CompatRequest,
+        client: HTTPClient,
+        *,
+        version: str = "auto",
+    ) -> CompatResponse:
         """HTTP/2 path. Synchronous; uses ``HTTPClient.request_h2``.
 
         The h2 session lives inside ``HTTP2ConnectionPool`` so redirects
         reuse the same multiplexed connection when they target the
         same origin. Cross-origin redirects fall through to the
         HTTPClientPool and create a new h2 session.
-        """
-        from geventhttpclient.http2_response import HTTP2Response, HTTP2SocketResponseBridge
 
+        ``version`` controls ALPN dispatch: ``"auto"`` falls back to
+        HTTP/1.1 if the peer did not negotiate ``h2``; ``"2"`` forces
+        HTTP/2 and raises otherwise; ``"1.1"`` short-circuits to the
+        HTTP/1.1 path before opening an h2 session.
+        """
         payload = request.payload
         body: bytes | None
         if isinstance(payload, (bytes, bytearray, memoryview)):
@@ -747,14 +760,28 @@ class UserAgent:
             body = payload.read()
         else:
             body = None
-        handle = client.request_h2(
+        result = client.request_h2(
             request.method,
             request.url_split.quoted_uri,
             body=body,
             headers=request.headers,
             timeout=request.timeout if hasattr(request, "timeout") else None,
+            version=version,
         )
-        h2_resp = HTTP2Response(handle)
+        # ``request_h2`` returns either an ``HTTP2ResponseHandle`` (the
+        # h2 path) or an ``HTTPSocketPoolResponse`` (auto-fallback
+        # when the peer chose http/1.1 in the ALPN handshake). We
+        # distinguish them by class name to avoid a circular import
+        # at this point.
+        from geventhttpclient.http2_response import HTTP2Response, HTTP2SocketResponseBridge
+
+        if isinstance(result, HTTPSocketPoolResponse):
+            return self.response_type(
+                result,
+                request=request,
+                sent_request=result._sent_request,
+            )
+        h2_resp = HTTP2Response(result)
         bridge = HTTP2SocketResponseBridge(h2_resp)
         return self.response_type(bridge, request=request)  # type: ignore[arg-type]
 
