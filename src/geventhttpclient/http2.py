@@ -191,11 +191,56 @@ class WindowUpdateReceived:
     """
 
     stream_id: int
-    increment: int
+    delta: int
 
     @property
     def kind(self) -> str:
         return "window_update"
+
+
+# ---------------------------------------------------------------------------
+# HTTP/2 review-commentary events (RFC 9113 §8.1.1 / §8.1)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True, frozen=True)
+class InformationalResponseReceived:
+    """1xx informational response (RFC 9113 §8.1.1).
+
+    Examples: ``100 Continue``, ``103 Early Hints``. The server may
+    emit zero or more of these before the final response. They do
+    *not* end the stream — the final HEADERS frame carries the
+    status code callers care about.
+    """
+
+    stream_id: int
+    status_code: int
+    headers: tuple[tuple[str, str], ...]
+
+    @property
+    def kind(self) -> str:
+        return "informational"
+
+
+@dataclass(slots=True, frozen=True)
+class TrailerReceived:
+    """Trailer HEADERS block (RFC 9113 §8.1).
+
+    A HEADERS frame arriving *after* DATA frames on the same stream
+    (or directly attached to ``END_STREAM=1`` for a zero-body response
+    that the server still wants to label with trailers) is the
+    trailer section. Trailers carry metadata that is only known after
+    the body has been generated (``Digest``, ``Server-Timing``,
+    etc.). They are merged into the response trailer dict, **not**
+    the headers dict, so callers see a clean separation.
+    """
+
+    stream_id: int
+    headers: tuple[tuple[str, str], ...]
+
+    @property
+    def kind(self) -> str:
+        return "trailer"
 
 
 Http2Event = (
@@ -207,6 +252,8 @@ Http2Event = (
     | PingReceived
     | GoAwayReceived
     | WindowUpdateReceived
+    | InformationalResponseReceived
+    | TrailerReceived
 )
 
 
@@ -231,6 +278,7 @@ class StreamState:
     response_body_parts: list[bytes] = field(default_factory=list)
     data_received: bool = False
     reset_error_code: int | None = None
+    trailer_headers: tuple[tuple[str, str], ...] | None = None
 
     def is_closed(self) -> bool:
         return self.state == StreamLifecycle.CLOSED
@@ -553,6 +601,38 @@ class HTTP2Connection:
                 (str(name), str(value))
                 for name, value in raw["headers"]  # type: ignore[union-attr,attr-defined]
             )
+            # RFC 9113 §8.1.1: 1xx informational responses (100, 103,
+            # ...) precede the final response. They are *not* stored in
+            # ``StreamState.response_status_code`` and are emitted as
+            # ``InformationalResponseReceived`` so callers can inspect
+            # early hints without confusing them for the real answer.
+            status_str = next(
+                (v for n, v in all_headers if n == ":status"),
+                None,
+            )
+            try:
+                status_code = int(status_str) if status_str is not None else None
+            except ValueError:
+                status_code = None
+            state = self._streams.get(stream_id)
+            if (
+                status_code is not None
+                and 100 <= status_code < 200
+            ):
+                headers = tuple(h for h in all_headers if h[0] != ":status")
+                return InformationalResponseReceived(
+                    stream_id, status_code, headers,
+                )
+            # Trailer detection (RFC 9113 §8.1): a HEADERS frame on a
+            # stream whose final response was already delivered is the
+            # trailer section. We emit a ``TrailerReceived`` event and
+            # leave the original ``response_headers`` untouched.
+            if state is not None and state.response_status_code is not None:
+                trailers = tuple(h for h in all_headers if h[0] != ":status")
+                state.trailer_headers = trailers
+                if end_stream:
+                    self._mark_remote_closed(state)
+                return TrailerReceived(stream_id, trailers)
             self._update_stream_state_on_headers(stream_id, all_headers, end_stream)
             # Surface to the user: the :status pseudo-header has been
             # captured into ``StreamState.response_status_code`` and is

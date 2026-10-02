@@ -165,6 +165,26 @@ class TestReviewHttp2_3Regressions:
         assert bridge.readline() == b"zeile1\r\n"
         assert bridge.read() == b"zeile2\r\nzeile3"
 
+    def test_body_cache_picks_up_late_data_frames(self) -> None:
+        """Klein (review part 3): reading before the stream ended used
+        to freeze the body cache -- a later DATA frame was invisible
+        and repeated reads kept returning the stale partial body.
+        The cache must rebuild as ``unread remainder + new parts``
+        and reset the cursor."""
+        h = _make_round_trip(b"first-part|")
+        r = HTTP2Response(h)
+        assert r.read(5) == b"first"
+        # The session's ``_on_data`` appends to ``handle.body_parts``.
+        h.body_parts.append(b"second-part|")
+        # The unread remainder plus the late frame, no duplication.
+        assert r.read() == b"-part|second-part|"
+        # A fully drained response still surfaces late frames.
+        h2 = _make_round_trip(b"abc")
+        r2 = HTTP2Response(h2)
+        assert r2.read() == b"abc"
+        h2.body_parts.append(b"def")
+        assert r2.read() == b"def"
+
 
 class TestIterLines:
     def test_basic_lines(self) -> None:
@@ -244,7 +264,11 @@ class TestRetry:
         # — we monkey-patch _open_socket to raise on the first call
         # and succeed on the second. We rely on the live nginx server
         # (skipped when nginx is not running).
-        from test_http2_session_live import NGINX_HOST, NGINX_PORT, _start_nginx
+        from tests.test_http2_session_live import (
+            NGINX_HOST,
+            NGINX_PORT,
+            _start_nginx,
+        )
         _start_nginx()
 
         from geventhttpclient import client as client_module

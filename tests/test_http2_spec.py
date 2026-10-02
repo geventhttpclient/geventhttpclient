@@ -246,3 +246,65 @@ class TestTrailer:
                 assert not any(name == "x-checksum" for name, _ in handle.headers)
             finally:
                 client.close()
+
+    def test_trailer_with_zero_body_keeps_status_200(self) -> None:
+        """M7 (review part 3): a HEADERS block at ``END_STREAM`` on a
+        stream whose body is also empty is *trailer-only* and must
+        not consume the ``:status`` pseudo-header."""
+        def handler(method, path, headers, body):
+            return {
+                "status": 200,
+                "headers": [("content-type", "text/plain")],
+                "body": b"",
+                "trailers": [("x-empty-trailer", "yes")],
+            }
+
+        with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
+            client = HTTPClient(
+                "127.0.0.1", port=server.port,
+                ssl=True, insecure=True, enable_http2=True,
+            )
+            try:
+                handle = client.request_h2("GET", "/empty")
+                assert handle.status_code == 200
+                assert handle.body == b""
+                assert ("x-empty-trailer", "yes") in handle.trailers
+            finally:
+                client.close()
+
+
+class TestInformational:
+    """1xx informational responses (RFC 9113 §8.1.1)."""
+
+    def test_early_hints_surface_and_dont_overwrite_status(self) -> None:
+        """M8 (review part 3): 103 Early Hints precedes 200 OK and
+        does not become the final ``status_code``."""
+        def handler(method, path, headers, body):
+            return {
+                "status": 200,
+                "headers": [("content-type", "text/plain")],
+                "body": b"loaded",
+                "informational": [
+                    {
+                        "status": 103,
+                        "headers": [("link", "</style.css>; rel=preload")],
+                    },
+                ],
+            }
+
+        with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
+            client = HTTPClient(
+                "127.0.0.1", port=server.port,
+                ssl=True, insecure=True, enable_http2=True,
+            )
+            try:
+                resp = client.request_h2("GET", "/")
+                assert resp.status_code == 200
+                assert resp.body == b"loaded"
+                # Early hints accumulated on the handle.
+                assert len(resp.informational) == 1
+                status, headers = resp.informational[0]
+                assert status == 103
+                assert ("link", "</style.css>; rel=preload") in headers
+            finally:
+                client.close()

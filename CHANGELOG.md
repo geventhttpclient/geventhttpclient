@@ -46,6 +46,16 @@ follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
   section 3.3): redirected requests report unverifiable, like urllib's
   redirect handler, so strict cookie policies can refuse cookies set
   along the chain - the permissive defaults are unaffected
+- Experimental HTTP/2 support (RFC 9113) backed by a vendored
+  nghttp2 v1.70.0 C extension with a sans-IO core. Opt-in per client
+  with `HTTPClient(..., enable_http2=True)` or
+  `UserAgent(..., enable_http2=True)`; the default stays HTTP/1.1.
+  The h2 transport negotiates ALPN and falls back to HTTP/1.1
+  transparently when the peer picks `http/1.1`. 1xx informational
+  responses are collected on `response.informational`, trailers on
+  `response.trailers` (RFC 9113 §8.1.1 / §8.1); h2 transport errors
+  raise `HTTP2Error` (a `ConnectionError` subclass) so callers can
+  catch both protocol versions uniformly
 
 ### Changed
 

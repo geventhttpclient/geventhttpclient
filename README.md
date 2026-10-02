@@ -115,6 +115,43 @@ with httpx.Client() as client:
 Per-request options are not plumbed through (the engine is
 session-level configured); HTTP/2 and mounts are out of scope.
 
+## HTTP/2 (experimental)
+
+HTTP/2 support is opt-in per client, mirroring `httpx`'s
+`http2=True` switch. The default stays HTTP/1.1 -- nothing changes
+unless you ask for it.
+
+```python
+from geventhttpclient.useragent import UserAgent
+
+ua = UserAgent(enable_http2=True, insecure=True)
+response = ua.urlopen("https://nghttp2.org/")
+print(response.status_code, response.content)
+```
+
+Behaviour when `enable_http2=True`:
+
+- The client advertises ALPN `h2` and `http/1.1` on TLS connections.
+- If the server negotiates `h2`, requests are multiplexed over a
+  single connection (one HTTP/2 session per host, gevent greenlet
+  safe).
+- If the server picks `http/1.1` (or no ALPN), the client
+  transparently falls back to the regular HTTP/1.1 pool. No
+  per-request protocol knob, no failed requests on h1-only
+  destinations.
+
+Transport failures on the h2 path raise `HTTP2Error`, a subclass of
+`ConnectionError`, so `except ConnectionError` catches both protocol
+versions uniformly. 1xx informational responses (`103 Early Hints`)
+are collected on `response.informational` and never overwrite the
+final status; trailer headers end up in `response.trailers`,
+separate from `response.headers`.
+
+The implementation uses a vendored [nghttp2](https://nghttp2.org)
+(nghttp2 v1.70.0) C extension with a sans-IO core (`HTTP2Connection`,
+pull-based typed events) -- the same layering as the llhttp-based
+HTTP/1.1 parser.
+
 ## High Concurrency
 
 `HTTPClient` has a connection pool built in and is greenlet safe by design.

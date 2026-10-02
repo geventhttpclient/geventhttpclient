@@ -9,25 +9,17 @@ HTTP/2 server for H3.
 
 from __future__ import annotations
 
-import sys
-
-import gevent.monkey
-
-gevent.monkey.patch_all()
-
 import pytest
-
-sys.path.insert(0, "tests")
-from test_http2_session_live import (
-    NGINX_HOST,
-    NGINX_PORT,
-    _start_nginx,
-)
 
 from geventhttpclient._http2_errors import HTTP2Error
 from geventhttpclient.useragent import (
     UserAgent,
     _make_request,
+)
+from tests.test_http2_session_live import (
+    NGINX_HOST,
+    NGINX_PORT,
+    _start_nginx,
 )
 
 

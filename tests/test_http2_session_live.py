@@ -16,7 +16,6 @@ import os
 import socket
 import subprocess
 import time
-from typing import Any
 
 import gevent
 import gevent.socket
@@ -43,11 +42,41 @@ def _nginx_alive() -> bool:
         return False
 
 
+# Set by :func:`_start_nginx` when *this* process spawned the daemon;
+# the session finalizer only shuts down nginx it started itself, so a
+# developer-run instance is left alone (review part 3, "Klein": the
+# no-op teardown_module left a stray daemon bound to 8443).
+_nginx_spawned_by_us = False
+# Detached master handles we spawned. ``nginx -s stop`` relies on the
+# pid file, which a ``daemon off;`` master does not reliably leave
+# behind after a ``kill -9`` -- so we track the Popen objects and
+# terminate them directly.
+_nginx_processes: list[subprocess.Popen[bytes]] = []
+
+
+def _stop_nginx() -> None:
+    """Stop the nginx daemon only if this test session started it."""
+    global _nginx_spawned_by_us
+    if not _nginx_spawned_by_us:
+        return
+    _nginx_spawned_by_us = False
+    while _nginx_processes:
+        proc = _nginx_processes.pop()
+        try:
+            proc.terminate()
+            proc.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+
+
 def _start_nginx() -> None:
     """Start the local nginx in the background.
 
     Skips the test if nginx is not installed or cannot be started.
+    Remember whether we spawned the daemon so the session finalizer
+    can take it down again.
     """
+    global _nginx_spawned_by_us
     if _nginx_alive():
         return
     if not os.path.exists(NGINX_CONFIG):
@@ -55,7 +84,7 @@ def _start_nginx() -> None:
     # Spawn nginx detached; ``daemon on;`` would be cleaner but our
     # shared config keeps ``daemon off;`` for interactive debugging.
     try:
-        subprocess.Popen(
+        proc: subprocess.Popen[bytes] = subprocess.Popen(
             ["nginx", "-c", NGINX_CONFIG, "-p", NGINX_PREFIX],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -65,6 +94,8 @@ def _start_nginx() -> None:
         pytest.skip("nginx binary not available")
     except subprocess.SubprocessError:
         pytest.skip("nginx failed to start")
+    _nginx_spawned_by_us = True
+    _nginx_processes.append(proc)
 
     deadline = time.time() + STARTUP_TIMEOUT
     while time.time() < deadline:
@@ -174,12 +205,4 @@ class TestLiveRoundTrip:
             sock.close()
 
 
-def teardown_module(_: Any) -> None:
-    """No-op.
-
-    pytest's per-module teardown was killing the shared nginx between
-    test modules and causing race conditions in the useragent tests
-    that ran after this one. The fixture :func:`_start_nginx` already
-    brings nginx up if it is down, and the developer is expected to
-    stop their local nginx manually (``pkill nginx``) when done.
-    """
+""

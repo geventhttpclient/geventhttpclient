@@ -45,14 +45,20 @@ class HTTP2Response:
         # bytes from ``body_parts`` on every access; reading a 10 MB
         # response in 4 KB chunks would rejoin the full buffer
         # ~2500 times (O(n²)). The cached ``_body`` is computed on
-        # first read, then ``_cursor`` slices it.
+        # first read, then ``_cursor`` slices it. The cache is
+        # invalidated automatically when the handle receives a new
+        # DATA frame (``handle.body_parts`` grew) so callers can
+        # stream without reading the whole body up front.
         self._body: bytes | None = None
+        self._body_seen: int = 0  # body_parts length at cache time
         self._cursor = 0
         # Header index mirrored for ``CompatResponse``-style access.
-        # Populated from ``handle.headers`` on first read.
-        self._headers_index: dict[str, str] = {
-            name.lower(): value for name, value in handle.headers
-        }
+        # Uses a ``Headers`` instance (case-preserving multi-map from
+        # ``header.py``) so duplicate headers like ``Set-Cookie`` are
+        # not silently collapsed to a single value.
+        self._headers_index = Headers()
+        for name, value in handle.headers:
+            self._headers_index.add(name, value)
 
     # -- Properties ---------------------------------------------------------
 
@@ -63,6 +69,27 @@ class HTTP2Response:
     @property
     def headers(self) -> list[tuple[str, str]]:
         return self._handle.headers
+
+    @property
+    def trailers(self) -> list[tuple[str, str]]:
+        """Trailer section of the response (RFC 9113 §8.1).
+
+        Empty list if the response carried no trailer HEADERS
+        block. Populated by ``HTTP2Session`` after the body has
+        been delivered and the stream is closed.
+        """
+        return self._handle.trailers
+
+    @property
+    def informational(self) -> list[tuple[int, list[tuple[str, str]]]]:
+        """1xx informational responses observed on this stream.
+
+        Each entry is ``(status_code, headers)``. Common entries
+        are ``(100, ...)`` for ``100 Continue`` and ``(103, ...)``
+        for ``103 Early Hints``. Empty list if the server sent no
+        early hints (RFC 9113 §8.1.1).
+        """
+        return self._handle.informational
 
     @property
     def is_closed(self) -> bool:
@@ -95,8 +122,27 @@ class HTTP2Response:
     # -- Read API -----------------------------------------------------------
 
     def _body_cached(self) -> bytes:
-        if self._body is None:
-            self._body = self._handle.body
+        """Return the body joined once and cached.
+
+        Invalidation: every read probes ``len(handle.body_parts)``
+        against the snapshot taken at cache-time. If the handle has
+        accumulated more DATA frames in the meantime (i.e. the
+        caller streamed a partial response), the cache is rebuilt as
+        ``unread remainder + newly arrived parts`` and the cursor is
+        reset to 0 -- the buffer then starts exactly at the read
+        position again, so ``_body[cursor:]`` stays the unread part.
+        """
+        seen_now = len(self._handle.body_parts)
+        if self._body is None or seen_now != self._body_seen:
+            new_body = b"".join(self._handle.body_parts[self._body_seen:])
+            if self._body is None:
+                self._body = new_body
+            else:
+                # Keep the unread remainder; the rebuilt buffer starts
+                # at the read position, so reset the cursor.
+                self._body = self._body[self._cursor:] + new_body
+                self._cursor = 0
+            self._body_seen = seen_now
         return self._body
 
     def _remaining(self) -> bytes:

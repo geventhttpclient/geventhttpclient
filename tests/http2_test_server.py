@@ -21,6 +21,11 @@ Design goals:
 from __future__ import annotations
 
 import os
+
+# Default location of the test certs. Falls back to ``tests/certs/``
+# so contributors without ``/tmp/pi/nginx/`` can still run the suite
+# against the bundled self-signed cert.
+import os as _os
 import socket
 import ssl
 from collections.abc import Callable, Iterable
@@ -34,8 +39,19 @@ import h2.connection
 import h2.events
 import h2.exceptions
 
-CERT_FILE = "/tmp/pi/nginx/server.crt"
-KEY_FILE = "/tmp/pi/nginx/server.key"
+_HERE = _os.path.dirname(_os.path.abspath(__file__))
+CERT_FILE = _os.environ.get(
+    "GEVENTHTTPCLIENT_TEST_CERT",
+    "/tmp/pi/nginx/server.crt"
+    if _os.path.exists("/tmp/pi/nginx/server.crt")
+    else _os.path.join(_HERE, "certs", "server.crt"),
+)
+KEY_FILE = _os.environ.get(
+    "GEVENTHTTPCLIENT_TEST_KEY",
+    "/tmp/pi/nginx/server.key"
+    if _os.path.exists("/tmp/pi/nginx/server.key")
+    else _os.path.join(_HERE, "certs", "server.key"),
+)
 
 # Default response builder: returns ``{"status": int, "headers": list,
 # "body": bytes}`` for a given request. Tests can replace this via the
@@ -258,6 +274,17 @@ class H2TestServer:
         out_headers: list[tuple[str, str]] = list(result.get("headers", []))  # type: ignore[arg-type]
         out_headers.extend(cfg.extra_headers)
         out_body = bytes(result.get("body", b""))  # type: ignore[arg-type]
+        # 1xx informational responses (RFC 9113 §8.1.1): the handler
+        # may return a list of ``{"status": int, "headers": [...]}``
+        # blocks in ``result["informational"]`` to precede the final
+        # response. The default echo handler emits none.
+        for info in result.get("informational", []) or []:  # type: ignore[union-attr]
+            info_status = int(info.get("status", 100))  # type: ignore[arg-type,union-attr]
+            info_headers = list(info.get("headers", []))  # type: ignore[arg-type,union-attr]
+            h2_conn.send_headers(
+                stream_id=event.stream_id,
+                headers=[(":status", str(info_status)), *info_headers],
+            )
         # If the handler wanted to send trailers, it would put them in
         # ``result["trailers"]``; default: none.
         trailers: list[tuple[str, str]] = list(result.get("trailers", []))  # type: ignore[arg-type]

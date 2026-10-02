@@ -29,9 +29,11 @@ from geventhttpclient.http2 import (
     HeadersReceived,
     HTTP2Connection,
     Http2Event,
+    InformationalResponseReceived,
     StreamClosed,
     StreamReset,
     StreamState,
+    TrailerReceived,
 )
 
 
@@ -59,6 +61,7 @@ class HTTP2ResponseHandle:
         "body_parts",
         "error_code",
         "headers",
+        "informational",
         "session",
         "state",
         "status_code",
@@ -74,6 +77,11 @@ class HTTP2ResponseHandle:
         self.headers: list[tuple[str, str]] = []
         self.body_parts: list[bytes] = []
         self.trailers: list[tuple[str, str]] = []
+        # RFC 9113 §8.1.1: 1xx informational responses observed on
+        # this stream (e.g. ``103 Early Hints``). Each entry is a
+        # ``(status_code, headers)`` tuple so callers can correlate
+        # them with the corresponding 1xx number.
+        self.informational: list[tuple[int, list[tuple[str, str]]]] = []
         self.error_code: int | None = None
         self._headers_ready = gevent.event.Event()
         self._closed = gevent.event.Event()
@@ -116,6 +124,14 @@ class HTTP2ResponseHandle:
 
     def _on_trailer(self, trailers: list[tuple[str, str]]) -> None:
         self.trailers.extend(trailers)
+
+    def _on_informational(
+        self, status_code: int, headers: list[tuple[str, str]],
+    ) -> None:
+        # 1xx early hints (RFC 9113 §8.1.1) are accumulated on the
+        # handle so callers can inspect them after the response is
+        # closed. They do not advance the stream lifecycle.
+        self.informational.append((status_code, list(headers)))
 
     def _on_reset(self, event: StreamReset) -> None:
         self.error_code = event.error_code
@@ -274,6 +290,10 @@ class HTTP2Session(HTTP2Wire):
                 self._on_headers(event)  # type: ignore[arg-type]
             elif kind == "data":
                 self._on_data(event)  # type: ignore[arg-type]
+            elif kind == "informational":
+                self._on_informational(event)  # type: ignore[arg-type]
+            elif kind == "trailer":
+                self._on_trailer_event(event)  # type: ignore[arg-type]
             elif kind == "stream_reset":
                 self._on_reset(event)  # type: ignore[arg-type]
             elif kind == "stream_closed":
@@ -291,16 +311,28 @@ class HTTP2Session(HTTP2Wire):
         handle = self._handle_for(event.stream_id)
         if handle is None:
             return
-        # Distinguish the leading response HEADERS from trailer
-        # HEADERS (RFC 9113 §8.1): a second HEADERS block on a stream
-        # whose body already started is treated as trailers. The C
-        # extension emits both as ``_kind="headers"``; the only
-        # signal we have here is the underlying ``StreamState``'s
-        # ``data_received`` flag.
-        if handle.state is not None and handle.state.data_received:
+        # The sans-IO layer (``HTTP2Connection._convert_event``) already
+        # detects trailers and 1xx informational responses and emits
+        # dedicated events for them. ``_on_headers`` therefore only
+        # sees the *first* response HEADERS block per stream.
+        handle._on_headers(event)
+
+    def _on_informational(self, event: InformationalResponseReceived) -> None:
+        """RFC 9113 §8.1.1: 1xx early hints are stashed on the handle
+        but do *not* close the stream and do *not* become the
+        ``status_code`` that callers observe."""
+        if event.stream_id == CONNECTION_STREAM_ID:
+            return
+        handle = self._handle_for(event.stream_id)
+        if handle is not None:
+            handle._on_informational(event.status_code, list(event.headers))
+
+    def _on_trailer_event(self, event: TrailerReceived) -> None:
+        if event.stream_id == CONNECTION_STREAM_ID:
+            return
+        handle = self._handle_for(event.stream_id)
+        if handle is not None:
             handle._on_trailer(list(event.headers))
-        else:
-            handle._on_headers(event)
 
     def _on_data(self, event: DataReceived) -> None:
         if event.stream_id == CONNECTION_STREAM_ID:
