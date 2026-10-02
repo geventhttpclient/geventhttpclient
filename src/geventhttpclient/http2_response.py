@@ -21,6 +21,7 @@ import json as stdjsonlib
 from collections.abc import Iterator
 from typing import Any, Self
 
+from geventhttpclient.header import Headers
 from geventhttpclient.http2_session import HTTP2ResponseHandle
 
 
@@ -42,6 +43,11 @@ class HTTP2Response:
         # N bytes from here and advances it; iter_content tracks the
         # same cursor.
         self._cursor = 0
+        # Header index mirrored for ``CompatResponse``-style access.
+        # Populated from ``handle.headers`` on first read.
+        self._headers_index: dict[str, str] = {
+            name.lower(): value for name, value in handle.headers
+        }
 
     # -- Properties ---------------------------------------------------------
 
@@ -67,6 +73,19 @@ class HTTP2Response:
                 except ValueError:
                     return None
         return None
+
+    def get_code(self) -> int | None:
+        """http.client parity."""
+        return self.status_code
+
+    @property
+    def length(self) -> int | None:
+        """http.client parity for ``__len__``."""
+        return self.content_length
+
+    @property
+    def message_complete(self) -> bool:
+        return self._handle.is_closed
 
     # -- Read API -----------------------------------------------------------
 
@@ -145,4 +164,63 @@ class HTTP2ResponseError(RuntimeError):
     """Raised by :meth:`HTTP2Response.raise_for_status` for 4xx/5xx."""
 
 
-__all__ = ["HTTP2Response", "HTTP2ResponseError"]
+class HTTP2SocketResponseBridge:
+    """Minimal ``HTTPSocketResponse`` duck-typed surface for an :class:`HTTP2Response`.
+
+    Sprint 5 lets :class:`CompatResponse` wrap the h2 response
+    unchanged: it exposes ``read``, ``readline``, ``release``,
+    ``length``, ``_headers_index`` and ``get_code`` -- the small set
+    ``useragent.CompatResponse`` actually touches.
+
+    The underlying h2 stream auto-closes; ``release`` is a no-op.
+    """
+
+    def __init__(self, response: HTTP2Response) -> None:
+        self._response = response
+        # ``CompatResponse`` expects a ``Headers`` instance with
+        # ``getlist`` semantics; the raw tuple list does not have
+        # that.
+        self._headers_index = Headers()
+        for name, value in response.headers:
+            self._headers_index.add(name, value)
+        self._sent_request: str | None = None
+
+    @property
+    def length(self) -> int | None:
+        return self._response.length
+
+    def get_code(self) -> int | None:
+        return self._response.get_code()
+
+    @property
+    def message_complete(self) -> bool:
+        return self._response.message_complete
+
+    def read(self, n: int | None = None) -> bytes:
+        return self._response.read(n)
+
+    def readline(self, sep: bytes = b"\r\n") -> bytes:
+        # Compatibility shim: HTTP/2 has no chunked transfer-encoding,
+        # so the body has already been concatenated by the time we get
+        # here. We replicate the line-by-line split of ``HTTPSocketResponse``
+        # on the in-memory buffer.
+        buf = bytearray()
+        for chunk in self._response.iter_content():
+            buf.extend(chunk)
+            sep_idx = buf.find(sep)
+            if sep_idx >= 0:
+                line = bytes(buf[:sep_idx + len(sep)])
+                # Anything past the line is consumed by the next read()
+                # call -- we don't expose the leftover here.
+                self._response._cursor = len(self._response._handle.body)
+                return line
+        return bytes(buf)
+
+    def release(self) -> None:
+        return None
+
+    def __iter__(self) -> Iterator[bytes]:
+        return iter(self._response.iter_content())
+
+
+__all__ = ["HTTP2Response", "HTTP2ResponseError", "HTTP2SocketResponseBridge"]

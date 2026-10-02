@@ -481,6 +481,8 @@ class UserAgent:
         retry_delay: float = 0,
         cookiejar: CookieJarLike = None,
         headers: HeadersDataType | None = None,
+        *,
+        enable_http2: bool = False,
         **kw: Any,
     ) -> None:
         self.max_redirects = int(max_redirects)
@@ -490,7 +492,13 @@ class UserAgent:
         if headers:
             self.default_headers.update(headers)
         self.cookiejar = cookiejar
-        self.clientpool = HTTPClientPool(**kw)
+        # ``enable_http2`` is a Layered message for Sprint 5: when set
+        # the HTTPClientPool creates HTTPClient instances with the
+        # corresponding kwarg. ``version`` is left at "1.1" by default
+        # (the HTTPClient default); Phase 6 adds the auto-detect
+        # switch when the TLS handshake completes via ALPN.
+        self.enable_http2 = enable_http2
+        self.clientpool = HTTPClientPool(enable_http2=enable_http2, **kw)
 
     def close(self) -> None:
         self.clientpool.close()
@@ -710,6 +718,8 @@ class UserAgent:
 
     def _urlopen(self, request: CompatRequest) -> CompatResponse:
         client = self.clientpool.get_client(request.url_split)
+        if client.enable_http2 and client.ssl:
+            return self._urlopen_h2(request, client)
         resp = client.request(
             request.method,
             request.url_split.quoted_uri,
@@ -718,6 +728,35 @@ class UserAgent:
             headers=request.headers,
         )
         return self.response_type(resp, request=request, sent_request=resp._sent_request)
+
+    def _urlopen_h2(self, request: CompatRequest, client: HTTPClient) -> CompatResponse:
+        """HTTP/2 path. Synchronous; uses ``HTTPClient.request_h2``.
+
+        The h2 session lives inside ``HTTP2ConnectionPool`` so redirects
+        reuse the same multiplexed connection when they target the
+        same origin. Cross-origin redirects fall through to the
+        HTTPClientPool and create a new h2 session.
+        """
+        from geventhttpclient.http2_response import HTTP2Response, HTTP2SocketResponseBridge
+
+        payload = request.payload
+        body: bytes | None
+        if isinstance(payload, (bytes, bytearray, memoryview)):
+            body = bytes(payload)
+        elif payload is not None and hasattr(payload, "read"):
+            body = payload.read()
+        else:
+            body = None
+        handle = client.request_h2(
+            request.method,
+            request.url_split.quoted_uri,
+            body=body,
+            headers=request.headers,
+            timeout=request.timeout if hasattr(request, "timeout") else None,
+        )
+        h2_resp = HTTP2Response(handle)
+        bridge = HTTP2SocketResponseBridge(h2_resp)
+        return self.response_type(bridge, request=request)  # type: ignore[arg-type]
 
     @classmethod
     def _conversation_str(
