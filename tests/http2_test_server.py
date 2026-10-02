@@ -27,7 +27,6 @@ import os
 # against the bundled self-signed cert.
 import os as _os
 import socket
-import ssl
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Self
@@ -131,7 +130,10 @@ class H2TestServer:
                 f"missing test certs at {CERT_FILE} and {KEY_FILE}; "
                 "generate them with openssl before running h2 tests"
             )
-        ctx = gevent.ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        # Explicit server-side context (the modern idiom instead of
+        # ``create_default_context(Purpose.CLIENT_AUTH)``): no hostname
+        # verification semantics, server cert via ``load_cert_chain``.
+        ctx = gevent.ssl.SSLContext(gevent.ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
         ctx.set_alpn_protocols(["h2", "http/1.1"])
         # Self-signed cert is the only thing we offer; tests opt in via

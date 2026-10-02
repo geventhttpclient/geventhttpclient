@@ -13,8 +13,6 @@ The class lives here (rather than in ``useragent.py``) so the lower
 layers can import it without circular dependencies.
 """
 
-from __future__ import annotations
-
 from typing import Any
 
 

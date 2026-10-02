@@ -717,7 +717,6 @@ class UserAgent:
 
     def _urlopen(self, request: CompatRequest) -> CompatResponse:
         client = self.clientpool.get_client(request.url_split)
-        # ``version`` overrides dispatch. ``CompatRequest`` does not
         # httpx-style auto-fallback (review_http2_3.md H1 + Phase 6):
         # the user opted into ``http2=True`` on the client, so
         # we route through ``_urlopen_h2`` whenever the request uses

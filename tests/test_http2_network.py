@@ -55,7 +55,7 @@ class TestRealWorldH2Servers:
         "host,path",
         [
             ("nghttp2.org", "/"),
-            ("www.google.com", "/"),
+            ("nghttp2.org", "/documentation/"),
             ("github.com", "/"),
             ("httpbin.org", "/html"),
         ],
@@ -77,21 +77,25 @@ class TestMultiplexing:
     """Several files over ONE h2 connection (stream multiplexing)."""
 
     def test_concurrent_requests_share_one_session(self) -> None:
-        _skip_if_no_h2("www.google.com")
-        c = HTTPClient("www.google.com", port=443, ssl=True, http2=True)
+        # nghttp2.org is the canonical h2 reference server and its
+        # MAX_CONCURRENT_STREAMS (100) comfortably fits the pool size
+        # below; google.com was dropped as SUT -- GFE serves captcha
+        # pages to datacenter IPs, which made the check flaky.
+        _skip_if_no_h2("nghttp2.org")
+        c = HTTPClient("nghttp2.org", port=443, ssl=True, http2=True)
         try:
             pool = gevent.pool.Pool(20)
 
             def fetch(i: int) -> tuple[int, int]:
                 h = c.request_h2(
-                    "GET", f"/gen_204?i={i}",
-                    headers={"host": "www.google.com"},
+                    "GET", f"/?i={i}",
+                    headers={"host": "nghttp2.org"},
                 )
                 return i, h.status_code
 
             jobs = [pool.spawn(fetch, i) for i in range(20)]
             results = [j.get(timeout=60) for j in jobs]
-            assert all(status == 204 for _, status in results)
+            assert all(status == 200 for _, status in results)
             # Every request rode the same connection.
             assert c._h2_pool is not None
             assert len(c._h2_pool._sessions) == 1

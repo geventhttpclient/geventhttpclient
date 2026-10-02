@@ -42,6 +42,10 @@ optional-dependencies.dev = [
     "dpkt",
     "requests",
     "httplib2",
+    # tests/http2_test_server.py speaks real HTTP/2 through the h2
+    # library; without it the entire test collection fails
+    # (review_http2_3.md follow-up K1).
+    "h2>=4.0",
 ]
 optional-dependencies.benchmarks = [
     "requests",

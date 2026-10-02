@@ -16,6 +16,8 @@ We exercise this against a local nginx that listens on
 
 from __future__ import annotations
 
+import socket
+
 import pytest
 
 from geventhttpclient.client import HTTPClient
@@ -144,3 +146,91 @@ class TestALPNNeverForcesH2:
             assert r.status_code == 200
         finally:
             c.close()
+
+
+class TestErrorTaxonomy:
+    """K2 (review): every h2 transport failure must surface as a
+    ``ConnectionError`` so ``except ConnectionError`` catches h1 and
+    h2 uniformly. Previously: timeouts escaped as bare
+    ``TimeoutError`` and peer aborts as ``HTTP2WireError(RuntimeError)``."""
+
+    @staticmethod
+    def _tls_listener():
+        """A TLS listener with a valid cert, for hang/abort servers."""
+        import ssl
+
+        from tests.http2_test_server import CERT_FILE, KEY_FILE
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+        # Negotiate h2 like a real h2 server would, so the client's
+        # h2 pool accepts the connection and we exercise the pump
+        # path (not the ALPN fallback).
+        ctx.set_alpn_protocols(["h2"])
+        listener = socket.socket()
+        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        return listener, ctx
+
+    def test_timeout_surfaces_as_connection_error(self) -> None:
+        import threading
+
+        from geventhttpclient._http2_errors import HTTP2Error
+
+        listener, ctx = self._tls_listener()
+        port = listener.getsockname()[1]
+        held = []
+
+        def accept_and_hang() -> None:
+            # Complete the handshake, then never send application data.
+            conn, _ = listener.accept()
+            conn = ctx.wrap_socket(conn, server_side=True)
+            held.append(conn)
+
+        t = threading.Thread(target=accept_and_hang, daemon=True)
+        t.start()
+
+        c = HTTPClient("127.0.0.1", port=port, ssl=True, insecure=True, http2=True)
+        try:
+            with pytest.raises(HTTP2Error, match="did not arrive"):
+                c.request_h2(
+                    "GET", "/", headers={"host": f"127.0.0.1:{port}"},
+                    timeout=1.0,
+                )
+        finally:
+            c.close()
+            for conn in held:
+                conn.close()
+            listener.close()
+
+    def test_peer_abort_surfaces_as_connection_error(self) -> None:
+        import threading
+
+        listener, ctx = self._tls_listener()
+        port = listener.getsockname()[1]
+
+        def accept_and_abort() -> None:
+            # Complete the handshake, read the request frames, then
+            # slam the connection shut mid-stream.
+            conn, _ = listener.accept()
+            conn = ctx.wrap_socket(conn, server_side=True)
+            try:
+                conn.recv(65536)
+            finally:
+                conn.close()
+
+        t = threading.Thread(target=accept_and_abort, daemon=True)
+        t.start()
+
+        c = HTTPClient("127.0.0.1", port=port, ssl=True, insecure=True, http2=True)
+        try:
+            # HTTP2WireError is a ConnectionError now (K2); the exact
+            # subclass may evolve, the contract must not.
+            with pytest.raises(ConnectionError):
+                c.request_h2(
+                    "GET", "/", headers={"host": f"127.0.0.1:{port}"},
+                    timeout=5.0,
+                )
+        finally:
+            c.close()
+            listener.close()

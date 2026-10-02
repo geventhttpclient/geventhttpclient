@@ -53,9 +53,11 @@ follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
   The h2 transport negotiates ALPN and falls back to HTTP/1.1
   transparently when the peer picks `http/1.1`. 1xx informational
   responses are collected on `response.informational`, trailers on
-  `response.trailers` (RFC 9113 §8.1.1 / §8.1); h2 transport errors
-  raise `HTTP2Error` (a `ConnectionError` subclass) so callers can
-  catch both protocol versions uniformly
+  `response.trailers` (RFC 9113 §8.1.1 / §8.1); every h2 transport
+  failure (`HTTP2Error` for timeouts/mapping, `HTTP2WireError` for
+  peer aborts, `HTTP2ConnectionPoolError` for pool/handshake) is a
+  `ConnectionError` subclass, so callers catch both protocol
+  versions uniformly
 
 ### Changed
 
