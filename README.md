@@ -95,6 +95,30 @@ geventhttpclient.httplib.patch()
 import httplib2
 ```
 
+## httpx-compatible interface
+
+`geventhttpclient.httpx` is a drop-in surface for code written against
+`httpx.Client` - same engine, gevent concurrency, a 5-7x parser-speed
+advantage over `httpx`'s default. Per-request options live at the
+client (mirror the engine's configuration model); HTTP/2 and mounts
+are not in scope.
+
+```python
+import geventhttpclient.httpx as httpx
+
+with httpx.Client(base_url="http://api.example.com", auth=("u", "p")) as client:
+    response = client.get("v1/users", params={"limit": 10})
+    response.raise_for_status()
+    for chunk in response.iter_text(64):
+        ...
+```
+
+The response carries the same `is_success` / `is_client_error` / `...`
+predicates, `elapsed`, `num_bytes_downloaded`, `charset_encoding` and
+`http_version` httpx exposes; exceptions come through an httpx-named
+hierarchy (`HTTPError`, `RequestError`, `HTTPStatusError`,
+`TooManyRedirects`, `ConnectError`, ...).
+
 ## High Concurrency
 
 `HTTPClient` has a connection pool built in and is greenlet safe by design.

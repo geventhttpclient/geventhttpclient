@@ -17,6 +17,23 @@ left out unless it affects users of the package.
   requests-style 2-tuple `auth=("user", "pass")` and a pre-built
   header value are also accepted; the requests interface adds
   session-level `Session(auth=...)` (overridable per request)
+
+- `geventhttpclient.httpx` is an httpx-compatible drop-in surface
+  on the same engine: `Client(base_url, auth, params,
+follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
+  `num_bytes_downloaded`/`iter_bytes`/`iter_text` Response helpers, an
+  httpx-named exception hierarchy (`HTTPError`/`RequestError`/
+  `HTTPStatusError`/`TooManyRedirects`/`ConnectError`/...) and
+  `raise_for_status` carrying the failing request and response
+- `UserAgent(..., follow_redirects=True)` and
+  `raise_for_status` are also available on the requests surface:
+  `response.history` collects the redirect chain (oldest first),
+  `response.elapsed` is a `datetime.timedelta`, `response.cookies`
+  parses the response's `Set-Cookie` headers into an
+  `http.cookiejar.CookieJar`, and `raise_for_status` raises with
+  the failing response and request attached; per-request `auth`
+  accepts the requests-style `(username, password)` tuple and
+  sets the `Authorization` header for that request
 - `iter_content()`, `iter_lines()` and `json(**kw)` on `RequestsResponse`,
   mirroring the `requests` API: chunked streaming with an incremental
   unicode decoder, line splitting on `\r\n`/`\r`/`\n` across chunk
