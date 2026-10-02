@@ -34,7 +34,7 @@ class TestH1PayloadNormalisation:
     h2 path the same way the HTTP/1.1 path does."""
 
     def test_str_payload_is_bytes_on_h2(self) -> None:
-        ua = UserAgent(enable_http2=True, insecure=True)
+        ua = UserAgent(http2=True, insecure=True)
         try:
             req = _make_request(
                 f"https://{NGINX_HOST}:{NGINX_PORT}/post",
@@ -47,7 +47,7 @@ class TestH1PayloadNormalisation:
             ua.close()
 
     def test_dict_payload_is_urlencoded(self) -> None:
-        ua = UserAgent(enable_http2=True, insecure=True)
+        ua = UserAgent(http2=True, insecure=True)
         try:
             req = _make_request(
                 f"https://{NGINX_HOST}:{NGINX_PORT}/post",
@@ -69,7 +69,7 @@ class TestH2DefaultTimeout:
         # server replies quickly. The point is that the call does
         # not blow up with ``None`` from request.timeout and that
         # the round trip completes against nginx.
-        ua = UserAgent(enable_http2=True, insecure=True)
+        ua = UserAgent(http2=True, insecure=True)
         try:
             r = ua.urlopen(
                 f"https://{NGINX_HOST}:{NGINX_PORT}/get", method="GET",
@@ -102,7 +102,7 @@ class TestH3ErrorTaxonomy:
         assert UAConnectionError.__name__ == "ConnectionError"
 
     def test_connection_failure_surfaces_as_connection_error(self) -> None:
-        ua = UserAgent(enable_http2=True, insecure=True)
+        ua = UserAgent(http2=True, insecure=True)
         try:
             # Point at a closed port so the connection fails.
             with pytest.raises((HTTP2Error, OSError)):

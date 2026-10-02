@@ -51,7 +51,7 @@ class TestConnectionManagement:
         with H2TestServer() as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/", )
@@ -64,7 +64,7 @@ class TestConnectionManagement:
         with H2TestServer() as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2(
@@ -83,7 +83,7 @@ class TestStreamLifecycle:
         with H2TestServer() as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 h1 = client.request_h2("GET", "/a", )
@@ -111,7 +111,7 @@ class TestHeaderHandling:
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/anything", )
@@ -158,7 +158,7 @@ class TestServerReset:
         with H2TestServer(config=H2ServerConfig(handler=rstd_handler)) as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/", )
@@ -187,7 +187,7 @@ class TestGoAway:
         with H2TestServer() as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/", )
@@ -203,7 +203,7 @@ class TestSettings:
         with H2TestServer() as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 # Default settings include ENABLE_PUSH=0 (RFC 9113 §8.2).
@@ -233,7 +233,7 @@ class TestTrailer:
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/", )
@@ -262,7 +262,7 @@ class TestTrailer:
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/empty")
@@ -295,7 +295,7 @@ class TestInformational:
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
                 "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, enable_http2=True,
+                ssl=True, insecure=True, http2=True,
             )
             try:
                 resp = client.request_h2("GET", "/")

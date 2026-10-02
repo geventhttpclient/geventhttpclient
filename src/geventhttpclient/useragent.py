@@ -483,7 +483,7 @@ class UserAgent:
         cookiejar: CookieJarLike = None,
         headers: HeadersDataType | None = None,
         *,
-        enable_http2: bool = False,
+        http2: bool = False,
         **kw: Any,
     ) -> None:
         self.max_redirects = int(max_redirects)
@@ -493,13 +493,11 @@ class UserAgent:
         if headers:
             self.default_headers.update(headers)
         self.cookiejar = cookiejar
-        # ``enable_http2`` is a Layered message for Sprint 5: when set
-        # the HTTPClientPool creates HTTPClient instances with the
-        # corresponding kwarg. ``version`` is left at "1.1" by default
-        # (the HTTPClient default); Phase 6 adds the auto-detect
-        # switch when the TLS handshake completes via ALPN.
-        self.enable_http2 = enable_http2
-        self.clientpool = HTTPClientPool(enable_http2=enable_http2, **kw)
+        # httpx-style opt-in switch: when set, the HTTPClientPool
+        # creates HTTPClient instances with ``http2=True``.
+        # The default stays HTTP/1.1.
+        self.http2 = http2
+        self.clientpool = HTTPClientPool(http2=http2, **kw)
 
     def close(self) -> None:
         self.clientpool.close()
@@ -721,12 +719,12 @@ class UserAgent:
         client = self.clientpool.get_client(request.url_split)
         # ``version`` overrides dispatch. ``CompatRequest`` does not
         # httpx-style auto-fallback (review_http2_3.md H1 + Phase 6):
-        # the user opted into ``enable_http2=True`` on the client, so
+        # the user opted into ``http2=True`` on the client, so
         # we route through ``_urlopen_h2`` whenever the request uses
         # TLS. The h2 path performs its own ALPN-aware fallback to
         # HTTP/1.1 when the peer did not negotiate ``h2``; no
         # per-request ``version`` knob is exposed here.
-        if client.enable_http2 and client.ssl:
+        if client.http2 and client.ssl:
             return self._urlopen_h2(request, client)
         resp = client.request(
             request.method,

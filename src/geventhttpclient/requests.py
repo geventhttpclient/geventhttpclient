@@ -512,6 +512,10 @@ class Session(useragent.UserAgent):
         # overrides this; ``auth=None`` (the default) uses it.
         self._default_auth = resolve_auth(kw.pop("auth", None))
         kw.setdefault("max_redirects", 30)
+        # ``http2`` is accepted like on the other client surfaces
+        # (httpx-style opt-in); requests itself has no such kwarg, so
+        # it is documented here rather than for API parity.
+        kw.setdefault("http2", False)
         super().__init__(*args, **kw)
         if not self.cookiejar:
             self.cookiejar = CookieJar()

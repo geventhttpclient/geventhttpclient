@@ -113,7 +113,9 @@ with httpx.Client() as client:
 ```
 
 Per-request options are not plumbed through (the engine is
-session-level configured); HTTP/2 and mounts are out of scope.
+session-level configured); mounts are out of scope. HTTP/2 is
+available session-level: pass `http2=True` to `httpx.Client()` for
+the same opt-in upgrade semantics as `UserAgent(http2=True)` below.
 
 ## HTTP/2 (experimental)
 
@@ -124,12 +126,12 @@ unless you ask for it.
 ```python
 from geventhttpclient.useragent import UserAgent
 
-ua = UserAgent(enable_http2=True, insecure=True)
+ua = UserAgent(http2=True, insecure=True)
 response = ua.urlopen("https://nghttp2.org/")
 print(response.status_code, response.content)
 ```
 
-Behaviour when `enable_http2=True`:
+Behaviour when `http2=True`:
 
 - The client advertises ALPN `h2` and `http/1.1` on TLS connections.
 - If the server negotiates `h2`, requests are multiplexed over a

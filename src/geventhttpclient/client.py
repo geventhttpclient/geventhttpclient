@@ -211,7 +211,7 @@ class HTTPClient:
         proxy_password: str | None = None,
         version: str = HTTP_11,
         headers_type: type[Headers] = Headers,
-        enable_http2: bool = False,
+        http2: bool = False,
     ) -> None:
         if headers is None:
             headers = headers_type()
@@ -291,14 +291,16 @@ class HTTPClient:
         # and the target uses TLS — h2 over plaintext (h2c) needs a
         # separate code path (prior-knowledge mode) and is out of Sprint
         # 3b scope.
-        self.enable_http2 = enable_http2
+        # httpx-style opt-in switch (``http2=True``); the default
+        # ``False`` keeps the HTTP/1.1 path untouched.
+        self.http2 = http2
         self._h2_pool: HTTP2ConnectionPool | None = (
             HTTP2ConnectionPool(
                 connection_timeout=connection_timeout,
                 network_timeout=network_timeout,
                 insecure=insecure,
             )
-            if enable_http2 and self.ssl
+            if http2 and self.ssl
             else None
         )
 
@@ -710,7 +712,7 @@ class HTTPClient:
         ALPN-aware auto-fallback (Phase 6 + review_http2_3.md H1):
         when the peer did not negotiate ``h2`` we silently retry on
         the HTTP/1.1 pool. Callers therefore do not need a ``version``
-        switch -- opt into HTTP/2 by setting ``enable_http2=True`` on
+        switch -- opt into HTTP/2 by setting ``http2=True`` on
         the client, and let the transport pick the protocol that
         actually works.
 
@@ -730,7 +732,7 @@ class HTTPClient:
         """
         if self._h2_pool is None:
             raise HTTP2Error(
-                "enable_http2=True must be set on the HTTPClient and the "
+                "http2=True must be set on the HTTPClient and the "
                 "URL must use https://",
             )
         path = request_uri
@@ -756,7 +758,7 @@ class HTTPClient:
         # we always try h2 first because the user opted into the h2
         # pool, but if the peer's ALPN chose http/1.1 we close that
         # socket and fall back to the HTTP/1.1 pool. There is no
-        # per-request ``version`` knob; opt in via ``enable_http2``.
+        # per-request ``version`` knob; opt in via ``http2``.
         deadline = (time.monotonic() + timeout) if timeout is not None else None
         attempts = max_retries + 1
         last_exc: Exception | None = None
@@ -861,15 +863,15 @@ class HTTPClientPool:
     only way to hand clients back; nothing expires on its own, so the pool grows
     with the number of hosts it has talked to.
 
-    ``enable_http2`` is forwarded to every HTTPClient the pool creates
+    ``http2`` is forwarded to every HTTPClient the pool creates
     (Sprint 5). The pool itself stays HTTP/1.1-shaped: each HTTPClient
-    owns its own HTTP2ConnectionPool when ``enable_http2=True``, so
+    owns its own HTTP2ConnectionPool when ``http2=True``, so
     multiplexed h2 sessions are per-host exactly like h1 sockets.
     """
 
-    def __init__(self, *, enable_http2: bool = False, **kw: Any) -> None:
+    def __init__(self, *, http2: bool = False, **kw: Any) -> None:
         self.clients: dict[tuple[str, int | None], HTTPClient] = {}
-        self.client_args = {**kw, "enable_http2": enable_http2}
+        self.client_args = {**kw, "http2": http2}
 
     def get_client(self, url: str | URL) -> HTTPClient:
         if not isinstance(url, URL):

@@ -344,12 +344,16 @@ class Client(Session):
         params: dict[str, Any] | None = None,
         follow_redirects: bool = False,
         timeout: float | tuple[float, float] | None = None,
+        http2: bool = False,
         **kw: Any,
     ) -> None:
         self.base_url = base_url.rstrip("/") if base_url else None
         self.auth_header = _resolve_auth(auth)
         self.session_params = dict(params) if params else None
         self.follow_redirects = follow_redirects
+        # httpx parity: ``http2=True`` opts into HTTP/2 with automatic
+        # ALPN-based fallback to HTTP/1.1 (same kwarg name as httpx).
+        kw["http2"] = http2
         if isinstance(timeout, tuple):
             if len(timeout) == 2:
                 kw.setdefault("connection_timeout", timeout[0])

@@ -48,8 +48,8 @@ follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
   along the chain - the permissive defaults are unaffected
 - Experimental HTTP/2 support (RFC 9113) backed by a vendored
   nghttp2 v1.70.0 C extension with a sans-IO core. Opt-in per client
-  with `HTTPClient(..., enable_http2=True)` or
-  `UserAgent(..., enable_http2=True)`; the default stays HTTP/1.1.
+  with `HTTPClient(..., http2=True)` or
+  `UserAgent(..., http2=True)`; the default stays HTTP/1.1.
   The h2 transport negotiates ALPN and falls back to HTTP/1.1
   transparently when the peer picks `http/1.1`. 1xx informational
   responses are collected on `response.informational`, trailers on
