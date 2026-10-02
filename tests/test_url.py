@@ -106,16 +106,137 @@ def test_redirection_abs_path():
     assert updated.fragment == ""
 
 
-@pytest.mark.parametrize("redirection", ("test.html?key=val", "folder/test.html?key=val"))
-def test_redirection_rel_path(redirection):
+@pytest.mark.parametrize(
+    ("redirection", "expected_path"),
+    [
+        ("test.html?key=val", "/subdir/test.html"),
+        ("folder/test.html?key=val", "/subdir/folder/test.html"),
+    ],
+)
+def test_redirection_rel_path(redirection, expected_path):
+    """RFC 3986 section 5.3: a relative path merges against all but the last
+    segment of the base path, not against the full base path."""
     url = URL(url_full)
     updated = url.redirect(redirection)
     assert updated.host == url.host
     assert updated.port == url.port
-    assert updated.path.startswith("/subdir/")
-    assert updated.path.endswith(redirection.split("?", 1)[0])
+    assert updated.path == expected_path
     assert updated.query == "key=val"
     assert updated.fragment == ""
+
+
+@pytest.mark.parametrize(
+    ("redirection", "expected"),
+    [
+        # RFC 3986 section 5.4.2, normal examples (base http://a/b/c/d?q)
+        ("g", "http://a/b/c/g"),
+        ("./g", "http://a/b/c/g"),
+        ("g/", "http://a/b/c/g/"),
+        ("/g", "http://a/g"),
+        ("//g", "http://g"),
+        ("?y", "http://a/b/c/d?y"),
+        ("g?y", "http://a/b/c/g?y"),
+        ("#s", "http://a/b/c/d?q#s"),
+        ("g#s", "http://a/b/c/g#s"),
+        ("g?y#s", "http://a/b/c/g?y#s"),
+        # RFC 3986 section 5.4.2, abnormal examples
+        ("../../../g", "http://a/g"),
+        ("../../../../g", "http://a/g"),
+        ("/./g", "http://a/g"),
+        ("/../g", "http://a/g"),
+        ("g.", "http://a/b/c/g."),
+        (".g", "http://a/b/c/.g"),
+        ("./../g", "http://a/b/g"),
+        ("./g/.", "http://a/b/c/g/"),
+        ("g/./h", "http://a/b/c/g/h"),
+        ("g/../h", "http://a/b/c/h"),
+        ("../up", "http://a/b/up"),
+        ("/a/b/c/../up", "http://a/a/b/up"),
+        # query and fragment content never takes part in resolution
+        ("g?y/./x", "http://a/b/c/g?y/./x"),
+        ("g#s/../x", "http://a/b/c/g#s/../x"),
+    ],
+)
+def test_redirection_resolution_rfc3986_5_4(redirection, expected):
+    assert URL("http://a/b/c/d?q").redirect(redirection) == URL(expected)
+
+
+def test_redirection_params_only_reference_merges_as_a_path_segment():
+    """A reference like ``;x`` has an empty path with parameters; it merges
+    as a path segment of its own, not as parameters of the base path, and
+    the base parameters do not leak into it (urljoin behaves the same)."""
+    url = URL("https://example.com/a/b/c/d;p?q")
+    updated = url.redirect(";x")
+    assert str(updated) == "https://example.com/a/b/c/;x"
+
+
+def test_redirection_absolute_reference_drops_dot_segments():
+    """Dot segment removal applies to absolute paths and full URLs too
+    (RFC 3986 section 5.2.2 runs remove_dot_segments on every resolved
+    path)."""
+    url = URL("https://example.com/dir/page")
+    assert url.redirect("/a/../b").path == "/b"
+    updated = url.redirect("https://other.example.com/x/../y")
+    assert str(updated) == "https://other.example.com/y"
+
+
+def test_redirection_protocol_relative_keeps_base_scheme():
+    """``//host/path`` resolves against the base URI (RFC 3986 section 5.2.2):
+    the scheme must survive so an https connection is not downgraded to plain
+    http by a redirect."""
+    url = URL("https://example.com/dir/page")
+    updated = url.redirect("//other.example.com/p")
+    assert updated.scheme == "https"
+    assert updated.host == "other.example.com"
+    assert updated.port == 443
+    assert updated.path == "/p"
+    assert str(updated) == "https://other.example.com/p"
+
+
+def test_redirection_with_explicit_scheme_is_untouched():
+    url = URL("https://example.com/dir/page")
+    updated = url.redirect("http://other.example.com/p")
+    url_full2 = URL("http://other.example.com/p")
+    for attr in URL.__slots__:
+        assert getattr(updated, attr) == getattr(url_full2, attr)
+
+
+def test_redirection_query_only_keeps_base_path():
+    """A reference with an empty path keeps the base path (RFC 3986 section
+    5.2.2); the merge must not turn /a/b into /a/b/."""
+    url = URL("https://example.com/a/b?old=1")
+    updated = url.redirect("?new=2")
+    assert updated.path == "/a/b"
+    assert updated.query == "new=2"
+    assert updated.fragment == ""
+
+
+def test_redirection_query_only_keeps_base_path_parameters():
+    """urlparse splits ``;p`` out of the last path segment into its own
+    field; RFC 3986 section 5.2.2 keeps the whole base path for references
+    with an empty path - parameters included, like urljoin does."""
+    url = URL("https://example.com/a/b/c/d;p?q")
+    updated = url.redirect("?new=2")
+    assert updated.path == "/a/b/c/d"
+    assert updated.params == "p"
+    assert updated.query == "new=2"
+    assert str(updated) == "https://example.com/a/b/c/d;p?new=2"
+
+
+def test_redirection_fragment_only_keeps_path_and_query():
+    """Without a reference path or query, the base path and base query both
+    survive; only the fragment is replaced."""
+    url = URL("https://example.com/a/b?old=1")
+    updated = url.redirect("#frag")
+    assert updated.path == "/a/b"
+    assert updated.query == "old=1"
+    assert updated.fragment == "frag"
+
+
+def test_redirection_empty_reference_resolves_to_base_without_fragment():
+    url = URL("https://example.com/a/b?old=1")
+    updated = url.redirect("")
+    assert updated == URL("https://example.com/a/b?old=1")
 
 
 def test_redirection_full_path():

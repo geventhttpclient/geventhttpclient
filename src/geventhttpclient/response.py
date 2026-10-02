@@ -38,6 +38,8 @@ class HTTPResponse(HTTPResponseParser):
         self.headers_complete = False
         self.message_begun = False
         self.message_complete = False
+        self._message_ended_in_skip_body = False
+        self._trailing_data_dropped = False
         self._headers_index = headers_type()
         self._header_state = HEADER_STATE_INIT
         self._current_header_field: str | None = None
@@ -71,7 +73,12 @@ class HTTPResponse(HTTPResponseParser):
         It is not the opposite of should_keep_alive method. It also checks
         that the body as been consumed completely.
         """
-        return not self.message_complete or self.parser_failed() or not super().should_keep_alive()
+        return (
+            self._trailing_data_dropped
+            or not self.message_complete
+            or self.parser_failed()
+            or not super().should_keep_alive()
+        )
 
     @property
     def status_code(self) -> int:
@@ -119,7 +126,30 @@ class HTTPResponse(HTTPResponseParser):
         self._header_state = HEADER_STATE_DONE
         self.headers_complete = True
 
-        return self.method == "HEAD"  # SKIP BODY
+        result = self.method == "HEAD"  # SKIP BODY
+        if result:
+            # the message ends with the headers; llhttp parses any bytes
+            # beyond them as the next response on the wire
+            self._message_ended_in_skip_body = True
+        return result
+
+    def feed(self, data: str | bytes) -> None:
+        try:
+            super().feed(data)
+        except HTTPParseError:
+            # A bodyless response (HEAD) whose server sent a protocol
+            # violating body: llhttp completes the message at the header
+            # end, then restarts for the leftover bytes and rejects them.
+            # The restart also clears the parsed message state, so restore
+            # the completion here and drop the trailing data - the
+            # connection is marked for closing (should_close) instead of
+            # surfacing a parse error. Garbage before complete headers still
+            # raises.
+            if not self._message_ended_in_skip_body:
+                raise
+            self.headers_complete = True
+            self.message_complete = True
+            self._trailing_data_dropped = True
 
     def _on_header_field(self, string: str) -> None:
         if self._header_state == HEADER_STATE_FIELD:

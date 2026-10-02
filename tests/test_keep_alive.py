@@ -1,6 +1,3 @@
-import pytest
-
-from geventhttpclient._parser import HTTPParseError
 from geventhttpclient.response import HTTPResponse
 
 
@@ -62,9 +59,8 @@ def test_keep_alive_bodyless_response_with_body():
     assert response.should_keep_alive()
 
     response = HTTPResponse(method="HEAD")
-    with pytest.raises(HTTPParseError):
-        response.feed("""HTTP/1.1 200 Ok\r\nContent-Length: 10\r\n\r\n0123456789""")
-    assert not response.should_keep_alive()
+    response.feed("""HTTP/1.1 200 Ok\r\nContent-Length: 10\r\n\r\n0123456789""")
+    assert response.message_complete
     assert response.should_close()
 
 

@@ -10,8 +10,14 @@ import gevent.socket
 import pytest
 
 from geventhttpclient import __version__
-from geventhttpclient.client import METHOD_GET, HTTPClient
+from geventhttpclient.client import (
+    IDEMPOTENT_METHODS,
+    METHOD_GET,
+    HTTPClient,
+    _may_retry_after_send_error,
+)
 from geventhttpclient.connectionpool import ConnectionPool
+from geventhttpclient.response import HTTPConnectionClosed
 from tests.common import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
 
 
@@ -581,3 +587,174 @@ class TestIsSocketAlive:
             assert pool._is_socket_alive(s1) is False
         finally:
             s1.close()
+
+
+def test_build_request_splits_list_header_values_into_field_lines():
+    client = HTTPClient("localhost", port=1)  # never connects
+    request = client._build_request("GET", "/", b"", {"X-Multi": ["a", "b"]})
+    assert "X-Multi: a\r\nX-Multi: b\r\n" in request
+    assert "['a', 'b']" not in request
+
+
+def test_build_request_allows_empty_and_tab_header_values():
+    client = HTTPClient("localhost", port=1)  # never connects
+    request = client._build_request("GET", "/", b"", {"X-Empty": "", "X-Tab": "a\tb"})
+    assert "X-Empty: \r\n" in request
+    assert "X-Tab: a\tb\r\n" in request
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["bar\r\nX-Evil: injected", "bar\nX-Evil: injected", "bar\rX-Evil: injected", "foo\x00bar"],
+)
+def test_build_request_rejects_header_value_injection(value):
+    """RFC 9110 section 5.5: field values carry no CR/LF; without the check
+    a value smuggles extra headers into the request head."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", "/", b"", {"X-Foo": value})
+
+
+@pytest.mark.parametrize("field", ["X-Foo\r\nBar", "X-Foo\nBar", "X: Foo", "X Foo"])
+def test_build_request_rejects_header_field_name_injection(field):
+    """RFC 9110 section 5.1: a header field name is a token."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", "/", b"", {field: "a"})
+
+
+@pytest.mark.parametrize("method", ["GET\r\nX-Smuggled: 1", "GET\n", "GE T", "GET:"])
+def test_build_request_rejects_method_injection(method):
+    """RFC 9110 section 9.1: methods are tokens; injection into the request
+    line smuggles a second request onto the connection."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request(method, "/", b"", {})
+
+
+@pytest.mark.parametrize("request_uri", ["/a\r\nX-Smuggled: 1", "/a\n", "/a b", "/a\x00"])
+def test_build_request_rejects_request_uri_injection(request_uri):
+    """RFC 9112 section 3: request targets carry no whitespace and no
+    control characters."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", request_uri, b"", {})
+
+
+def test_build_request_rejects_protocol_relative_request_uri():
+    """RFC 9112 section 3.2: origin-form has exactly one leading slash; a
+    '//host/path' target is a protocol-relative reference, not a path, and
+    used to be sent literally with an empty first segment."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    with pytest.raises(ValueError):
+        client._build_request("GET", "//other.example.com/p", b"", {})
+
+
+def test_send_retry_is_limited_to_idempotent_methods():
+    """RFC 9110 section 9.2.1: exactly these methods are idempotent."""
+    assert IDEMPOTENT_METHODS == {"GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"}
+    assert _may_retry_after_send_error("GET")
+    assert _may_retry_after_send_error("put")
+    assert not _may_retry_after_send_error("POST")
+    assert not _may_retry_after_send_error("PATCH")
+
+
+def test_broken_connection_after_full_send_is_not_retried_for_post():
+    """The body reached the server in full: a connection that dies at
+    response read time may not trigger a resend for non-idempotent
+    methods (RFC 9110 section 9.2.2)."""
+    connections: list = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        connections.append(1)
+        if len(connections) == 1:
+            # request received, but the server closes without a response
+            sock.close()
+            return
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    with server(handle):
+        client = HTTPClient(LISTENER[0], port=LISTENER[1])
+        with pytest.raises(HTTPConnectionClosed):
+            client.request("POST", "/", body=b"payload")
+    assert len(connections) == 1
+
+
+def test_broken_connection_after_full_send_is_retried_for_get():
+    connections = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        connections.append(1)
+        if len(connections) == 1:
+            sock.close()
+            return
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    with server(handle):
+        client = HTTPClient(LISTENER[0], port=LISTENER[1])
+        resp = client.request("GET", "/")
+        assert resp.status_code == 200
+    assert len(connections) == 2
+
+
+def test_bodyless_post_and_put_send_content_length_zero():
+    """RFC 9112 section 6.3: body-carrying methods SHOULD send
+    Content-Length. An empty or absent body is a zero, like curl and
+    http.client send it."""
+    client = HTTPClient("localhost", port=1)  # never connects
+    for method in ("POST", "PUT", "PATCH"):
+        for body in (None, b""):
+            request = client._build_request(method, "/", body, {})
+            assert "Content-Length: 0\r\n" in request
+
+
+def test_requests_without_body_semantics_send_no_content_length():
+    client = HTTPClient("localhost", port=1)  # never connects
+    for method in ("GET", "HEAD", "OPTIONS", "DELETE", "TRACE"):
+        for body in (None, b""):
+            request = client._build_request(method, "/", body, {})
+            assert "Content-Length" not in request
+
+
+def test_request_head_is_encoded_as_latin1():
+    """Header values are latin-1 on the wire, symmetric with the response
+    header decoding and http.client - not UTF-8 mojibake."""
+    received = []
+
+    def handle(sock, address):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            chunk = sock.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+        received.append(data)
+        body = b"ok"
+        sock.sendall(
+            b"HTTP/1.1 200 OK\r\nContent-Length: " + str(len(body)).encode() + b"\r\n\r\n" + body
+        )
+
+    with server(handle):
+        client = HTTPClient(LISTENER[0], port=LISTENER[1])
+        resp = client.request("GET", "/", headers={"X-City": "Köln"})
+        assert resp.status_code == 200
+    assert b"X-City: K\xf6ln\r\n" in received[0]
+    assert "Köln".encode() not in received[0]

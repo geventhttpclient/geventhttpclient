@@ -48,6 +48,12 @@ class Headers(dict[str, _StoredEntry]):
     of matching header fields and .add() and .extend() for appending header
     lines instead of overwriting them.
 
+    A list or tuple value is stored as one field line per element (RFC 9110
+    section 5.2): ``Headers({'X-Multi': ['a', 'b']})`` sends
+    ``X-Multi: a`` and ``X-Multi: b`` as two lines, which recipients combine
+    to ``a, b`` (section 5.3). It never ends up on the wire as a Python
+    ``str`` of the list.
+
     Field names and values are plain str: the parser decodes the bytes of
     the wire as latin-1, and bytes passed in here are not handled.
 
@@ -65,7 +71,7 @@ class Headers(dict[str, _StoredEntry]):
 
     def __init__(
         self,
-        headers: "Headers | Mapping[str, str] | Iterable[tuple[str, str]] | None" = None,
+        headers: "Headers | Mapping[str, str | list[str] | tuple[str, ...]] | Iterable[tuple[str, str]] | None" = None,
         **kwargs: str,
     ) -> None:
         dict.__init__(self)
@@ -79,8 +85,13 @@ class Headers(dict[str, _StoredEntry]):
 
     # the raw storage takes tuples and lists of tuples, the public surface
     # only takes and speaks str
-    def __setitem__(self, field: str, value: str) -> None:  # type: ignore[override]
-        return _dict_setitem(self, field.lower(), (field, value))
+    def __setitem__(self, field: str, value: str | list[str] | tuple[str, ...]) -> None:  # type: ignore[override]
+        field_lower = field.lower()
+        if isinstance(value, (list, tuple)):
+            # one field line per element, see the class docstring
+            _dict_setitem(self, field_lower, [(field, item) for item in value])
+            return
+        return _dict_setitem(self, field_lower, (field, value))
 
     def __getitem__(self, field: str) -> str | list[str]:  # type: ignore[override]
         vals = _dict_getitem(self, field.lower())
@@ -178,15 +189,22 @@ class Headers(dict[str, _StoredEntry]):
         self.update(other)
         return self
 
-    def add(self, field: str, value: str) -> None:
+    def add(self, field: str, value: str | list[str] | tuple[str, ...]) -> None:
         """Add a (field, value) pair without overwriting the value if it already
         exists.
+
+        A list or tuple value is added as one field line per element, in
+        order, after any existing lines of the field.
 
         >>> headers = Headers(foo='bar')
         >>> headers.add('Foo', 'baz')
         >>> headers['foo']
         'bar, baz'
         """
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                self.add(field, item)
+            return
         field_lower = field.lower()
         new_vals = field, value
         # Keep the common case aka no item present as fast as possible
@@ -234,8 +252,11 @@ class Headers(dict[str, _StoredEntry]):
         other = args[0] if len(args) >= 1 else ()
 
         if isinstance(other, type(self)):
-            for field, value in other.items():
-                self[field] = value
+            for field in other:
+                # copy the raw storage entry: items() yields multi line fields
+                # line by line, and the per-line overwrite would keep only the
+                # last line of the field
+                _dict_setitem(self, field, _dict_getitem(other, field))
         elif isinstance(other, Mapping) or hasattr(other, "keys"):
             for field in other:
                 self[field] = other[field]

@@ -133,25 +133,111 @@ class URL:
         """Alias of str(url), mirroring the parse result's own name for it."""
         return self._parsed.geturl()
 
+    @staticmethod
+    def _remove_dot_segments(path: str) -> str:
+        """RFC 3986 section 5.2.4: resolve "." and ".." segments."""
+        segments: list[str] = []
+        while path:
+            if path.startswith("../"):
+                path = path[3:]
+            elif path.startswith("./"):
+                path = path[2:]
+            elif path.startswith("/./"):
+                path = "/" + path[3:]
+            elif path == "/.":
+                path = "/"
+            elif path.startswith("/../"):
+                path = "/" + path[4:]
+                if segments:
+                    segments.pop()
+            elif path == "/..":
+                path = "/"
+                if segments:
+                    segments.pop()
+            elif path in (".", ".."):
+                path = ""
+            else:
+                cut = path.find("/", 1) if path.startswith("/") else path.find("/")
+                if cut == -1:
+                    segments.append(path)
+                    path = ""
+                else:
+                    segments.append(path[:cut])
+                    path = path[cut:]
+        return "".join(segments)
+
     def redirect(self, other: str | URL) -> URL:
-        """Redirect to the other URL, relative to the current one."""
+        """Redirect to the other URL, relative to the current one.
+
+        The reference is resolved per RFC 3986 section 5.2: dot segments are
+        removed from the resolved path (section 5.2.4) and a relative path is
+        merged against the base path (section 5.3).
+        """
         if isinstance(other, str):
             other = URL(other)
 
-        if other.netloc:
-            return other
-
-        # relative redirect
-        scheme, netloc, path, params, query, fragment = other
-        scheme = self.scheme
-        netloc = self.netloc
-        if not path.startswith("/"):
-            if path.endswith("/"):
-                path = self.path + path
-            else:
-                path = self.path.rstrip("/") + "/" + path
-        parsed = urlparse.ParseResult(scheme, netloc, path, params, query, fragment)
-        return type(self)(parsed)
+        if other.scheme:
+            # RFC 3986 section 5.2.2: a reference with a scheme replaces
+            # scheme, authority and path entirely.
+            resolved = other
+        elif other.netloc:
+            # protocol-relative reference ("//host/path"): section 5.2.2
+            # resolves it against the base URI, which keeps the base
+            # scheme. Returning `other` unchanged left the scheme empty and
+            # HTTPClient.from_url then opened a plain-HTTP connection - an
+            # https-to-http downgrade an attacker can force with a single
+            # Location header on a TLS connection.
+            resolved = type(self)(
+                urlparse.ParseResult(
+                    self.scheme,
+                    other.netloc,
+                    other.path,
+                    other.params,
+                    other.query,
+                    other.fragment,
+                )
+            )
+        else:
+            # relative reference
+            scheme, netloc, path, params, query, fragment = other
+            scheme = self.scheme
+            netloc = self.netloc
+            if not path and not params:
+                # RFC 3986 section 5.2.2: a reference with an empty path keeps
+                # the base path as-is and, unless it defines a query of its
+                # own, the base query. Running "?x=1" through the merge below
+                # turned /a/b into /a/b/?x=1, which path-sensitive servers and
+                # caches treat as a different resource. The path parameters
+                # (";p", split into their own field by urlparse) belong to the
+                # base path and are kept with it.
+                path = self.path
+                params = self.params
+                if not query:
+                    query = self.query
+            elif not path.startswith("/"):
+                # RFC 3986 section 5.3: merge against all but the last
+                # segment of the base path. Appending to the full base path
+                # instead turned /dir/page + test.html into
+                # /dir/page/test.html, a resource that does not exist.
+                if not self.path:
+                    path = "/" + path
+                elif self.path.endswith("/"):
+                    path = self.path + path
+                else:
+                    path = self.path[: self.path.rfind("/") + 1] + path
+            resolved = type(self)(
+                urlparse.ParseResult(scheme, netloc, path, params, query, fragment)
+            )
+        return type(self)(
+            urlparse.ParseResult(
+                resolved.scheme,
+                resolved.netloc,
+                self._remove_dot_segments(resolved.path),
+                resolved.params,
+                resolved.query,
+                resolved.fragment,
+            )
+        )
 
     @property
     def quoted(self) -> str:

@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 import brotli
 import gevent
 
-from geventhttpclient.client import HTTPClient, HTTPClientPool
+from geventhttpclient.client import IDEMPOTENT_METHODS, HTTPClient, HTTPClientPool
 from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
@@ -86,6 +86,14 @@ class EmptyResponse(ConnectionError):
     pass
 
 
+class UnrewoundBodyError(ConnectionError):
+    pass
+
+
+class UnsupportedRedirectSchemeError(ConnectionError):
+    pass
+
+
 class CompatRequest(urllib.request.Request):
     """urllib.request.Request compatible request class.
     See also: http://docs.python.org/library/cookielib.html
@@ -99,6 +107,7 @@ class CompatRequest(urllib.request.Request):
 
     url_split: URL
     original_host: str
+    original_origin: tuple[str, str, int | None]
     headers: Headers  # type: ignore[assignment]
     payload: Payload
     # the base class allows None until the opener picks a method, ours is final
@@ -114,6 +123,11 @@ class CompatRequest(urllib.request.Request):
     ) -> None:
         self.set_url(url, params=params)
         self.original_host = self.url_split.host
+        self.original_origin = (
+            self.url_split.scheme,
+            self.url_split.host,
+            self.url_split.port,
+        )
         self.method = method.upper()
         # None is accepted for backwards compatibility with callers which never
         # touch the headers. Every path reading them requires a Headers object.
@@ -164,8 +178,12 @@ class CompatRequest(urllib.request.Request):
         return self.original_host
 
     def is_unverifiable(self) -> bool:
-        """See http://tools.ietf.org/html/rfc2965.html. Not fully implemented!"""
-        return False
+        """RFC 2965 section 3.3: True once the request has been through a
+        redirect. urllib.request marks redirected requests the same way, so
+        the stdlib cookie policy treats cookies set along the chain as
+        unverifiable - blocked by strict policies, ignored by the
+        permissive defaults."""
+        return self.unverifiable
 
     def add_unredirected_header(self, key: str, val: str) -> None:
         # the base class parks these in a dict our client never reads, so they
@@ -178,10 +196,39 @@ class CompatRequest(urllib.request.Request):
         return list(self.headers.items())
 
     def _drop_payload(self) -> None:
-        self.method = "GET"
+        if self.method != "HEAD":
+            # RFC 9110 section 15.4: an automatic redirect changes the
+            # request method according to the redirecting status code's
+            # semantics. That rewrites body-carrying methods to GET; HEAD
+            # stays HEAD, like requests and browsers keep it.
+            self.method = "GET"
         self.payload = None
         for item in ("content-length", "content-type", "content-encoding"):
             self.headers.discard(item)
+
+    def _rewind_payload(self) -> None:
+        """307/308 keep method and payload: a seekable body is rewound so the
+        resent request carries the full body again. After the first send the
+        stream sits at its end and the redirected request would ship an empty
+        body under the original length, leaving the server waiting for bytes
+        that never arrive."""
+        if self.payload is None:
+            return
+        seek = getattr(self.payload, "seek", None)
+        if seek is not None:
+            try:
+                seek(0)
+            except OSError as e:
+                # e.g. a BufferedReader on a pipe (subprocess.Popen.stdout):
+                # the seek attribute exists, seek(0) fails with ESPIPE - the
+                # body is not rewindable either
+                raise UnrewoundBodyError(
+                    self.url, "payload cannot be rewound and resent after a redirect"
+                ) from e
+        elif not isinstance(self.payload, (bytes, bytearray, memoryview, str, Mapping)):
+            raise UnrewoundBodyError(
+                self.url, "payload cannot be rewound and resent after a redirect"
+            )
 
     def _drop_cookies(self) -> None:
         for item in ("cookie", "cookie2"):
@@ -189,10 +236,39 @@ class CompatRequest(urllib.request.Request):
 
     def redirect(self, code: int, location: str) -> None:
         """Modify the request inplace to point to the new location"""
-        self.set_url(self.url_split.redirect(location))
+        new_url = self.url_split.redirect(location)
+        # RFC 9110 section 15.4 has the user agent resolve Location within
+        # the HTTP context it is already in; a redirect to ftp:, data: or a
+        # custom scheme is outside of it. HTTPClient.from_url would silently
+        # degrade anything but https to plain http, so refuse instead of
+        # downgrading.
+        if new_url.scheme not in ("http", "https"):
+            raise UnsupportedRedirectSchemeError(
+                self.url, f"refusing to follow redirect to {new_url.scheme!r} URL"
+            )
+        self.set_url(new_url)
         if code in (301, 302, 303):
             self._drop_payload()
+        else:
+            # 307/308 keep the payload: rewind what was sent so far, the
+            # whole body belongs to the redirected request again
+            self._rewind_payload()
         self._drop_cookies()
+        if not self._is_same_origin():
+            self.headers.discard("authorization")
+        # RFC 2965 section 3.3: a request produced by a server redirect is
+        # unverifiable from the user's perspective. urllib.request marks
+        # redirected requests the same way, and strict cookie policies use
+        # the flag to refuse cookies set along the chain. Cookies of the
+        # redirecting response itself were extracted before this point and
+        # stay verifiable.
+        self.unverifiable = True
+
+    def _is_same_origin(self) -> bool:
+        """The RFC 6454 origin (scheme, host, port) of the redirect target
+        against the origin this request was created with."""
+        url = self.url_split
+        return (url.scheme, url.host, url.port) == self.original_origin
 
 
 class CompatResponse:
@@ -397,6 +473,13 @@ class UserAgent:
     ) -> None:
         self.close()
 
+    def _may_retry(self, request: CompatRequest) -> bool:
+        """RFC 9110 section 9.2.2: a client SHOULD NOT automatically retry a
+        request with a non-idempotent method - the previous behavior retried
+        POST and PATCH on timeout, EPIPE, ECONNRESET and empty responses,
+        which can execute such a request twice."""
+        return request.method in IDEMPOTENT_METHODS
+
     def _verify_status(self, status_code: int, url: str | URL | None = None) -> None:
         """Hook for subclassing"""
         if status_code not in self.valid_response_codes:
@@ -523,6 +606,9 @@ class UserAgent:
                 except BaseException as e:  # noqa: BLE001
                     e.request = req  # type: ignore[attr-defined]
                     last_error = self._handle_error(e, url=req.url)
+                    # _handle_error returning means it wants this retried
+                    if not self._may_retry(req):
+                        raise self._handle_retries_exceeded(url, last_error=last_error)
                     break  # Continue with next retry
 
                 # We received a response
@@ -573,6 +659,8 @@ class UserAgent:
                             # re-using the name bound by the except block above,
                             # which python deletes once the handler is left
                             e = EmptyResponse(url, "Empty response body received")  # type: ignore[misc]
+                            if not self._may_retry(req):
+                                raise self._handle_retries_exceeded(url, last_error=e)  # type: ignore[misc]
                             last_error = self._handle_error(e, url=req.url)  # type: ignore[misc]
                             break
                         else:

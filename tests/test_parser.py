@@ -199,3 +199,20 @@ def test_on_message_begin():
     response._on_message_begin = on_message_begin
     with pytest.raises(RuntimeError):
         response.feed(RESPONSE)
+
+
+def test_head_response_with_protocol_violating_body_parses():
+    """Servers do send bodies for HEAD responses. The parser completes the
+    message at the header end (skip body); the leftover wire bytes must not
+    surface as a parse error, and the connection must not be reused."""
+    response = HTTPResponse(method="HEAD")
+    response.feed(b"HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\ndone")
+    assert response.status_code == 200
+    assert response.message_complete
+    assert response.should_close()
+
+
+def test_garbage_before_complete_headers_still_raises():
+    response = HTTPResponse(method="HEAD")
+    with pytest.raises(HTTPException):
+        response.feed(b"done\r\n\r\n")

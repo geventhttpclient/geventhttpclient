@@ -1,6 +1,7 @@
 import base64
 import errno
 import os
+import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from typing import IO, Any
 
@@ -16,6 +17,33 @@ from geventhttpclient.response import (
     HTTPSocketPoolResponse,
 )
 from geventhttpclient.url import URL
+
+# RFC 9110 section 9.1 and section 5.1: a method and a header field name
+# are tokens. Section 5.5: a field value carries no CR and no LF - request
+# smuggling builds on exactly those bytes (RFC 9112 section 5.2 deprecates
+# folding). Section 3: a request target carries no whitespace and no
+# control characters.
+_TOKEN_RE = re.compile(r"\A[!#$%&'*+\-.^_`|~0-9A-Za-z]+\Z")
+_FIELD_VALUE_RE = re.compile(r"\A[\t\x20-\x7e\x80-\xff]*\Z")
+_REQUEST_TARGET_RE = re.compile(r"\A[^\x00-\x20\x7f]*\Z")
+
+# RFC 9110 section 9.2.1: GET, HEAD, OPTIONS, TRACE, PUT and DELETE are the
+# idempotent methods.
+IDEMPOTENT_METHODS = frozenset(("GET", "HEAD", "OPTIONS", "TRACE", "PUT", "DELETE"))
+
+
+# RFC 9110 sections 9.3.1 and 9.3.3 and RFC 5789: the methods whose
+# requests define a meaning for enclosed content.
+_BODY_CARRYING_METHODS = frozenset(("POST", "PUT", "PATCH"))
+
+
+def _may_retry_after_send_error(method: str) -> bool:
+    """RFC 9110 section 9.2.2: a client SHOULD NOT automatically retry a
+    request with a non-idempotent method once it may have been processed.
+    After a send error part or all of the body may have reached the server,
+    so the retry is limited to idempotent methods."""
+    return method.upper() in IDEMPOTENT_METHODS
+
 
 CRLF = "\r\n"
 WHITESPACE = " "
@@ -281,6 +309,18 @@ class HTTPClient:
         if headers is None:
             headers = {}
 
+        if not isinstance(method, str) or not _TOKEN_RE.fullmatch(method):
+            raise ValueError(f"invalid HTTP method {method!r}")
+        if not isinstance(request_uri, str) or not _REQUEST_TARGET_RE.fullmatch(request_uri):
+            raise ValueError(f"invalid request URI {request_uri!r}")
+        if request_uri.startswith("//"):
+            # origin-form has exactly one leading slash (RFC 9112 section
+            # 3.2); "//host/path" is a protocol-relative reference that would
+            # be sent as a literal path with an empty first segment
+            raise ValueError(
+                f"invalid request URI {request_uri!r}: protocol-relative targets are not origin-form"
+            )
+
         header_fields = self.headers_type()
         header_fields.update(self.default_headers)
         header_fields.update(headers)
@@ -313,6 +353,12 @@ class HTTPClient:
             body_length = _get_body_length(body)
             if body_length:
                 header_fields[HEADER_CONTENT_LENGTH] = str(body_length)
+        elif not chunked and HEADER_CONTENT_LENGTH not in header_fields:
+            # RFC 9112 section 6.3: methods that define a meaning for
+            # enclosed content SHOULD carry Content-Length. An empty or
+            # absent body is a zero, like curl and http.client send it.
+            if method.upper() in _BODY_CARRYING_METHODS:
+                header_fields[HEADER_CONTENT_LENGTH] = "0"
 
         request_url = request_uri
         if self.use_proxy and not self.ssl:
@@ -334,6 +380,10 @@ class HTTPClient:
         request = method + WHITESPACE + request_url + WHITESPACE + self.version + CRLF
 
         for field, value in header_fields.items():
+            if not isinstance(field, str) or not _TOKEN_RE.fullmatch(field):
+                raise ValueError(f"invalid header field name {field!r}")
+            if isinstance(value, str) and not _FIELD_VALUE_RE.fullmatch(value):
+                raise ValueError(f"invalid value for header field {field!r}: {value!r}")
             request += field + FIELD_VALUE_SEP + str(value) + CRLF
         request += CRLF
         return request
@@ -382,7 +432,10 @@ class HTTPClient:
         while True:
             sock = self._connection_pool.get_socket()
             try:
-                _request = request.encode()
+                # the request head speaks latin-1, like the response header
+                # decoding and http.client; characters outside latin-1 fail
+                # loudly instead of leaving UTF-8 mojibake on the wire
+                _request = request.encode("latin-1")
                 if expect_continue:
                     sock.sendall(_request)
                     try:
@@ -408,7 +461,7 @@ class HTTPClient:
                             )
                         except HTTPConnectionClosed:
                             # connection is released by the response itself
-                            if attempts_left > 0:
+                            if attempts_left > 0 and _may_retry_after_send_error(method):
                                 attempts_left -= 1
                                 continue
                             raise
@@ -427,7 +480,7 @@ class HTTPClient:
                         )
                     except HTTPConnectionClosed:
                         # connection is released by the response itself
-                        if attempts_left > 0:
+                        if attempts_left > 0 and _may_retry_after_send_error(method):
                             attempts_left -= 1
                             continue
                         raise
@@ -472,7 +525,7 @@ class HTTPClient:
                     )
                 except (gevent.socket.error, HTTPParseError):
                     # no pending (valid) response, socket is released already
-                    if attempts_left > 0:
+                    if attempts_left > 0 and _may_retry_after_send_error(method):
                         attempts_left -= 1
                         continue
                     raise
@@ -489,8 +542,10 @@ class HTTPClient:
                     headers_type=self.headers_type,
                 )
             except HTTPConnectionClosed:
-                # connection is released by the response itself
-                if attempts_left > 0:
+                # connection is released by the response itself; the request
+                # was sent in full, so the server may have processed it and
+                # the same RFC 9112 section 9.2.2 limit applies
+                if attempts_left > 0 and _may_retry_after_send_error(method):
                     attempts_left -= 1
                     continue
                 raise
