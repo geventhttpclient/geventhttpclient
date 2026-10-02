@@ -9,7 +9,7 @@ description = "HTTP client library for gevent"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-license-files = ["LICENSE-MIT", "llhttp/LICENSE"]
+license-files = ["LICENSE-MIT", "llhttp/LICENSE", "third-party/nghttp2/COPYING"]
 keywords = ["http", "gevent", "client"]
 authors = [{name = "Antonin Amand", email = "antonin.amand@gmail.com"}]
 classifiers = [
