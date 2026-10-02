@@ -54,7 +54,7 @@ class TestConnectionManagement:
                 ssl=True, insecure=True, enable_http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", version="auto")
+                handle = client.request_h2("GET", "/", )
                 assert handle.status_code == 200
                 assert handle.body.startswith(b"echo GET /\n")
             finally:
@@ -70,7 +70,6 @@ class TestConnectionManagement:
                 handle = client.request_h2(
                     "POST", "/upload",
                     body=b"the request body",
-                    version="auto",
                 )
                 assert handle.status_code == 200
                 # Echo handler reflects the body back.
@@ -87,8 +86,8 @@ class TestStreamLifecycle:
                 ssl=True, insecure=True, enable_http2=True,
             )
             try:
-                h1 = client.request_h2("GET", "/a", version="auto")
-                h2 = client.request_h2("GET", "/b", version="auto")
+                h1 = client.request_h2("GET", "/a", )
+                h2 = client.request_h2("GET", "/b", )
                 assert h1.stream_id != h2.stream_id
                 # Both must finish independently.
                 assert h1.status_code == 200
@@ -115,7 +114,7 @@ class TestHeaderHandling:
                 ssl=True, insecure=True, enable_http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/anything", version="auto")
+                handle = client.request_h2("GET", "/anything", )
                 assert handle.status_code == 201
                 assert handle.body == b'{"ok":true}'
                 header_dict = dict(handle.headers)
@@ -162,7 +161,7 @@ class TestServerReset:
                 ssl=True, insecure=True, enable_http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", version="auto")
+                handle = client.request_h2("GET", "/", )
                 assert handle.status_code == 200
             finally:
                 client.close()
@@ -191,7 +190,7 @@ class TestGoAway:
                 ssl=True, insecure=True, enable_http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", version="auto")
+                handle = client.request_h2("GET", "/", )
                 assert handle.is_closed
             finally:
                 client.close()
@@ -212,7 +211,7 @@ class TestSettings:
                 # Touch a connection so local settings are populated
                 # (the h2-pool constructor emits our SETTINGS to the
                 # connection preface). Round-trip once to settle.
-                handle = client.request_h2("GET", "/", version="auto")
+                handle = client.request_h2("GET", "/", )
                 assert handle.status_code == 200
                 assert handle.is_closed
             finally:
@@ -237,7 +236,7 @@ class TestTrailer:
                 ssl=True, insecure=True, enable_http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", version="auto")
+                handle = client.request_h2("GET", "/", )
                 # Review part 2 finding #4: trailers in their own field,
                 # headers without the trailer fields.
                 assert handle.body == b"hello"

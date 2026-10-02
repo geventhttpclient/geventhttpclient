@@ -10,6 +10,13 @@ import gevent
 import gevent.socket
 
 from geventhttpclient import __version__
+
+# Review_http2_3.md H3: h2 transport failures are wrapped in a
+# subclass of ``ConnectionError`` so the UserAgent retry loop and
+# locust-style callers can catch them uniformly. The class lives in
+# ``useragent.py`` to avoid a circular import; we re-export it under
+# the same name for documentation.
+from geventhttpclient._http2_errors import HTTP2Error
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
 from geventhttpclient.header import Headers, HeadersDataType
 from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
@@ -692,7 +699,6 @@ class HTTPClient:
         *,
         timeout: float | None = None,
         max_retries: int = 0,
-        version: str = "auto",
     ) -> Union["HTTP2ResponseHandle", "HTTPSocketPoolResponse"]:
         """Submit a request over HTTP/2 and block until the response
         handle is closed.
@@ -701,6 +707,13 @@ class HTTPClient:
         :class:`HTTP2ResponseHandle`: spins the pump until the stream
         becomes closed or the timeout expires.
 
+        ALPN-aware auto-fallback (Phase 6 + review_http2_3.md H1):
+        when the peer did not negotiate ``h2`` we silently retry on
+        the HTTP/1.1 pool. Callers therefore do not need a ``version``
+        switch -- opt into HTTP/2 by setting ``enable_http2=True`` on
+        the client, and let the transport pick the protocol that
+        actually works.
+
         ``max_retries`` (Sprint 3c) limits automatic retries of
         **connection errors only** for idempotent methods. RFC 9110
         §9.2.2 forbids retries of POST/PATCH after a network error,
@@ -708,21 +721,15 @@ class HTTPClient:
         peer may have processed the request but we never saw its
         response, so silently replaying it is unsafe.
 
-        ``version`` controls ALPN-based dispatch (Phase 6):
+        Raises :class:`HTTP2Error` on transport failures (review_http2_3
+        H3) so callers can ``except ConnectionError`` uniformly across
+        HTTP/1.1 and HTTP/2.
 
-        * ``"auto"`` (default) reads the negotiated ALPN protocol from
-          the h2 connection's underlying socket and returns an
-          :class:`HTTP2ResponseHandle` when the peer picked ``h2``;
-          when the peer picked ``http/1.1`` we fall back to a normal
-          :class:`HTTPSocketPoolResponse` over the HTTP/1.1 pool.
-        * ``"2"`` forces HTTP/2 and raises if the peer did not
-          negotiate ``h2`` (transparent fallback is the caller's
-          option via ``version="auto"``).
-        * ``"1.1"`` raises immediately -- use :meth:`request` for
-          HTTP/1.1 traffic.
+        Behaviour mirrors httpx ``http2=True``: opt-in per client, no
+        extra per-request knob.
         """
         if self._h2_pool is None:
-            raise RuntimeError(
+            raise HTTP2Error(
                 "enable_http2=True must be set on the HTTPClient and the "
                 "URL must use https://",
             )
@@ -745,50 +752,43 @@ class HTTPClient:
         # we short-circuit to the HTTP/1.1 path; for ``"auto"`` we
         # connect via the h2 pool and re-route to HTTP/1.1 if the peer
         # did not negotiate ``h2``; for ``"2"`` the h2 pool raises
-        # ``HTTP2ConnectionPoolError`` when ALNG does not match.
-        if version == "1.1":
-            return self._http1_fallback(method, request_uri, body_bytes, headers)
-
+        # httpx-style auto-fallback (review_http2_3.md H1 + Phase 6):
+        # we always try h2 first because the user opted into the h2
+        # pool, but if the peer's ALPN chose http/1.1 we close that
+        # socket and fall back to the HTTP/1.1 pool. There is no
+        # per-request ``version`` knob; opt in via ``enable_http2``.
         deadline = (time.monotonic() + timeout) if timeout is not None else None
         attempts = max_retries + 1
         last_exc: Exception | None = None
         for attempt in range(attempts):
             try:
                 session = self._h2_pool.get_session(self.host, port, scheme=scheme)
-                # ALPN check: when ``version="auto"`` we honour the
-                # peer's ALPN choice and silently fall back to HTTP/1.1
-                # if the server did not negotiate ``h2``. The h2 pool
-                # itself raises ``HTTP2ConnectionPoolError`` when the
-                # ALPN-selected protocol is ``http/1.1``; we catch that
-                # specific failure and re-route. For ``version="2"``
-                # we want the error to surface.
-                if version == "auto":
-                    negotiated = self._alpn_negotiated(session)
-                    if negotiated and negotiated != "h2":
-                        # Peer chose HTTP/1.1: drop the h2 session
-                        # (its preface has already been written to the
-                        # socket -- the connection is unusable for h1
-                        # so we close the socket and start fresh).
-                        try:
-                            sock = session._sock  # type: ignore[attr-defined]
-                            sock.close()
-                        except Exception:  # noqa: BLE001,S110
-                            pass
-                        self._h2_pool._sessions.pop(  # type: ignore[attr-defined]
-                            next(iter(self._h2_pool._sessions)), None  # type: ignore[attr-defined]
-                        )
-                        return self._http1_fallback(method, request_uri, body_bytes, headers)
+                negotiated = self._alpn_negotiated(session)
+                if negotiated and negotiated != "h2":
+                    # Peer chose HTTP/1.1: drop the h2 session
+                    # (its preface has already been written to the
+                    # socket -- the connection is unusable for h1 so
+                    # we close the socket and start fresh).
+                    try:
+                        sock = session._sock  # type: ignore[attr-defined]
+                        sock.close()
+                    except Exception:  # noqa: BLE001,S110
+                        pass
+                    self._h2_pool._sessions.pop(  # type: ignore[attr-defined]
+                        next(iter(self._h2_pool._sessions)), None  # type: ignore[attr-defined]
+                    )
+                    return self._http1_fallback(method, request_uri, body_bytes, headers)
                 handle = session.submit_request(
                     method, path, str(authority), h2_headers,
                     scheme=scheme, body=body_bytes,
                 )
             except HTTP2ConnectionPoolError as e:
-                if version == "auto" and "did not negotiate h2" in str(e):
+                if "did not negotiate h2" in str(e):
                     return self._http1_fallback(method, request_uri, body_bytes, headers)
                 last_exc = e
                 if attempt + 1 < attempts and _may_retry_after_send_error(method):
                     continue
-                raise RuntimeError(f"HTTP/2 connection failed: {e}") from e
+                raise HTTP2Error(f"HTTP/2 connection failed: {e}") from e
 
             try:
                 while not handle.is_closed:
@@ -811,7 +811,7 @@ class HTTPClient:
             return handle
         # All attempts failed.
         assert last_exc is not None
-        raise RuntimeError(f"HTTP/2 request failed after {attempts} attempts: {last_exc}")
+        raise HTTP2Error(f"HTTP/2 request failed after {attempts} attempts: {last_exc}")
 
     def _alpn_negotiated(self, session: HTTP2Session) -> str | None:
         """Return the ALPN protocol the TLS handshake negotiated.

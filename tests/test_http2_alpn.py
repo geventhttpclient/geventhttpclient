@@ -1,13 +1,17 @@
-"""Phase 6 tests: ALPN setup + version="auto" fallback to HTTP/1.1.
+"""httpx-style HTTP/2 upgrade tests (review_http2_3.md H1).
 
-The ``HTTPClient`` learns the peer's choice via ``selected_alpn_protocol``
-on the underlying socket. When the peer did not negotiate ``h2`` we
-fall back to the HTTP/1.1 pool instead of raising. The
-``SSLConnectionPool`` advertises ``["h2", "http/1.1"]`` by default so
-h2-capable servers prefer the h2 ALPN.
+The behaviour matches httpx's ``http2=True`` kwarg:
 
-A local nginx serves both ``8443`` (h2) and ``8444`` (http/1.1
-fallback) so we can exercise both code paths.
+* ``HTTPClient(enable_http2=False)`` (the default) keeps the existing
+  HTTP/1.1 path untouched.
+* ``HTTPClient(enable_http2=True)`` opens the h2 pool for any https://
+  URL. The h2 transport negotiates ALPN; when the peer chose
+  ``http/1.1`` (or did not negotiate ALPN) we close the h2 socket
+  and retry on the HTTP/1.1 pool. Callers do not pass a per-request
+  ``version=`` knob.
+
+We exercise this against a local nginx that listens on
+``127.0.0.1:8443`` (h2-capable) and ``127.0.0.1:8444`` (http/1.1-only).
 """
 
 from __future__ import annotations
@@ -18,11 +22,9 @@ import subprocess
 import time
 
 import gevent
-import gevent.ssl
 import pytest
 
 from geventhttpclient.client import HTTPClient
-from geventhttpclient.connectionpool import SSLConnectionPool
 
 NGINX_HOST = "127.0.0.1"
 NGINX_H2_PORT = 8443
@@ -69,94 +71,63 @@ def _nginx_session():
     yield
 
 
-class TestSSLConnectionPoolALPN:
-    def test_default_advertises_h2(self) -> None:
-        """Setting up an ``SSLConnectionPool`` with the default ALPN
-        list must not raise and must install the context on the pool."""
-        pool = SSLConnectionPool(
-            connection_host=NGINX_HOST, connection_port=NGINX_H2_PORT,
-            request_host=NGINX_HOST, request_port=NGINX_H2_PORT,
-            insecure=True,
-        )
-        # ``set_alpn_protocols`` was called without raising -- that is
-        # what we need. The stdlib SSLContext does not expose the
-        # advertised list (it is private state), so we verify the
-        # negotiated outcome via the live round-trip below.
-        assert pool.ssl_context is not None
+class TestHttpxStyleEnable:
+    """Verifies the default-off / opt-in behaviour."""
 
-    def test_empty_alpn_protocols_disables_alpn(self) -> None:
-        """An empty ALPN list is accepted (no ALPN negotiation)."""
-        pool = SSLConnectionPool(
-            connection_host=NGINX_HOST, connection_port=NGINX_H2_PORT,
-            request_host=NGINX_HOST, request_port=NGINX_H2_PORT,
-            insecure=True,
-            alpn_protocols=[],
-        )
-        assert pool.ssl_context is not None
-
-
-class TestHTTPClientVersionDispatch:
-    def test_version_auto_falls_back_to_http11(self) -> None:
-        """``version="auto"`` on a server that does not negotiate ``h2``
-        must fall back to the HTTP/1.1 pool transparently."""
+    def test_default_is_http1(self) -> None:
         c = HTTPClient(
-            NGINX_HOST,
-            port=NGINX_H1_PORT,
-            ssl=True,
-            insecure=True,
-            enable_http2=True,
+            NGINX_HOST, port=NGINX_H1_PORT,
+            ssl=True, insecure=True,
         )
         try:
-            result = c.request_h2(
-                "GET", "/get", headers={"host": f"{NGINX_HOST}:{NGINX_H1_PORT}"},
-                version="auto",
-            )
-            # Fallback returned an HTTP/1.1 response object, not the
-            # h2 handle.
-            assert hasattr(result, "_sent_request"), (
-                f"expected HTTPSocketPoolResponse, got {type(result).__name__}"
-            )
+            # No ``enable_http2=True`` -> the h1 path serves the
+            # request, no auto-upgrade.
+            assert c._h2_pool is None
+            # Confirm we get a real h1 response.
+            r = c.request("GET", "/get", headers={"host": f"{NGINX_HOST}:{NGINX_H1_PORT}"})
+            assert r.status_code == 200
         finally:
             c.close()
 
-    def test_version_2_raises_on_no_h2(self) -> None:
-        """``version="2"`` forces HTTP/2 and refuses to fall back."""
+    def test_enable_http2_then_h2_succeeds(self) -> None:
         c = HTTPClient(
-            NGINX_HOST,
-            port=NGINX_H1_PORT,
-            ssl=True,
-            insecure=True,
-            enable_http2=True,
+            NGINX_HOST, port=NGINX_H2_PORT,
+            ssl=True, insecure=True, enable_http2=True,
         )
         try:
-            with pytest.raises(RuntimeError, match="HTTP/2"):
-                c.request_h2(
-                    "GET", "/get",
-                    headers={"host": f"{NGINX_HOST}:{NGINX_H1_PORT}"},
-                    version="2",
-                )
-        finally:
-            c.close()
-
-    def test_version_auto_on_h2_returns_handle(self) -> None:
-        """``version="auto"`` on an h2-capable server returns the
-        HTTP2ResponseHandle."""
-        c = HTTPClient(
-            NGINX_HOST,
-            port=NGINX_H2_PORT,
-            ssl=True,
-            insecure=True,
-            enable_http2=True,
-        )
-        try:
-            result = c.request_h2(
-                "GET", "/get",
-                headers={"host": f"{NGINX_HOST}:{NGINX_H2_PORT}"},
-                version="auto",
-            )
+            assert c._h2_pool is not None
+            r = c.request_h2("GET", "/get", headers={"host": f"{NGINX_HOST}:{NGINX_H2_PORT}"})
+            assert r.status_code == 200
             from geventhttpclient.http2_session import HTTP2ResponseHandle
-            assert isinstance(result, HTTP2ResponseHandle), (
-                f"expected HTTP2ResponseHandle, got {type(result).__name__}"
+            assert isinstance(r, HTTP2ResponseHandle)
+        finally:
+            c.close()
+
+    def test_enable_http2_then_h1_server_falls_back(self) -> None:
+        """enable_http2=True + h1-only server -> transparent HTTP/1.1
+        fallback. The client returns an ``HTTPSocketPoolResponse``,
+        not a stream handle."""
+        c = HTTPClient(
+            NGINX_HOST, port=NGINX_H1_PORT,
+            ssl=True, insecure=True, enable_http2=True,
+        )
+        try:
+            r = c.request_h2("GET", "/get", headers={"host": f"{NGINX_HOST}:{NGINX_H1_PORT}"})
+            assert r.status_code == 200
+            assert hasattr(r, "_sent_request"), (
+                f"expected HTTP/1.1 response after fallback, got {type(r).__name__}"
             )
+        finally:
+            c.close()
+
+    def test_enable_http2_then_unreachable_raises_http2_error(self) -> None:
+        from geventhttpclient._http2_errors import HTTP2Error
+        c = HTTPClient(
+            "127.0.0.1", port=1,  # closed port -> connection refused
+            ssl=True, insecure=True, enable_http2=True,
+        )
+        try:
+            with pytest.raises((HTTP2Error, ConnectionError)):
+                c.request_h2("GET", "/", headers={"host": "127.0.0.1:1"})
         finally:
             c.close()
