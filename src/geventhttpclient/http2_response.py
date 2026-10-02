@@ -1,4 +1,4 @@
-"""HTTP/2 response wrapper (Sprint 3c).
+"""HTTP/2 response wrapper.
 
 The :class:`HTTP2ResponseHandle` from :mod:`geventhttpclient.http2_session`
 already exposes :attr:`status_code`, :attr:`headers`, :attr:`body` and
@@ -8,13 +8,15 @@ small adapter that mirrors the ``http.client`` ergonomics used by
 
 * ``read(N)`` returns up to ``N`` bytes from the body buffer;
 * ``iter_content(chunk_size)`` yields body chunks until END_STREAM;
-* ``iter_lines()`` yields lines split on ``\\r\\n``;
-* ``json()`` decodes the body as JSON;
-* ``raise_for_status()`` raises for 4xx/5xx (matches ``http.client``).
+* ``iter_lines()`` yields lines split on universal-newline boundaries
+  (``\\r\\n``, ``\\r``, ``\\n`` — same as ``requests._iter_lines_bytes``);
+* ``json()`` decodes the full body as JSON;
+* ``raise_for_status()`` raises :exc:`HTTP2ResponseError` for 4xx/5xx.
 
-The :class:`HTTP2Client` is a tiny convenience over ``HTTPClient``
-that bundles ``submit_request`` + the wait-for-close pump with a
-``HTTP2Response`` result.
+:exc:`HTTP2SocketResponseBridge` is the duck-typed surface that
+:class:`geventhttpclient.useragent.CompatResponse` consumes; ``request_h2``
+itself still returns the raw :class:`HTTP2ResponseHandle` so callers
+that only need the stream lifecycle do not have to import the bridge.
 """
 
 import json as stdjsonlib
@@ -39,9 +41,12 @@ class HTTP2Response:
 
     def __init__(self, handle: HTTP2ResponseHandle) -> None:
         self._handle = handle
-        # A cursor into the handle's body buffer. read(N) returns up to
-        # N bytes from here and advances it; iter_content tracks the
-        # same cursor.
+        # Cache the body once. ``handle.body`` rebuilds the joined
+        # bytes from ``body_parts`` on every access; reading a 10 MB
+        # response in 4 KB chunks would rejoin the full buffer
+        # ~2500 times (O(n²)). The cached ``_body`` is computed on
+        # first read, then ``_cursor`` slices it.
+        self._body: bytes | None = None
         self._cursor = 0
         # Header index mirrored for ``CompatResponse``-style access.
         # Populated from ``handle.headers`` on first read.
@@ -89,9 +94,13 @@ class HTTP2Response:
 
     # -- Read API -----------------------------------------------------------
 
+    def _body_cached(self) -> bytes:
+        if self._body is None:
+            self._body = self._handle.body
+        return self._body
+
     def _remaining(self) -> bytes:
-        body = self._handle.body
-        return body[self._cursor:]
+        return self._body_cached()[self._cursor:]
 
     def read(self, n: int | None = None) -> bytes:
         """Read up to ``n`` bytes. ``n=None`` reads everything.
@@ -99,11 +108,11 @@ class HTTP2Response:
         HTTP/2 has no chunked encoding, so we do not have to recv()
         again here — the body is fully buffered on the wire side.
         """
-        remaining = self._remaining()
+        body = self._body_cached()
         if n is None:
-            self._cursor = len(self._handle.body)
-            return remaining
-        chunk = remaining[:n]
+            self._cursor = len(body)
+            return bytes(body)
+        chunk = bytes(body[self._cursor:self._cursor + n])
         self._cursor += len(chunk)
         return chunk
 
@@ -115,28 +124,43 @@ class HTTP2Response:
         splitting semantics match the http.client ``read(N)`` contract
         for backward compatibility with the HTTPResponse API.
         """
-        remaining = self._remaining()
-        while remaining:
-            chunk = remaining[:chunk_size]
-            self._cursor += len(chunk)
+        body = self._body_cached()
+        total = len(body)
+        while self._cursor < total:
+            end = min(self._cursor + chunk_size, total)
+            chunk = bytes(body[self._cursor:end])
+            self._cursor = end
             yield chunk
-            remaining = self._remaining()
 
     def iter_lines(self, chunk_size: int = 4096) -> Iterator[bytes]:
-        """Yield body lines split on ``\\r\\n``.
+        """Yield body lines split on universal-newlines boundaries
+        (``\\r\\n``, ``\\r``, or ``\\n``).
 
-        The last chunk may not have a terminator if the server did
-        not send one — it is yielded as-is.
+        Matches :func:`requests._iter_lines_bytes` so a drop-in for
+        the http.client behaviour stays consistent across protocols.
+        The last line is yielded without a terminator when the body does
+        not end with one.
         """
         buf = bytearray()
         for chunk in self.iter_content(chunk_size):
             buf.extend(chunk)
             while True:
-                sep = buf.find(b"\r\n")
-                if sep < 0:
+                # Prefer \r\n, then \r, then \n.
+                crlf = buf.find(b"\r\n")
+                if crlf >= 0:
+                    yield bytes(buf[:crlf])
+                    del buf[:crlf + 2]
+                    continue
+                cr = buf.find(b"\r")
+                lf = buf.find(b"\n")
+                if cr >= 0 and (lf < 0 or cr <= lf):
+                    yield bytes(buf[:cr])
+                    del buf[:cr + 1]
+                elif lf >= 0:
+                    yield bytes(buf[:lf])
+                    del buf[:lf + 1]
+                else:
                     break
-                yield bytes(buf[:sep])
-                del buf[:sep + 2]
         if buf:
             yield bytes(buf)
 
