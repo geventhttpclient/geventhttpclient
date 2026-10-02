@@ -8,6 +8,24 @@ import pytest
 # live in tests/gevent_only and are excluded in that mode.
 if os.environ.get("NON_GEVENT") != "1":
     gevent.monkey.patch_all()  # make sure all tests run monkey patched
+else:
+    # The HTTP/2 integration tests need gevent cooperative scheduling:
+    # H2TestServer serves from gevent greenlets and the client's pump
+    # loop yields via gevent.sleep. Unpatched, blocking SSL handshakes
+    # starve the server greenlet (CI showed handshake timeouts in the
+    # non-gevent job). The sans-IO parser and connection tests stay in.
+    collect_ignore_glob = [
+        "test_http2_alpn.py",
+        "test_http2_pool.py",
+        "test_http2_response.py",
+        "test_http2_session.py",
+        "test_http2_session_concurrent.py",
+        "test_http2_session_live.py",
+        "test_http2_spec.py",
+        "test_http2_useragent.py",
+        "test_http2_useragent_payload.py",
+        "test_http2_network.py",
+    ]
 
 
 @pytest.fixture(scope="session", autouse=True)
