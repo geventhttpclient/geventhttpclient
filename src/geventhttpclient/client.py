@@ -10,6 +10,8 @@ import gevent.socket
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
 from geventhttpclient.header import Headers, HeadersDataType
+from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
+from geventhttpclient.http2_session import HTTP2ResponseHandle
 from geventhttpclient.response import (
     HTTPConnectionClosed,
     HTTPParseError,
@@ -200,6 +202,7 @@ class HTTPClient:
         proxy_password: str | None = None,
         version: str = HTTP_11,
         headers_type: type[Headers] = Headers,
+        enable_http2: bool = False,
     ) -> None:
         if headers is None:
             headers = headers_type()
@@ -275,7 +278,24 @@ class HTTPClient:
         port_str = f":{port}" if port else ""
         self._base_url_string = f"{scheme}://{self.host}{port_str}/"
 
-    def close(self) -> None:
+        # HTTP/2 pool (Sprint 3b). Created only when explicitly enabled
+        # and the target uses TLS — h2 over plaintext (h2c) needs a
+        # separate code path (prior-knowledge mode) and is out of Sprint
+        # 3b scope.
+        self.enable_http2 = enable_http2
+        self._h2_pool: HTTP2ConnectionPool | None = (
+            HTTP2ConnectionPool(
+                connection_timeout=connection_timeout,
+                network_timeout=network_timeout,
+                insecure=insecure,
+            )
+            if enable_http2 and self.ssl
+            else None
+        )
+
+    def close(self) -> None:  # type: ignore[override]
+        if self._h2_pool is not None:
+            self._h2_pool.close()
         self._connection_pool.close()
 
     # a body without a usable len() falls back to the size of its file in
@@ -656,6 +676,78 @@ class HTTPClient:
         self, request_uri: str, headers: Mapping[str, Any] | None = None
     ) -> HTTPSocketPoolResponse:
         return self.request(METHOD_OPTIONS, request_uri, headers=headers)
+
+    # -- HTTP/2 dispatch (Sprint 3b) --------------------------------------
+
+    HTTP_2 = "HTTP/2.0"
+
+    def request_h2(
+        self,
+        method: str,
+        request_uri: str,
+        body: bytes | None = None,
+        headers: HeadersDataType | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> HTTP2ResponseHandle:
+        """Submit a request over HTTP/2 and block until the response
+        handle is closed.
+
+        Synchronous convenience over the pull-API of
+        :class:`HTTP2ResponseHandle`: spins the pump until the stream
+        becomes closed or the timeout expires.
+        """
+        if self._h2_pool is None:
+            raise RuntimeError(
+                "enable_http2=True must be set on the HTTPClient and the "
+                "URL must use https://",
+            )
+        path = request_uri
+        if not path.startswith("/") and not path.startswith("http"):
+            path = "/" + path
+        merged = self._merge_headers(headers)
+        h2_headers = [(k, v) for k, v in merged.items() if k.lower() != "host"]
+        authority = merged.get("host") or (
+            f"{self.host}:{self.port}" if self.port not in (80, 443) else self.host
+        )
+        scheme = PROTO_HTTPS if self.ssl else PROTO_HTTP
+        port = self.port or (443 if self.ssl else 80)
+        try:
+            session = self._h2_pool.get_session(self.host, port, scheme=scheme)
+        except HTTP2ConnectionPoolError as e:
+            raise RuntimeError(f"HTTP/2 connection failed: {e}") from e
+
+        handle = session.submit_request(
+            method, path, str(authority), h2_headers, scheme=scheme, body=body,
+        )
+        # Drive the pump until the stream closes. The HTTPClient
+        # exposes the synchronous API for Sprint 3b; Sprint 3c adds
+        # an async-friendly HTTP2Response wrapper.
+        import time as _time
+        deadline = (_time.monotonic() + timeout) if timeout is not None else None
+        while not handle.is_closed:
+            if deadline is not None and _time.monotonic() > deadline:
+                raise TimeoutError(f"HTTP/2 response did not arrive in {timeout}s")
+            try:
+                progressed = session.drive_once()
+            except Exception as e:
+                raise RuntimeError(f"HTTP/2 wire error: {e}") from e
+            if not progressed:
+                # No inbound data yet — yield to the scheduler. We
+                # deliberately avoid ``gevent.sleep(0)`` because the
+                # caller may be running inside a greenlet that has
+                # not yet spawned; cooperative scheduling is provided
+                # by gevent when the importer is.
+                import gevent
+                gevent.sleep(0)
+        return handle
+
+    def _merge_headers(self, headers: HeadersDataType | None) -> Headers:
+        merged = self.headers_type()
+        merged.update(self.default_headers)
+        if headers:
+            merged.update(headers)
+        return merged
 
 
 class HTTPClientPool:
