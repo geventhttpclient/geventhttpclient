@@ -432,7 +432,7 @@ def test_per_request_auth_invalid_raises():
 
 
 @pytest.mark.network
-def test_basicauth_end_to_end_with_httpbingo():
+def test_basicauth_end_to_end():
     """End-to-end check against httpbingo's /basic-auth/{user}/{pass}:
 
     the request goes out, httpbingo decodes the ``Authorization``
@@ -452,7 +452,7 @@ def test_basicauth_end_to_end_with_httpbingo():
 
 
 @pytest.mark.network
-def test_session_auth_end_to_end_with_httpbingo():
+def test_session_auth_end_to_end():
     """Same, but the auth comes from the session - confirms that
     ``Session(auth=...)`` is wired through ``urlopen`` so the
     ``Authorization`` header actually reaches the server."""
