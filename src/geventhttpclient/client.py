@@ -771,11 +771,16 @@ class HTTPClientPool:
     A client is created on first use and stays until :meth:`close`, which is the
     only way to hand clients back; nothing expires on its own, so the pool grows
     with the number of hosts it has talked to.
+
+    ``enable_http2`` is forwarded to every HTTPClient the pool creates
+    (Sprint 5). The pool itself stays HTTP/1.1-shaped: each HTTPClient
+    owns its own HTTP2ConnectionPool when ``enable_http2=True``, so
+    multiplexed h2 sessions are per-host exactly like h1 sockets.
     """
 
-    def __init__(self, **kw: Any) -> None:
+    def __init__(self, *, enable_http2: bool = False, **kw: Any) -> None:
         self.clients: dict[tuple[str, int | None], HTTPClient] = {}
-        self.client_args = kw
+        self.client_args = {**kw, "enable_http2": enable_http2}
 
     def get_client(self, url: str | URL) -> HTTPClient:
         if not isinstance(url, URL):

@@ -175,22 +175,11 @@ class TestLiveRoundTrip:
 
 
 def teardown_module(_: Any) -> None:
-    """Stop the local nginx at end of session if we started it.
+    """No-op.
 
-    pytest fixture doesn't expose state, so we check the PID file.
-    Skipped silently if nginx is not ours (different PID file).
+    pytest's per-module teardown was killing the shared nginx between
+    test modules and causing race conditions in the useragent tests
+    that ran after this one. The fixture :func:`_start_nginx` already
+    brings nginx up if it is down, and the developer is expected to
+    stop their local nginx manually (``pkill nginx``) when done.
     """
-    pid_file = NGINX_PID_FILE
-    if not os.path.exists(pid_file):
-        return
-    try:
-        with open(pid_file) as f:
-            pid = int(f.read().strip())
-        # Only kill if the process is actually running.
-        os.kill(pid, 0)
-    except (ValueError, OSError):
-        return
-    try:
-        os.kill(pid, 15)  # SIGTERM
-    except OSError:
-        pass
