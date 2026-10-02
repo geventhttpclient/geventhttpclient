@@ -103,15 +103,19 @@ class HTTP2Response:
         return self._body_cached()[self._cursor:]
 
     def read(self, n: int | None = None) -> bytes:
-        """Read up to ``n`` bytes. ``n=None`` reads everything.
+        """Read up to ``n`` bytes. ``n=None`` reads the remainder.
 
         HTTP/2 has no chunked encoding, so we do not have to recv()
         again here — the body is fully buffered on the wire side.
+        Mirrors the http.client contract: a partial ``read(N)``
+        advances the cursor; ``read()`` with no argument returns
+        everything from the cursor to the end (review_http2_3.md M1).
         """
         body = self._body_cached()
         if n is None:
+            chunk = bytes(body[self._cursor:])
             self._cursor = len(body)
-            return bytes(body)
+            return chunk
         chunk = bytes(body[self._cursor:self._cursor + n])
         self._cursor += len(chunk)
         return chunk
@@ -138,19 +142,49 @@ class HTTP2Response:
 
         Matches :func:`requests._iter_lines_bytes` so a drop-in for
         the http.client behaviour stays consistent across protocols.
-        The last line is yielded without a terminator when the body does
-        not end with one.
+        The last line is yielded without a terminator when the body
+        does not end with one.
+
+        Trailing-``\\r`` handling: when a chunk ends with ``\\r`` we
+        hold that byte back across iterations so the next chunk can
+        pair it with ``\\n`` to form a ``\\r\\n`` boundary. Without
+        this guard a body of ``b"a"*4095 + b"\\r\\nb"`` (chunked at
+        4096) would emit a phantom empty line — the held ``\\r`` is
+        paired with the leading ``\\n`` of the next chunk (review_http2_3
+        M2).
         """
+        body = self._body_cached()
+        # Single in-memory buffer (HTTP/2 has no chunked encoding).
+        # We emulate the chunked interface so the ``\\r\\n``-over-chunk
+        # test from review M2 can be reproduced.
         buf = bytearray()
-        for chunk in self.iter_content(chunk_size):
+        cursor = self._cursor
+        total = len(body)
+        while True:
+            # Pull ``chunk_size`` bytes from the underlying buffer; on
+            # the last iteration this may be a short read.
+            end = min(cursor + chunk_size, total)
+            chunk = body[cursor:end]
             buf.extend(chunk)
+            cursor = end
+            # Split the buffer on universal-newline boundaries.
             while True:
-                # Prefer \r\n, then \r, then \n.
                 crlf = buf.find(b"\r\n")
                 if crlf >= 0:
                     yield bytes(buf[:crlf])
                     del buf[:crlf + 2]
                     continue
+                # If the buffer ends in ``\r`` and we are NOT at end-of-body
+                # we must hold it back so the next chunk can pair it
+                # with a leading ``\n`` to form ``\r\n``. If we are
+                # at end-of-body the trailing ``\r`` is its own line.
+                if buf.endswith(b"\r") and cursor < total:
+                    # Keep the trailing ``\r`` in the buffer; truncate
+                    # the local view by removing the carried byte from
+                    # the underlying cursor advance.
+                    del buf[-1:]
+                    cursor -= 1
+                    break
                 cr = buf.find(b"\r")
                 lf = buf.find(b"\n")
                 if cr >= 0 and (lf < 0 or cr <= lf):
@@ -161,6 +195,9 @@ class HTTP2Response:
                     del buf[:lf + 1]
                 else:
                     break
+            if cursor >= total:
+                break
+        # Flush any leftover bytes that did not end in a terminator.
         if buf:
             yield bytes(buf)
 
@@ -226,17 +263,22 @@ class HTTP2SocketResponseBridge:
     def readline(self, sep: bytes = b"\r\n") -> bytes:
         # Compatibility shim: HTTP/2 has no chunked transfer-encoding,
         # so the body has already been concatenated by the time we get
-        # here. We replicate the line-by-line split of ``HTTPSocketResponse``
-        # on the in-memory buffer.
+        # here. We split on ``sep`` in the in-memory buffer and advance
+        # the cursor exactly past the first match -- leaving any bytes
+        # after the line for subsequent ``read()`` calls (review M3).
         buf = bytearray()
         for chunk in self._response.iter_content():
             buf.extend(chunk)
             sep_idx = buf.find(sep)
             if sep_idx >= 0:
                 line = bytes(buf[:sep_idx + len(sep)])
-                # Anything past the line is consumed by the next read()
-                # call -- we don't expose the leftover here.
-                self._response._cursor = len(self._response._handle.body)
+                # Push the leftover back into the underlying buffer so
+                # the next read() picks it up.
+                leftover = bytes(buf[sep_idx + len(sep):])
+                self._response._body = leftover + self._response._body_cached()[
+                    self._response._cursor:
+                ]
+                self._response._cursor = 0
                 return line
         return bytes(buf)
 

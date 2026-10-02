@@ -11,6 +11,7 @@ from typing import Any
 
 import pytest
 
+from geventhttpclient._http2_errors import HTTP2Error
 from geventhttpclient.http2_response import HTTP2Response, HTTP2ResponseError
 
 # Reuse the FakeSocket helpers from test_http2_session
@@ -132,6 +133,39 @@ class TestIterContent:
         assert b"".join(r.iter_content()) == b"chunk-1-chunk-2-chunk-3"
 
 
+class TestReviewHttp2_3Regressions:
+    """Regression tests for review_http2_3.md."""
+
+    def test_read_without_arg_returns_remainder(self) -> None:
+        """M1: ``read()`` with no argument must return the remainder,
+        not the full body (reset cursor bug)."""
+        h = _make_round_trip(b"0123456789")
+        r = HTTP2Response(h)
+        assert r.read(3) == b"012"
+        assert r.read() == b"3456789"
+        # Subsequent read returns empty.
+        assert r.read() == b""
+
+    def test_iter_lines_across_chunk_boundary(self) -> None:
+        """M2: a ``\\r\\n`` straddling a chunk boundary must produce one
+        line, not a phantom empty one."""
+        body = b"a" * 4095 + b"\r\nb"
+        h = _make_round_trip(body)
+        r = HTTP2Response(h)
+        lines = list(r.iter_lines(chunk_size=4096))
+        assert lines == [b"a" * 4095, b"b"]
+
+    def test_readline_does_not_eat_remainder(self) -> None:
+        """M3: ``HTTP2SocketResponseBridge.readline`` must leave the
+        rest of the body for subsequent ``read()`` calls."""
+        from geventhttpclient.http2_response import HTTP2SocketResponseBridge
+        h = _make_round_trip(b"zeile1\r\nzeile2\r\nzeile3")
+        r = HTTP2Response(h)
+        bridge = HTTP2SocketResponseBridge(r)
+        assert bridge.readline() == b"zeile1\r\n"
+        assert bridge.read() == b"zeile2\r\nzeile3"
+
+
 class TestIterLines:
     def test_basic_lines(self) -> None:
         h = _make_round_trip(b"alpha\r\nbeta\r\ngamma")
@@ -198,7 +232,7 @@ class TestRetry:
         pool = _BrokenFirstOpenPool(insecure=True)
         try:
             client = _make_http_client(pool, host="never-resolves")
-            with pytest.raises(RuntimeError, match="HTTP/2 connection failed"):
+            with pytest.raises(HTTP2Error, match="HTTP/2 connection failed"):
                 client.request_h2(
                     "GET", "/", max_retries=0,
                 )
@@ -256,7 +290,7 @@ class TestRetry:
             client = _make_http_client(
                 client_module.HTTP2ConnectionPool(insecure=True),
             )
-            with pytest.raises(RuntimeError):
+            with pytest.raises(HTTP2Error):
                 client.request_h2("POST", "/", body=b"x", max_retries=3)
             # POST should NOT retry, so we must have made a single
             # attempt (plus the one we count in the wrapper itself).

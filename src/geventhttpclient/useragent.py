@@ -719,11 +719,14 @@ class UserAgent:
     def _urlopen(self, request: CompatRequest) -> CompatResponse:
         client = self.clientpool.get_client(request.url_split)
         # ``version`` overrides dispatch. ``CompatRequest`` does not
-        # carry it explicitly; callers can set it via ``request.version``
-        # (Sprint 6) -- if absent we default to ``"auto"``.
-        version = getattr(request, "version", "auto")
+        # httpx-style auto-fallback (review_http2_3.md H1 + Phase 6):
+        # the user opted into ``enable_http2=True`` on the client, so
+        # we route through ``_urlopen_h2`` whenever the request uses
+        # TLS. The h2 path performs its own ALPN-aware fallback to
+        # HTTP/1.1 when the peer did not negotiate ``h2``; no
+        # per-request ``version`` knob is exposed here.
         if client.enable_http2 and client.ssl:
-            return self._urlopen_h2(request, client, version=version)
+            return self._urlopen_h2(request, client)
         resp = client.request(
             request.method,
             request.url_split.quoted_uri,
@@ -737,8 +740,6 @@ class UserAgent:
         self,
         request: CompatRequest,
         client: HTTPClient,
-        *,
-        version: str = "auto",
     ) -> CompatResponse:
         """HTTP/2 path. Synchronous; uses ``HTTPClient.request_h2``.
 
@@ -753,20 +754,44 @@ class UserAgent:
         HTTP/1.1 path before opening an h2 session.
         """
         payload = request.payload
-        body: bytes | None
+        # Match the HTTP/1.1 path's payload normalisation in
+        # :func:`_make_request`: ``str`` and ``dict`` are converted to
+        # ``bytes`` (with a matching Content-Type header the caller
+        # already set via ``_make_request``). Iterables are buffered
+        # into a single ``bytes`` so the h2 client sends a single
+        # DATA frame instead of a stream (review_http2_3.md H1).
+        body: bytes | None = None
         if isinstance(payload, (bytes, bytearray, memoryview)):
             body = bytes(payload)
+        elif isinstance(payload, str):
+            body = payload.encode("utf-8")
+        elif isinstance(payload, dict):
+            # ``urlencode`` is already imported at module scope; use
+            # it to mirror the HTTP/1.1 form-encoding semantics.
+            body = urlencode(payload).encode("utf-8")
+        elif isinstance(payload, Iterable):
+            buf = bytearray()
+            for chunk in payload:
+                if isinstance(chunk, str):
+                    buf.extend(chunk.encode("utf-8"))
+                else:
+                    buf.extend(chunk)
+            body = bytes(buf)
         elif payload is not None and hasattr(payload, "read"):
             body = payload.read()
-        else:
-            body = None
+        # Per-request timeout (review_http2_3.md H2): default to the
+        # connection pool's network_timeout when the request did not
+        # set one explicitly. Without a deadline, ``request_h2``'s
+        # pump loop waits forever for a response that never comes.
+        timeout = getattr(request, "timeout", None)
+        if timeout is None:
+            timeout = client._connection_pool.network_timeout
         result = client.request_h2(
             request.method,
             request.url_split.quoted_uri,
             body=body,
             headers=request.headers,
-            timeout=request.timeout if hasattr(request, "timeout") else None,
-            version=version,
+            timeout=timeout,
         )
         # ``request_h2`` returns either an ``HTTP2ResponseHandle`` (the
         # h2 path) or an ``HTTPSocketPoolResponse`` (auto-fallback
@@ -783,6 +808,14 @@ class UserAgent:
             )
         h2_resp = HTTP2Response(result)
         bridge = HTTP2SocketResponseBridge(h2_resp)
+        # ``_conversation_str`` reads ``resp._sent_request`` to print
+        # the wire request; the h2 path never sees the raw head (the
+        # framing is internal to nghttp2). The bridge carries a stable
+        # string we synthesise from method/path/authority so debug
+        # streams do not crash with TypeError (review M4).
+        bridge._sent_request = (
+            f"{request.method} {request.url_split.quoted_uri} HTTP/2.0\r\n"
+        )
         return self.response_type(bridge, request=request)  # type: ignore[arg-type]
 
     @classmethod
