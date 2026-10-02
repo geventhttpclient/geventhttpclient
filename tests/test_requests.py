@@ -534,5 +534,3 @@ def test_raise_for_status_attaches_response_and_request():
     assert exc_info.value.response is response
     assert exc_info.value.request is not None
     assert exc_info.value.request.method == "GET"
-
-

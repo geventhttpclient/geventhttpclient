@@ -1,4 +1,3 @@
-import base64
 import json as jsonlib
 import re
 import time

@@ -38,7 +38,7 @@ with a C compiler otherwise; it is fully type annotated (`py.typed`).
 
 ## Requests-compatible interface
 
-Since version 2.3, `geventhttpclient` features a largely `requests`
+`geventhttpclient` features a largely `requests`
 compatible interface. It covers basic HTTP usage including cookie
 management, form data encoding or decoding of compressed data,
 but otherwise isn't as feature rich as the original `requests`. For
@@ -97,27 +97,23 @@ import httplib2
 
 ## httpx-compatible interface
 
-`geventhttpclient.httpx` is a drop-in surface for code written against
-`httpx.Client` - same engine, gevent concurrency, a 5-7x parser-speed
-advantage over `httpx`'s default. Per-request options live at the
-client (mirror the engine's configuration model); HTTP/2 and mounts
-are not in scope.
+`geventhttpclient` also features a largely `httpx` compatible
+interface. Same engine, gevent concurrency, and a 5-7x parser-speed
+advantage over `httpx`'s default. For code already written against
+`httpx.Client`, it can serve as a drop-in replacement.
 
 ```python
-import geventhttpclient.httpx as httpx
+from geventhttpclient import httpx
 
-with httpx.Client(base_url="http://api.example.com", auth=("u", "p")) as client:
-    response = client.get("v1/users", params={"limit": 10})
+with httpx.Client() as client:
+    response = client.get("https://github.com")
     response.raise_for_status()
     for chunk in response.iter_text(64):
         ...
 ```
 
-The response carries the same `is_success` / `is_client_error` / `...`
-predicates, `elapsed`, `num_bytes_downloaded`, `charset_encoding` and
-`http_version` httpx exposes; exceptions come through an httpx-named
-hierarchy (`HTTPError`, `RequestError`, `HTTPStatusError`,
-`TooManyRedirects`, `ConnectError`, ...).
+Per-request options are not plumbed through (the engine is
+session-level configured); HTTP/2 and mounts are out of scope.
 
 ## High Concurrency
 
