@@ -11,6 +11,12 @@ left out unless it affects users of the package.
 - `CompatRequest` derives from `urllib.request.Request` now: cookie jars
   work without workarounds, `full_url` is assignable
 - `UserAgent` accepts `headers=None` when building a request
+- `geventhttpclient.BasicAuth` is a first-class authentication object:
+  instantiate `BasicAuth("user", "pass")` and pass it to a Session
+  or a single request to set the `Authorization` header. The
+  requests-style 2-tuple `auth=("user", "pass")` and a pre-built
+  header value are also accepted; the requests interface adds
+  session-level `Session(auth=...)` (overridable per request)
 - `iter_content()`, `iter_lines()` and `json(**kw)` on `RequestsResponse`,
   mirroring the `requests` API: chunked streaming with an incremental
   unicode decoder, line splitting on `\r\n`/`\r`/`\n` across chunk

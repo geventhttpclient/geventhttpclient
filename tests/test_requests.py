@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from geventhttpclient import BasicAuth
 from geventhttpclient.header import Headers
 from geventhttpclient.requests import RequestsResponse, Session
 from geventhttpclient.response import HTTPResponse
@@ -359,3 +360,103 @@ def test_json_raises_jsondecodeerror_on_bad_input():
     with pytest.raises(json.JSONDecodeError) as excinfo:
         response.json()
     assert isinstance(excinfo.value, ValueError)
+
+
+# ---------------------------------------------------------------------------
+# Session(auth=) - the requests-style session-level authentication
+# ---------------------------------------------------------------------------
+
+import base64 as _base64
+
+from geventhttpclient import BasicAuth as _BasicAuth
+from geventhttpclient.requests import Session as _Session
+from tests.common import LISTENER as _LISTENER
+from tests.common import wsgiserver as _wsgiserver
+
+_BASE = f"http://127.0.0.1:{_LISTENER[1]}"
+_EXPECTED_AUTH = "Basic " + _base64.b64encode(b"user:pass").decode("ascii")
+_OTHER_AUTH = "Basic " + _base64.b64encode(b"alice:wonderland").decode("ascii")
+
+
+def _auth_app(environ, start_response):
+    path = environ["PATH_INFO"]
+    if path == "/auth":
+        if environ.get("HTTP_AUTHORIZATION") == _EXPECTED_AUTH:
+            start_response("200 OK", [("Content-Type", "text/plain")])
+            return [b"ok"]
+        if environ.get("HTTP_AUTHORIZATION") == _OTHER_AUTH:
+            start_response("200 OK", [("Content-Type", "text/plain")])
+            return [b"other"]
+        start_response("401 Unauthorized", [])
+        return [b"no auth"]
+    if path == "/never":
+        if environ.get("HTTP_AUTHORIZATION") != _EXPECTED_AUTH:
+            start_response("401 Unauthorized", [])
+            return [b"no auth"]
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b"ok"]
+    start_response("200 OK", [("Content-Type", "text/plain")])
+    return [b"ok"]
+
+
+def test_session_auth_tuple_sets_authorization_header_on_every_request():
+    with _wsgiserver(_auth_app), _Session(auth=("user", "pass")) as session:
+        assert session.get(f"{_BASE}/never").status_code == 200
+        assert session.get(f"{_BASE}/never").status_code == 200
+
+
+def test_session_auth_basicauth_object_works_the_same():
+    with _wsgiserver(_auth_app), _Session(auth=_BasicAuth("user", "pass")) as session:
+        assert session.get(f"{_BASE}/never").status_code == 200
+
+
+def test_per_request_auth_tuple_overrides_session_auth():
+    with _wsgiserver(_auth_app), _Session(auth=("user", "pass")) as session:
+        assert session.get(f"{_BASE}/auth", auth=("alice", "wonderland")).status_code == 200
+        assert session.get(f"{_BASE}/auth").status_code == 200
+
+
+def test_session_without_auth_does_not_send_authorization_header():
+    with _wsgiserver(_auth_app), _Session() as session:
+        assert session.get(f"{_BASE}/never").status_code == 401
+
+
+def test_session_auth_invalid_raises():
+    with pytest.raises(NotImplementedError):
+        _Session(auth=123)
+
+
+def test_per_request_auth_invalid_raises():
+    with _wsgiserver(_auth_app), _Session() as session, pytest.raises(NotImplementedError):
+        session.get(f"{_BASE}/never", auth=object())
+
+
+@pytest.mark.network
+def test_basicauth_end_to_end_with_httpbingo():
+    """End-to-end check against httpbingo's /basic-auth/{user}/{pass}:
+
+    the request goes out, httpbingo decodes the ``Authorization``
+    header and answers with a JSON body confirming the credentials.
+    Marked ``network`` so the default ``-m 'not network'`` run skips it.
+    """
+    response = Session().get(
+        f"https://{HTTPBIN_HOST}/basic-auth/user/pass",
+        auth=BasicAuth("user", "pass"),
+    )
+    assert response.status_code == 200
+    assert response.json() == {
+        "authenticated": True,
+        "user": "user",
+        "authorized": True,
+    }
+
+
+@pytest.mark.network
+def test_session_auth_end_to_end_with_httpbingo():
+    """Same, but the auth comes from the session - confirms that
+    ``Session(auth=...)`` is wired through ``urlopen`` so the
+    ``Authorization`` header actually reaches the server."""
+    with Session(auth=BasicAuth("user", "pass")) as session:
+        response = session.get(f"https://{HTTPBIN_HOST}/basic-auth/user/pass")
+    assert response.status_code == 200
+    assert response.json()["authenticated"] is True
