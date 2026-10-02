@@ -6,6 +6,7 @@ from http.cookiejar import CookieJar
 from typing import Any, cast
 
 from geventhttpclient import useragent
+from geventhttpclient.auth import resolve_auth
 from geventhttpclient.header import HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType
@@ -410,14 +411,23 @@ class Session(useragent.UserAgent):
                 raise ValueError(
                     f"{param} can not be set on a per-request basis. Please configure the UserAgent instead."
                 )
-        for param in (cookies, auth, proxies, hooks):
+        for param in (cookies, proxies, hooks):
             if param is not None:
                 raise NotImplementedError(
                     f"{param} is currently unsupported as a keyword argument."
                 )
-        for param in (hooks,):
-            if param is not None:
-                raise NotImplementedError(f"{param} is not supported")
+        # auth: per-request value wins; falls back to the session-level
+        # auth set on ``Session(...)``; non-BasicAuth/tuple/string values
+        # are rejected with a NotImplementedError.
+        try:
+            request_auth = resolve_auth(auth)
+        except NotImplementedError as error:
+            raise NotImplementedError(f"per-request auth: {error}") from error
+        if request_auth is None:
+            request_auth = self._default_auth
+        if request_auth is not None:
+            headers = dict(headers) if headers else {}
+            headers.setdefault("Authorization", request_auth)
 
         if json:
             if data:
@@ -451,6 +461,10 @@ class Session(useragent.UserAgent):
         on configuring the Session / UserAgent, while requests focuses more on
         configuring the single requests.
         """
+        # session-level auth: a ``BasicAuth`` instance, a 2-tuple, or an
+        # already-built Authorization header value. Per-request ``auth=``
+        # overrides this; ``auth=None`` (the default) uses it.
+        self._default_auth = resolve_auth(kw.pop("auth", None))
         kw.setdefault("max_redirects", 30)
         super().__init__(*args, **kw)
         if not self.cookiejar:
