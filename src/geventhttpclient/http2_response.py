@@ -17,8 +17,6 @@ that bundles ``submit_request`` + the wait-for-close pump with a
 ``HTTP2Response`` result.
 """
 
-from __future__ import annotations
-
 import json as stdjsonlib
 from collections.abc import Iterator
 from typing import Any, Self

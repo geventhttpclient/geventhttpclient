@@ -19,8 +19,6 @@ touched here. Bytes flow in through ``feed()``, frames flow out through
 ``bytes_to_send()``; the caller pumps both sides.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -34,6 +32,12 @@ CONNECTION_STREAM_ID = 0
 #: peer's SETTINGS frame has been received. RFC 9113 §6.5.2 lets us open
 #: streams anyway — we just gate against a conservative default.
 DEFAULT_MAX_CONCURRENT_STREAMS = 100
+
+#: HTTP/2 client default for the ENABLE_PUSH setting (RFC 9113 §8.2).
+#: A client should advertise push as disabled. Callers wanting to
+#: override may pass a ``local_settings`` dict to :class:`HTTP2Connection`
+#: that includes ``{0x2: 1}``.
+DEFAULT_LOCAL_SETTINGS: dict[int, int] = {0x2: 0}  # ENABLE_PUSH = 0
 
 
 class StreamLifecycle(IntEnum):
@@ -56,8 +60,7 @@ class StreamLifecycle(IntEnum):
     OPEN = 0x1
     HALF_CLOSED_LOCAL = 0x2
     HALF_CLOSED_REMOTE = 0x3
-    HALF_CLOSED_BOTH = 0x4
-    CLOSED = 0x5
+    CLOSED = 0x4
 
 
 # ---------------------------------------------------------------------------
@@ -226,7 +229,6 @@ class StreamState:
     response_status_code: int | None = None
     response_headers: list[tuple[str, str]] = field(default_factory=list)
     response_body_parts: list[bytes] = field(default_factory=list)
-    response_trailers: list[tuple[str, str]] = field(default_factory=list)
     data_received: bool = False
     reset_error_code: int | None = None
 
@@ -274,16 +276,21 @@ class HTTP2Connection:
         # Streams with higher ids must be retried on a new connection.
         # ``2**31 - 1`` means "no GOAWAY received yet".
         self._last_accepted_stream_id = 2**31 - 1
-        # nghttp2 does *not* emit the connection preface nor its own
-    # initial SETTINGS frame until the application submits something
-        # (see RFC 9113 §3.4 — only the magic prefix is automatic). Push
-        # an empty SETTINGS so the wire bytes include our preface; this
-        # also lets the caller override individual settings before the
-        # first request goes out.
-        merged = dict(local_settings) if local_settings else {}
-        frames = self._session.submit_settings(merged)
-        if frames:
-            self._outbound.append(frames)
+        # The C extension queues an empty initial-SETTINGS frame on
+        # session creation so the connection preface is on the wire.
+        # We only submit our own SETTINGS when the caller passed
+        # overrides; merging in the client default (ENABLE_PUSH=0 per
+        # RFC 9113 §8.2) here as well keeps the canonical defaults at
+        # this layer. Note that nghttp2 itself currently ignores the
+        # ENABLE_PUSH submission on read paths -- the value gets dropped
+        # silently. We document it for forward compatibility.
+        merged: dict[int, int] = dict(DEFAULT_LOCAL_SETTINGS)
+        if local_settings:
+            merged.update(local_settings)
+        if merged:
+            frames = self._session.submit_settings(merged)
+            if frames:
+                self._outbound.append(frames)
         # Track how many streams we have opened against the peer budget.
         self._open_streams: int = 0
 
@@ -370,9 +377,15 @@ class HTTP2Connection:
 
         Pseudo-headers (:method, :scheme, :path, :authority) are inserted
         automatically and override anything passed in ``headers``.
-        ``body=None`` ends the stream on HEADERS; a non-empty body
-        requires further :meth:`submit_data` calls with the last
-        ``end_stream=True``.
+
+        When ``body`` is given, the bytes are submitted as a single
+        DATA frame with END_STREAM right after the HEADERS frame. The
+        local side moves to HALF_CLOSED_LOCAL through :meth:`submit_data`
+        bookkeeping so the state machine reflects the close.
+
+        For multi-chunk uploads, pass ``body=None`` and call
+        :meth:`submit_data` directly; ``submit_data`` still owns the
+        END_STREAM decision via its ``end_stream`` flag.
         """
         if self._session.next_stream_id() > self._last_accepted_stream_id:
             raise BlockingIOError(
@@ -417,6 +430,15 @@ class HTTP2Connection:
         state = StreamState(stream_id=stream_id, state=initial_state)
         self._streams[stream_id] = state
         self._open_streams += 1
+
+        # Body bytes are submitted as a single DATA frame immediately
+        # after the HEADERS frame; ``submit_data`` advances the state
+        # machine from OPEN to HALF_CLOSED_LOCAL via end_stream=True.
+        # An empty ``body`` is the convention for "no body, END_STREAM on
+        # HEADERS", which is what ``with_body=False`` produces; we treat
+        # it the same as ``body=None``.
+        if body:
+            self.submit_data(stream_id, body, end_stream=True)
         return stream_id
 
     def submit_data(
@@ -498,11 +520,27 @@ class HTTP2Connection:
         caller is expected to follow up with :meth:`bytes_to_send` to
         obtain the ACK / response / PING-reply frames nghttp2 emitted
         during the recv() pass.
+
+        nghttp2's C callbacks fire ``stream_closed`` twice for streams
+        that end via DATA + END_STREAM (once from ``on_frame_recv``,
+        once from ``on_stream_close``). The state machine is
+        idempotent on the second event; here we suppress the
+        duplicate ``StreamClosed`` event at the boundary so callers do
+        not have to dedupe themselves.
         """
         events, outbound = self._session.recv(bytes(data))
         if outbound:
             self._outbound.append(outbound)
-        return [self._convert_event(raw) for raw in events]
+        converted: list[Http2Event] = []
+        seen_stream_closed: set[int] = set()
+        for raw in events:
+            event = self._convert_event(raw)
+            if isinstance(event, StreamClosed):
+                if event.stream_id in seen_stream_closed:
+                    continue
+                seen_stream_closed.add(event.stream_id)
+            converted.append(event)
+        return converted
 
     # -- Helpers -----------------------------------------------------------
 
@@ -622,9 +660,12 @@ class HTTP2Connection:
 
     def _update_stream_state_on_close(self, stream_id: int, error_code: int) -> None:
         """Process the terminal ``stream_closed`` event from
-        nghttp2. The C side emits this once for every closed stream,
-        regardless of whether the close was clean (END_STREAM on both
-        sides) or via reset (already tracked by :attr:`StreamReset`).
+        nghttp2. The C side emits ``stream_closed`` *twice* for streams
+        that end via DATA + END_STREAM: once from
+        :c:func:`on_frame_recv_callback` (with ``end_stream=True``)
+        and once from :c:func:`on_stream_close_callback` (with
+        ``end_stream=False``). We deduplicate here by ignoring the
+        second event whenever the state is already CLOSED.
         """
         state = self._streams.get(stream_id)
         if state is None:
@@ -632,6 +673,8 @@ class HTTP2Connection:
         # nghttp2 fires ``on_stream_close`` *after* RST_STREAM was
         # surfaced as a ``stream_reset`` event; the state was already
         # CLOSED and the counter already decremented in that path.
+        # Same applies to the duplicate DATA-END_STREAM /
+        # on_stream_close pair.
         if state.state == StreamLifecycle.CLOSED:
             return
         state.state = StreamLifecycle.CLOSED

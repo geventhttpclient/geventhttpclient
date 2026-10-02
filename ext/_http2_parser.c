@@ -463,6 +463,16 @@ body_read_callback(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
     size_t copied = 0;
     while (copied < length && PyList_GET_SIZE(body->chunks) > 0) {
         PyObject *chunk = PyList_GET_ITEM(body->chunks, 0); /* borrowed */
+        /* Defensive: every chunk in the queue is a bytes object --
+         * submit_data() normalises to PyBytes before appending. If a
+         * caller ever bypasses submit_data() and patches the queue,
+         * we'd rather raise here than silently corrupt memory via
+         * PyBytes_GET_SIZE on a non-bytes object. */
+        if (!PyBytes_Check(chunk)) {
+            PyErr_SetString(PyExc_TypeError,
+                            "body chunk is not bytes (HTTP/2 collector invariant violated)");
+            return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+        }
         Py_ssize_t remaining = PyBytes_GET_SIZE(chunk) - body->offset;
         size_t to_copy = (size_t)remaining < (length - copied)
                              ? (size_t)remaining
@@ -701,6 +711,21 @@ session_recv(PyObject *self_obj, PyObject *data_obj)
     if (consumed < 0) {
         PyErr_Format(PyExc_RuntimeError,
                      "nghttp2_session_mem_recv failed: %zd", consumed);
+        /* Surface the events that nghttp2 fired in this batch anyway:
+         * a partial parse may already have produced SETTINGS-ACKs or
+         * HEADERS that the caller would otherwise lose. Drain the
+         * pending_events list into a fresh tuple of (events, b''). */
+        PyObject *events = self->pending_events;
+        self->pending_events = PyList_New(0);
+        if (self->pending_events == NULL) {
+            Py_DECREF(events);
+            return NULL;
+        }
+        /* Pending events reference session state; on mem_recv failure
+         * the session is in an undefined state. Drop them instead of
+         * handing them up, otherwise they may reference freed data
+         * via header accumulator. */
+        Py_DECREF(events);
         return NULL;
     }
     PyObject *outbound = drain_send(self->session);
@@ -783,7 +808,13 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
     if (body != NULL) body->stream_id = stream_id;
     PyObject *outbound = drain_send(self->session);
     if (outbound == NULL) return NULL;
-    PyObject *result = PyTuple_Pack(2, PyLong_FromLong(stream_id), outbound);
+    PyObject *sid_obj = PyLong_FromLong(stream_id);
+    if (sid_obj == NULL) {
+        Py_DECREF(outbound);
+        return NULL;
+    }
+    PyObject *result = PyTuple_Pack(2, sid_obj, outbound);
+    Py_DECREF(sid_obj);
     Py_DECREF(outbound);
     return result;
 }
@@ -811,17 +842,27 @@ session_submit_data(PyObject *self_obj, PyObject *args, PyObject *kwds)
                         "request body already finished for this stream");
         return NULL;
     }
+    /* Enforce bytes-only. bytearray / memoryview would otherwise be
+     * silently mis-read by the collector's PyBytes_GET_SIZE macros.
+     * The .pyi stub declares the type; this runtime check is a
+     * belt-and-braces measure that catches direct calls on the C
+     * API bypassing the Python wrapper. */
+    if (!PyBytes_Check(data)) {
+        PyErr_SetString(PyExc_TypeError,
+                        "submit_data() data must be bytes");
+        return NULL;
+    }
     if (PyList_Append(body->chunks, data) < 0) return NULL;
     if (end_stream) body->finished = 1;
 
     /* If nghttp2 deferred the DATA frame (empty queue at last read),
-     * resume it now that a chunk is available. */
+     * resume it now that a chunk is available. ``resume_data`` returns
+     * 0 on success and a negative code if there is nothing to
+     * resume; the negative case is not an error and we clear only the
+     * specific SystemError nghttp2 would surface if at all. */
     int rv = nghttp2_session_resume_data(self->session, stream_id);
-    if (rv != 0) {
-        if (PyErr_ExceptionMatches(PyExc_SystemError) ||
-            PyErr_Occurred()) {
-            PyErr_Clear(); /* not deferred: nothing to resume, harmless */
-        }
+    if (rv != 0 && PyErr_Occurred()) {
+        PyErr_Clear();
     }
     return drain_send(self->session);
 }
@@ -1142,7 +1183,8 @@ static PyMethodDef session_methods[] = {
     {"submit_data", (PyCFunction)(void (*)(void))session_submit_data,
      METH_VARARGS | METH_KEYWORDS,
      "submit_data(stream_id, data, end_stream) -> frames."},
-    {"submit_response", session_submit_response, METH_VARARGS | METH_KEYWORDS,
+    {"submit_response", (PyCFunction)(void (*)(void))session_submit_response,
+     METH_VARARGS | METH_KEYWORDS,
      "submit_response(stream_id, headers, with_body=False) -> frames (server only)."},
     {"submit_headers", session_submit_headers, METH_VARARGS,
      "submit_headers(stream_id, headers, end_stream=False) -> frames."},

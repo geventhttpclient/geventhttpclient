@@ -15,8 +15,6 @@ These types are intentionally small — Pool semantics, retries,
 redirects and the UserAgent hook-up are Sprint 3b/3c.
 """
 
-from __future__ import annotations
-
 import errno
 from collections.abc import Iterable
 
@@ -67,7 +65,7 @@ class HTTP2ResponseHandle:
         "trailers",
     )
 
-    def __init__(self, session: HTTP2Session, stream_id: int) -> None:
+    def __init__(self, session: "HTTP2Session", stream_id: int) -> None:
         self.stream_id = stream_id
         self.session = session
         self.state: StreamState | None = None
@@ -229,11 +227,13 @@ class HTTP2Session(HTTP2Wire):
         Raises :exc:`BlockingIOError` if the peer's MAX_CONCURRENT_STREAMS
         is reached or if a peer GOAWAY forbids a new stream.
         """
+        # ``HTTP2Connection.submit_request`` ships ``body`` through
+        # ``submit_data(end_stream=True)`` internally, so we no longer
+        # call ``submit_data`` again here -- doing so would either be a
+        # no-op (stream already finished) or duplicate the body.
         stream_id = self._connection.submit_request(
             method, path, authority, headers=headers, scheme=scheme, body=body,
         )
-        if body is not None:
-            self._connection.submit_data(stream_id, body, end_stream=True)
         handle = HTTP2ResponseHandle(self, stream_id)
         self._handles[stream_id] = handle
         # Push the request frames immediately so the peer can start

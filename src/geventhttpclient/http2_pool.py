@@ -19,8 +19,6 @@ concurrent sessions or enforce a maximum. Sprint 3c adds eviction
 and pool-level locking if needed.
 """
 
-from __future__ import annotations
-
 import threading
 from dataclasses import dataclass
 
