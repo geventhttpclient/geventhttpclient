@@ -210,10 +210,15 @@ on_header(nghttp2_session *session, const nghttp2_frame *frame,
     acc_list = PyDict_GetItemString(stream_dict, "headers");
     if (acc_list == NULL) goto fail;
 
-    PyObject *name_str = PyUnicode_FromStringAndSize((const char *)name,
-                                                     (Py_ssize_t)namelen);
-    PyObject *value_str = PyUnicode_FromStringAndSize((const char *)value,
-                                                      (Py_ssize_t)valuelen);
+    /* Header names and values are opaque octet sequences; nghttp2
+     * explicitly accepts obs-text (0x80-0xFF) in values, so strict
+     * UTF-8 would let a peer kill the session with a decode error.
+     * Decode as latin-1 (1:1 byte mapping, never fails), matching
+     * the HTTP/1 wrapper (_parser.c), header.py and http.client. */
+    PyObject *name_str = PyUnicode_DecodeLatin1((const char *)name,
+                                                (Py_ssize_t)namelen, NULL);
+    PyObject *value_str = PyUnicode_DecodeLatin1((const char *)value,
+                                                 (Py_ssize_t)valuelen, NULL);
     if (name_str == NULL || value_str == NULL) {
         Py_XDECREF(name_str);
         Py_XDECREF(value_str);
@@ -543,11 +548,19 @@ drain_send(nghttp2_session *session)
 }
 
 /* Build an nghttp2_nv array from a Python sequence of (str, str) pairs.
- * The strings are borrowed from the sequence entries, which the caller
- * must keep alive until the corresponding submit call returned. Returns
+ * Header names/values are encoded as latin-1 (symmetric with the
+ * inbound decode in on_header and with the HTTP/1 request path in
+ * client.py): the wire speaks bytes, so the 1:1 byte mapping keeps
+ * round-trips lossless. Characters outside latin-1 raise
+ * UnicodeEncodeError instead of silently producing UTF-8 mojibake.
+ *
+ * The encoded bytes objects are appended to ``keepalive`` (a list the
+ * caller owns) so the nv pointers stay valid until the corresponding
+ * submit call returned; nghttp2 copies name/value on submit. Returns
  * 0 or -1 (exception set). */
 static int
-make_nv_array(PyObject *headers, nghttp2_nv **out_nva, size_t *out_nvlen)
+make_nv_array(PyObject *headers, nghttp2_nv **out_nva, size_t *out_nvlen,
+              PyObject *keepalive)
 {
     if (!PyList_Check(headers) && !PyTuple_Check(headers)) {
         PyErr_SetString(PyExc_TypeError,
@@ -574,22 +587,30 @@ make_nv_array(PyObject *headers, nghttp2_nv **out_nva, size_t *out_nvlen)
             PyMem_Free(nva);
             return -1;
         }
-        Py_ssize_t name_len = 0;
-        Py_ssize_t value_len = 0;
-        const char *name = PyUnicode_AsUTF8AndSize(PyTuple_GET_ITEM(pair, 0),
-                                                   &name_len);
-        const char *value = PyUnicode_AsUTF8AndSize(PyTuple_GET_ITEM(pair, 1),
-                                                    &value_len);
+        PyObject *name = PyUnicode_AsLatin1String(PyTuple_GET_ITEM(pair, 0));
+        PyObject *value = PyUnicode_AsLatin1String(PyTuple_GET_ITEM(pair, 1));
         if (name == NULL || value == NULL) {
+            Py_XDECREF(name);
+            Py_XDECREF(value);
             Py_DECREF(pair);
             PyMem_Free(nva);
             return -1;
         }
-        nva[i].name = (uint8_t *)name;
-        nva[i].namelen = (size_t)name_len;
-        nva[i].value = (uint8_t *)value;
-        nva[i].valuelen = (size_t)value_len;
+        if (PyList_Append(keepalive, name) < 0 ||
+            PyList_Append(keepalive, value) < 0) {
+            Py_DECREF(name);
+            Py_DECREF(value);
+            Py_DECREF(pair);
+            PyMem_Free(nva);
+            return -1;
+        }
+        nva[i].name = (uint8_t *)PyBytes_AS_STRING(name);
+        nva[i].namelen = (size_t)PyBytes_GET_SIZE(name);
+        nva[i].value = (uint8_t *)PyBytes_AS_STRING(value);
+        nva[i].valuelen = (size_t)PyBytes_GET_SIZE(value);
         nva[i].flags = NGHTTP2_NV_FLAG_NONE;
+        Py_DECREF(name);  /* keepalive holds the reference */
+        Py_DECREF(value);
         Py_DECREF(pair);
     }
     *out_nva = nva;
@@ -775,9 +796,14 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
                                      &PyList_Type, &headers, &with_body))
         return NULL;
 
+    PyObject *keepalive = PyList_New(0);
+    if (keepalive == NULL) return NULL;
     nghttp2_nv *nva = NULL;
     size_t nvlen = 0;
-    if (make_nv_array(headers, &nva, &nvlen) < 0) return NULL;
+    if (make_nv_array(headers, &nva, &nvlen, keepalive) < 0) {
+        Py_DECREF(keepalive);
+        return NULL;
+    }
 
     /* NULL data provider => HEADERS carry END_STREAM (complete request
      * without body). With a body, a per-stream collector receives the
@@ -790,6 +816,7 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
         body = body_collector_new(self);
         if (body == NULL) {
             PyMem_Free(nva);
+            Py_DECREF(keepalive);
             return NULL;
         }
         provider.source.ptr = body;
@@ -799,6 +826,7 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
     int32_t stream_id = nghttp2_submit_request(self->session, NULL, nva,
                                                nvlen, provider_ptr, NULL);
     PyMem_Free(nva);
+    Py_DECREF(keepalive);
     if (stream_id < 0) {
         if (body != NULL) body_free(self, body);
         PyErr_Format(PyExc_RuntimeError,
@@ -880,9 +908,14 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
                                      &with_body))
         return NULL;
 
+    PyObject *keepalive = PyList_New(0);
+    if (keepalive == NULL) return NULL;
     nghttp2_nv *nva = NULL;
     size_t nvlen = 0;
-    if (make_nv_array(headers, &nva, &nvlen) < 0) return NULL;
+    if (make_nv_array(headers, &nva, &nvlen, keepalive) < 0) {
+        Py_DECREF(keepalive);
+        return NULL;
+    }
 
     /* The response header block must carry the :status pseudo header.
      * NULL provider => HEADERS carry END_STREAM (empty response body).
@@ -894,6 +927,7 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
     if (with_body) {
         if (body_find(self, stream_id) != NULL) {
             PyMem_Free(nva);
+            Py_DECREF(keepalive);
             PyErr_SetString(PyExc_ValueError,
                             "stream already has an open body collector");
             return NULL;
@@ -901,6 +935,7 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
         body = body_collector_new(self);
         if (body == NULL) {
             PyMem_Free(nva);
+            Py_DECREF(keepalive);
             return NULL;
         }
         body->stream_id = stream_id;
@@ -911,6 +946,7 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
     int rv = nghttp2_submit_response(self->session, stream_id, nva, nvlen,
                                      provider_ptr);
     PyMem_Free(nva);
+    Py_DECREF(keepalive);
     if (rv != 0) {
         if (body != NULL) body_free(self, body);
         PyErr_Format(PyExc_RuntimeError,
@@ -930,13 +966,19 @@ session_submit_headers(PyObject *self_obj, PyObject *args)
     if (!PyArg_ParseTuple(args, "iO!p", &stream_id, &PyList_Type, &headers,
                           &end_stream))
         return NULL;
+    PyObject *keepalive = PyList_New(0);
+    if (keepalive == NULL) return NULL;
     nghttp2_nv *nva = NULL;
     size_t nvlen = 0;
-    if (make_nv_array(headers, &nva, &nvlen) < 0) return NULL;
+    if (make_nv_array(headers, &nva, &nvlen, keepalive) < 0) {
+        Py_DECREF(keepalive);
+        return NULL;
+    }
     int rv = nghttp2_submit_headers(
         self->session, end_stream ? (uint8_t)NGHTTP2_FLAG_END_STREAM : 0,
         stream_id, NULL, nva, nvlen, NULL);
     PyMem_Free(nva);
+    Py_DECREF(keepalive);
     if (rv != 0) {
         PyErr_Format(PyExc_RuntimeError,
                      "nghttp2_submit_headers failed: %d", rv);
@@ -953,11 +995,17 @@ session_submit_trailer(PyObject *self_obj, PyObject *args)
     PyObject *headers = NULL;
     if (!PyArg_ParseTuple(args, "iO!", &stream_id, &PyList_Type, &headers))
         return NULL;
+    PyObject *keepalive = PyList_New(0);
+    if (keepalive == NULL) return NULL;
     nghttp2_nv *nva = NULL;
     size_t nvlen = 0;
-    if (make_nv_array(headers, &nva, &nvlen) < 0) return NULL;
+    if (make_nv_array(headers, &nva, &nvlen, keepalive) < 0) {
+        Py_DECREF(keepalive);
+        return NULL;
+    }
     int rv = nghttp2_submit_trailer(self->session, stream_id, nva, nvlen);
     PyMem_Free(nva);
+    Py_DECREF(keepalive);
     if (rv != 0) {
         PyErr_Format(PyExc_RuntimeError,
                      "nghttp2_submit_trailer failed: %d", rv);

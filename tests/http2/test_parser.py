@@ -355,3 +355,50 @@ class TestWindowUpdate:
         # Finish the response so both sides close the stream cleanly.
         tail = server.submit_data(stream_id, b"done", end_stream=True)
         pump_frames(client, server, to_client=tail)
+
+
+class TestHeaderEncoding:
+    """Header names/values are opaque octets on the wire; the binding
+    speaks latin-1 in both directions (1:1 byte mapping), matching the
+    HTTP/1 wrapper and header.py."""
+
+    def test_obs_text_response_value_survives(self):
+        """A server sending obs-text (0x80-0xFF) header values must not
+        kill the session with a decode error (R1)."""
+        client = session_client_new()
+        server = session_server_new()
+
+        stream_id, frames = client.submit_request(get_headers())
+        exchange(client, server, frames)
+
+        response = server.submit_response(
+            stream_id,
+            [(":status", "200"), ("x-quoted", "caf\xe9 \x80raw")],
+        )
+        response_events, _ = pump_frames(client, server, to_client=response)
+        headers = find(response_events, "headers")
+        assert len(headers) == 1
+        values = dict(headers[0]["headers"])
+        # 1:1 byte mapping: the exact characters come back.
+        assert values["x-quoted"] == "caf\xe9 \x80raw"
+
+    def test_obs_text_round_trip_is_lossless(self):
+        """latin-1 in both directions: a str submitted on one side
+        arrives byte-identical (as latin-1 str) on the other."""
+        client = session_client_new()
+        server = session_server_new()
+
+        headers = get_headers() + [("x-forwarded-note", "\xff\xfe\x80")]
+        _, frames = client.submit_request(headers)
+        _, server_events = exchange(client, server, frames)
+        received = find(server_events, "headers")
+        assert received
+        values = dict(received[0]["headers"])
+        assert values["x-forwarded-note"] == "\xff\xfe\x80"
+
+    def test_non_latin1_characters_raise_on_submit(self):
+        """Characters outside latin-1 must fail loudly instead of
+        silently producing UTF-8 mojibake on the wire."""
+        client = session_client_new()
+        with pytest.raises(UnicodeEncodeError):
+            client.submit_request(get_headers() + [("x-emoji", "\U0001f600")])
