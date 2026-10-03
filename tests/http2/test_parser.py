@@ -372,6 +372,59 @@ class TestSessionLatch:
             server.submit_response(1, [(":status", "200")])
 
 
+class TestHeaderListSizeLimit:
+    LIMIT = 65536
+
+    def test_limit_is_advertised_in_initial_settings(self):
+        client = session_client_new()
+        server = session_server_new()
+        _, initial = client.recv(b"")
+        pump_frames(client, server, to_server=initial)
+        remote = server.get_remote_settings()
+        assert remote[0x6] == self.LIMIT  # MAX_HEADER_LIST_SIZE
+
+    def test_oversized_header_block_is_rejected(self):
+        """A peer ignoring the advertised cap must not exhaust memory;
+        the callback failure surfaces as a fatal session error (M2).
+
+        Uses hyper-h2 as the peer: our own server session cannot
+        produce an oversized block because nghttp2's send-side cap
+        (NGHTTP2_MAX_HEADERSLEN) drops it first."""
+        h2 = pytest.importorskip("h2.connection")
+        h2_config = pytest.importorskip("h2.config")
+
+        client = session_client_new()
+        peer = h2.H2Connection(
+            config=h2_config.H2Configuration(client_side=False))
+        peer.initiate_connection()
+
+        stream_id, frames = client.submit_request(get_headers())
+        peer.receive_data(frames)
+        peer.send_headers(
+            stream_id,
+            [(b":status", b"200"), (b"x-flood", b"a" * (self.LIMIT + 1))],
+        )
+        with pytest.raises(RuntimeError,
+                           match="MAX_HEADER_LIST_SIZE|mem_recv"):
+            client.recv(peer.data_to_send())
+
+    def test_large_but_legal_header_block_passes(self):
+        client = session_client_new()
+        server = session_server_new()
+
+        stream_id, frames = client.submit_request(get_headers())
+        exchange(client, server, frames)
+
+        response = server.submit_response(
+            stream_id,
+            [(":status", "200"), ("x-large", "a" * (self.LIMIT // 2))],
+        )
+        response_events, _ = pump_frames(client, server, to_client=response)
+        headers = find(response_events, "headers")
+        assert headers
+        assert dict(headers[0]["headers"])["x-large"] == "a" * (self.LIMIT // 2)
+
+
 class TestHeaderEncoding:
     """Header names/values are opaque octets on the wire; the binding
     speaks latin-1 in both directions (1:1 byte mapping), matching the
