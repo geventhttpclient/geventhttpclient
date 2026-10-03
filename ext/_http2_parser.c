@@ -351,14 +351,18 @@ on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
         break;
     }
     case NGHTTP2_DATA: {
-        /* DATA chunks are emitted by on_data_chunk_recv; here
-         * we only need the (rare) end-of-stream notification for a
-         * frame without chunk callback invocations (empty DATA). */
-        if ((frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0) {
-            PyObject *event = new_event(KIND_STREAM_CLOSED, sid);
+        /* DATA chunks are emitted by on_data_chunk_recv (which also
+         * carries END_STREAM in its flags). A zero-length DATA frame
+         * never reaches that callback, so surface its END_STREAM here
+         * as an explicit empty chunk. stream_closed is *not* emitted
+         * here: on_stream_close is the single source for it (nghttp2
+         * invokes it exactly once per stream). */
+        if ((frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0 &&
+            frame->hd.length == frame->data.padlen) {
+            PyObject *event = new_event(KIND_DATA, sid);
             if (event == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
-            if (dict_set_bool(event, "end_stream", 1) < 0 ||
-                dict_set_ulong(event, "error_code", NGHTTP2_NO_ERROR) < 0) {
+            if (dict_set_bytes(event, "data", "", 0) < 0 ||
+                dict_set_bool(event, "end_stream", 1) < 0) {
                 Py_DECREF(event);
                 return NGHTTP2_ERR_CALLBACK_FAILURE;
             }
@@ -469,8 +473,9 @@ on_stream_close(nghttp2_session *session, int32_t stream_id,
 {
     PyHTTP2Session *self = (PyHTTP2Session *)user_data;
 
-    /* Report the close unless it already surfaced as a DATA
-     * END_STREAM event (normal response completion). */
+    /* Single source of stream_closed events (exactly once per
+     * stream). A DATA-frame END_STREAM is surfaced separately via
+     * data events, so nothing needs deduplication downstream. */
     PyObject *event = new_event(KIND_STREAM_CLOSED, stream_id);
     if (event == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
     if (dict_set_ulong(event, "error_code", error_code) < 0 ||

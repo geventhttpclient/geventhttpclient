@@ -425,6 +425,47 @@ class TestHeaderListSizeLimit:
         assert dict(headers[0]["headers"])["x-large"] == "a" * (self.LIMIT // 2)
 
 
+class TestStreamClosedSingleSource:
+    def _open_response_stream(self):
+        client = session_client_new()
+        server = session_server_new()
+        stream_id, frames = client.submit_request(get_headers())
+        exchange(client, server, frames)
+        response = server.submit_response(
+            stream_id, [(":status", "200")], with_body=True)
+        pump_frames(client, server, to_client=response)
+        return client, server, stream_id
+
+    def test_empty_terminal_data_surfaces_as_empty_chunk(self):
+        """A zero-length DATA frame with END_STREAM must surface as a
+        data event with b"" + end_stream (no chunk callback fires for
+        it in nghttp2)."""
+        client, server, stream_id = self._open_response_stream()
+        tail = server.submit_data(stream_id, b"", end_stream=True)
+        events, _ = pump_frames(client, server, to_client=tail)
+
+        data_events = [e for e in find(events, "data")
+                       if e["stream_id"] == stream_id]
+        assert data_events, "empty terminal DATA must still surface"
+        assert data_events[-1]["data"] == b""
+        assert data_events[-1]["end_stream"] is True
+
+    def test_stream_closed_fires_exactly_once(self):
+        """on_stream_close is the single source of stream_closed —
+        no duplicate from the DATA END_STREAM path (M3)."""
+        client, server, stream_id = self._open_response_stream()
+        tail = server.submit_data(stream_id, b"payload", end_stream=True)
+        events, _ = pump_frames(client, server, to_client=tail)
+
+        closed = [e for e in find(events, "stream_closed")
+                  if e["stream_id"] == stream_id]
+        assert len(closed) == 1
+
+        data_events = [e for e in find(events, "data")
+                       if e["stream_id"] == stream_id]
+        assert data_events[-1]["end_stream"] is True
+
+
 class TestHeaderEncoding:
     """Header names/values are opaque octets on the wire; the binding
     speaks latin-1 in both directions (1:1 byte mapping), matching the
