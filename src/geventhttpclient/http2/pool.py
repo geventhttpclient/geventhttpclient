@@ -170,7 +170,8 @@ class HTTP2ConnectionPool:
         prior-knowledge mode would need a separate code path.
         """
         sock = gevent.socket.create_connection(
-            (host, port), timeout=self.connection_timeout,
+            (host, port),
+            timeout=self.connection_timeout,
         )
         sock.settimeout(self.network_timeout)
         ctx = gevent.ssl.create_default_context()

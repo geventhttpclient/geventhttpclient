@@ -19,7 +19,6 @@ Every test starts its own server on ``127.0.0.1:0`` so the suite
 runs in parallel without conflict.
 """
 
-
 import sys
 
 import gevent
@@ -49,11 +48,17 @@ class TestConnectionManagement:
     def test_round_trip_get(self) -> None:
         with H2TestServer() as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", )
+                handle = client.request_h2(
+                    "GET",
+                    "/",
+                )
                 assert handle.status_code == 200
                 assert handle.body.startswith(b"echo GET /\n")
             finally:
@@ -62,12 +67,16 @@ class TestConnectionManagement:
     def test_post_with_body(self) -> None:
         with H2TestServer() as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
                 handle = client.request_h2(
-                    "POST", "/upload",
+                    "POST",
+                    "/upload",
                     body=b"the request body",
                 )
                 assert handle.status_code == 200
@@ -81,12 +90,21 @@ class TestStreamLifecycle:
     def test_concurrent_streams(self) -> None:
         with H2TestServer() as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
-                h1 = client.request_h2("GET", "/a", )
-                h2 = client.request_h2("GET", "/b", )
+                h1 = client.request_h2(
+                    "GET",
+                    "/a",
+                )
+                h2 = client.request_h2(
+                    "GET",
+                    "/b",
+                )
                 assert h1.stream_id != h2.stream_id
                 # Both must finish independently.
                 assert h1.status_code == 200
@@ -109,11 +127,17 @@ class TestHeaderHandling:
 
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/anything", )
+                handle = client.request_h2(
+                    "GET",
+                    "/anything",
+                )
                 assert handle.status_code == 201
                 assert handle.body == b'{"ok":true}'
                 header_dict = dict(handle.headers)
@@ -156,11 +180,17 @@ class TestServerReset:
         # response, leaving a true RST_STREAM test to follow-up work.
         with H2TestServer(config=H2ServerConfig(handler=rstd_handler)) as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", )
+                handle = client.request_h2(
+                    "GET",
+                    "/",
+                )
                 assert handle.status_code == 200
             finally:
                 client.close()
@@ -185,11 +215,17 @@ class TestGoAway:
 
         with H2TestServer() as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", )
+                handle = client.request_h2(
+                    "GET",
+                    "/",
+                )
                 assert handle.is_closed
             finally:
                 client.close()
@@ -201,8 +237,11 @@ class TestSettings:
     def test_local_settings_advertised(self) -> None:
         with H2TestServer() as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
                 # Defaults come from the C layer (MAX_HEADER_LIST_SIZE
@@ -211,7 +250,10 @@ class TestSettings:
                 # Touch a connection so local settings are populated
                 # (the h2-pool constructor emits our SETTINGS to the
                 # connection preface). Round-trip once to settle.
-                handle = client.request_h2("GET", "/", )
+                handle = client.request_h2(
+                    "GET",
+                    "/",
+                )
                 assert handle.status_code == 200
                 assert handle.is_closed
             finally:
@@ -232,11 +274,17 @@ class TestTrailer:
 
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
-                handle = client.request_h2("GET", "/", )
+                handle = client.request_h2(
+                    "GET",
+                    "/",
+                )
                 # Review part 2 finding #4: trailers in their own field,
                 # headers without the trailer fields.
                 assert handle.body == b"hello"
@@ -251,6 +299,7 @@ class TestTrailer:
         """M7 (review part 3): a HEADERS block at ``END_STREAM`` on a
         stream whose body is also empty is *trailer-only* and must
         not consume the ``:status`` pseudo-header."""
+
         def handler(method, path, headers, body):
             return {
                 "status": 200,
@@ -261,8 +310,11 @@ class TestTrailer:
 
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
                 handle = client.request_h2("GET", "/empty")
@@ -279,6 +331,7 @@ class TestInformational:
     def test_early_hints_surface_and_dont_overwrite_status(self) -> None:
         """M8 (review part 3): 103 Early Hints precedes 200 OK and
         does not become the final ``status_code``."""
+
         def handler(method, path, headers, body):
             return {
                 "status": 200,
@@ -294,8 +347,11 @@ class TestInformational:
 
         with H2TestServer(config=H2ServerConfig(handler=handler)) as server:
             client = HTTPClient(
-                "127.0.0.1", port=server.port,
-                ssl=True, insecure=True, http2=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
+                http2=True,
             )
             try:
                 resp = client.request_h2("GET", "/")

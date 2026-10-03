@@ -24,12 +24,14 @@ def _drive_until_closed(
 ) -> None:
     """Drive the session until the handle reports closed or we run out of time."""
     import time
+
     start_time = time.time()
     while not handle.is_closed:
         if time.time() - start_time > timeout:
             pytest.fail(f"response did not close in {timeout}s (status={handle.status_code})")
         session.drive_once()
         import gevent
+
         gevent.sleep(0)
 
 
@@ -67,7 +69,10 @@ class TestLiveRoundTrip:
         try:
             session = HTTP2Session(sock)
             handle = session.submit_request(
-                "GET", "/get", HTTPBIN_HOST, headers=_default_headers(),
+                "GET",
+                "/get",
+                HTTPBIN_HOST,
+                headers=_default_headers(),
             )
             _drive_until_closed(session, handle)
             assert handle.status_code == 200
@@ -81,7 +86,10 @@ class TestLiveRoundTrip:
         try:
             session = HTTP2Session(sock)
             handle = session.submit_request(
-                "POST", "/post", HTTPBIN_HOST, headers=_default_headers(),
+                "POST",
+                "/post",
+                HTTPBIN_HOST,
+                headers=_default_headers(),
             )
             _drive_until_closed(session, handle)
             assert handle.status_code == 200
@@ -110,6 +118,7 @@ class TestLiveRoundTrip:
             # the request's ``X-Request-Start`` timestamp which differs
             # per request. We assert on shape instead.
             import json
+
             for body, label in ((h1.body, "h1"), (h2.body, "h2")):
                 parsed = json.loads(body)
                 assert parsed["method"] == "GET"
@@ -124,7 +133,10 @@ class TestLiveRoundTrip:
         try:
             session = HTTP2Session(sock)
             handle = session.submit_request(
-                "GET", "/status/404", HTTPBIN_HOST, headers=_default_headers(),
+                "GET",
+                "/status/404",
+                HTTPBIN_HOST,
+                headers=_default_headers(),
             )
             _drive_until_closed(session, handle)
             assert handle.status_code == 404

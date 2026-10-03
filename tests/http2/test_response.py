@@ -4,7 +4,6 @@ Covers the :class:`HTTP2Response` read/iter API and the retry logic in
 :meth:`HTTPClient.request_h2` (Sprint 3c).
 """
 
-
 import sys
 from typing import Any
 
@@ -59,16 +58,16 @@ def _make_round_trip(
                 with_body=True,
             )
             for chunk in chunks[:-1]:
-                response += server_session.submit_data(
-                    stream_id, chunk, end_stream=False
-                )
-            response += server_session.submit_data(
-                stream_id, chunks[-1], end_stream=True
-            )
+                response += server_session.submit_data(stream_id, chunk, end_stream=False)
+            response += server_session.submit_data(stream_id, chunks[-1], end_stream=True)
             server_sock.sendall(response)
         else:
             _server_replies_with(
-                server_sock, server_session, stream_id, status, response_body,
+                server_sock,
+                server_session,
+                stream_id,
+                status,
+                response_body,
                 content_type=content_type,
             )
 
@@ -158,6 +157,7 @@ class TestReviewHttp2_3Regressions:
         """M3: ``HTTP2SocketResponseBridge.readline`` must leave the
         rest of the body for subsequent ``read()`` calls."""
         from geventhttpclient.http2.response import HTTP2SocketResponseBridge
+
         h = _make_round_trip(b"zeile1\r\nzeile2\r\nzeile3")
         r = HTTP2Response(h)
         bridge = HTTP2SocketResponseBridge(r)
@@ -253,7 +253,9 @@ class TestRetry:
             client = _make_http_client(pool, host="never-resolves")
             with pytest.raises(HTTP2Error, match="HTTP/2 connection failed"):
                 client.request_h2(
-                    "GET", "/", max_retries=0,
+                    "GET",
+                    "/",
+                    max_retries=0,
                 )
         finally:
             pool.close()
@@ -266,6 +268,7 @@ class TestRetry:
         # round trip plus transient-failure injection would be flaky
         # -- the network error path is unit-level by nature).
         from .servers import H2TestServer
+
         with H2TestServer() as server:
             from geventhttpclient import client as client_module
 
@@ -286,7 +289,10 @@ class TestRetry:
                     port=server.port,
                 )
                 handle = client.request_h2(
-                    "GET", "/get", max_retries=1, timeout=5.0,
+                    "GET",
+                    "/get",
+                    max_retries=1,
+                    timeout=5.0,
                 )
                 assert handle.status_code == 200
                 assert calls["n"] == 2

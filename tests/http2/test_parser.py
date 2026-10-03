@@ -58,9 +58,9 @@ def pump_frames(client, server, to_server=b"", to_client=b"", rounds=10):
 
 def exchange(client, server, *batches, rounds=10):
     """Client-to-server variant of pump_frames (request flow)."""
-    return pump_frames(client, server,
-                       to_server=b"".join(batch for batch in batches if batch),
-                       rounds=rounds)
+    return pump_frames(
+        client, server, to_server=b"".join(batch for batch in batches if batch), rounds=rounds
+    )
 
 
 def find(events, kind):
@@ -129,8 +129,9 @@ class TestSettingsRoundTrip:
         initial = client.submit_settings({0x3: 64})
 
         client_events, _ = exchange(client, server, initial)
-        acks = [event for event in client_events
-                if event.get("_kind") == "settings" and event["ack"]]
+        acks = [
+            event for event in client_events if event.get("_kind") == "settings" and event["ack"]
+        ]
         assert acks, "client must receive a SETTINGS ack from the server"
 
 
@@ -157,8 +158,7 @@ class TestRequestRoundTrip:
         server = session_server_new()
 
         body = b"hello http2 world"
-        stream_id, frames = client.submit_request(post_headers(),
-                                                  with_body=True)
+        stream_id, frames = client.submit_request(post_headers(), with_body=True)
         assert stream_id == 1
         frames += client.submit_data(stream_id, body, end_stream=True)
 
@@ -176,8 +176,7 @@ class TestRequestRoundTrip:
         client = session_client_new()
         server = session_server_new()
 
-        stream_id, frames = client.submit_request(post_headers(),
-                                                  with_body=True)
+        stream_id, frames = client.submit_request(post_headers(), with_body=True)
         frames += client.submit_data(stream_id, b"chunk-one-", end_stream=False)
         frames += client.submit_data(stream_id, b"chunk-two", end_stream=True)
 
@@ -215,11 +214,9 @@ class TestFullRequestResponse:
 
         response_frames = server.submit_response(
             stream_id,
-            [(":status", "200"),
-             ("content-type", "text/plain")],
+            [(":status", "200"), ("content-type", "text/plain")],
         )
-        response_events, _ = pump_frames(client, server,
-                                         to_client=response_frames)
+        response_events, _ = pump_frames(client, server, to_client=response_frames)
         client_events.extend(response_events)
         response_headers = find(client_events, "headers")
         assert len(response_headers) == 1
@@ -237,12 +234,9 @@ class TestFullRequestResponse:
         stream_id, frames = client.submit_request(get_headers())
         exchange(client, server, frames)
 
-        response_frames = server.submit_response(
-            stream_id, [(":status", "200")], with_body=True)
-        response_frames += server.submit_data(stream_id, b"the-body",
-                                              end_stream=True)
-        response_events, _ = pump_frames(client, server,
-                                         to_client=response_frames)
+        response_frames = server.submit_response(stream_id, [(":status", "200")], with_body=True)
+        response_frames += server.submit_data(stream_id, b"the-body", end_stream=True)
+        response_events, _ = pump_frames(client, server, to_client=response_frames)
 
         headers = find(response_events, "headers")
         assert headers and headers[0]["end_stream"] is False
@@ -293,13 +287,13 @@ class TestPing:
         ping_frames = client.submit_ping(opaque)
         client_events, server_events = exchange(client, server, ping_frames)
 
-        pings = [event for event in server_events
-                 if event.get("_kind") == "ping" and not event["ack"]]
+        pings = [
+            event for event in server_events if event.get("_kind") == "ping" and not event["ack"]
+        ]
         assert pings
         assert pings[0]["opaque_data"] == opaque
 
-        acks = [event for event in client_events
-                if event.get("_kind") == "ping" and event["ack"]]
+        acks = [event for event in client_events if event.get("_kind") == "ping" and event["ack"]]
         assert acks, "client must receive the PING ack from the server"
 
 
@@ -351,16 +345,17 @@ class TestWindowUpdate:
         # Response headers without END_STREAM: the stream stays open
         # until the body arrives, so a stream-level WINDOW_UPDATE is
         # valid in between.
-        response = server.submit_response(
-            stream_id, [(":status", "200")], with_body=True)
+        response = server.submit_response(stream_id, [(":status", "200")], with_body=True)
         response_events, _ = pump_frames(client, server, to_client=response)
         assert find(response_events, "headers")
 
         frames = client.submit_window_update(stream_id, 4096)
         _, server_events = pump_frames(client, server, to_server=frames)
-        updates = [event for event in server_events
-                   if event.get("_kind") == "window_update"
-                   and event["stream_id"] == stream_id]
+        updates = [
+            event
+            for event in server_events
+            if event.get("_kind") == "window_update" and event["stream_id"] == stream_id
+        ]
         assert updates
         assert updates[0]["increment"] == 4096
 
@@ -404,8 +399,7 @@ class TestHeaderListSizeLimit:
         nghttp2's send-side cap (NGHTTP2_MAX_HEADERSLEN) drops it
         first."""
         client = session_client_new()
-        peer = h2.connection.H2Connection(
-            config=h2.config.H2Configuration(client_side=False))
+        peer = h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=False))
         peer.initiate_connection()
 
         stream_id, frames = client.submit_request(get_headers())
@@ -414,8 +408,7 @@ class TestHeaderListSizeLimit:
             stream_id,
             [(b":status", b"200"), (b"x-flood", b"a" * (self.LIMIT + 1))],
         )
-        with pytest.raises(RuntimeError,
-                           match="MAX_HEADER_LIST_SIZE|mem_recv"):
+        with pytest.raises(RuntimeError, match="MAX_HEADER_LIST_SIZE|mem_recv"):
             client.recv(peer.data_to_send())
 
     def test_large_but_legal_header_block_passes(self):
@@ -441,8 +434,7 @@ class TestStreamClosedSingleSource:
         server = session_server_new()
         stream_id, frames = client.submit_request(get_headers())
         exchange(client, server, frames)
-        response = server.submit_response(
-            stream_id, [(":status", "200")], with_body=True)
+        response = server.submit_response(stream_id, [(":status", "200")], with_body=True)
         pump_frames(client, server, to_client=response)
         return client, server, stream_id
 
@@ -454,8 +446,7 @@ class TestStreamClosedSingleSource:
         tail = server.submit_data(stream_id, b"", end_stream=True)
         events, _ = pump_frames(client, server, to_client=tail)
 
-        data_events = [e for e in find(events, "data")
-                       if e["stream_id"] == stream_id]
+        data_events = [e for e in find(events, "data") if e["stream_id"] == stream_id]
         assert data_events, "empty terminal DATA must still surface"
         assert data_events[-1]["data"] == b""
         assert data_events[-1]["end_stream"] is True
@@ -471,12 +462,10 @@ class TestStreamClosedSingleSource:
         tail = server.submit_data(stream_id, b"payload", end_stream=True)
         events, _ = pump_frames(client, server, to_client=tail)
 
-        closed = [e for e in find(events, "stream_closed")
-                  if e["stream_id"] == stream_id]
+        closed = [e for e in find(events, "stream_closed") if e["stream_id"] == stream_id]
         assert len(closed) == 1
 
-        data_events = [e for e in find(events, "data")
-                       if e["stream_id"] == stream_id]
+        data_events = [e for e in find(events, "data") if e["stream_id"] == stream_id]
         assert data_events[-1]["end_stream"] is True
 
 
@@ -487,32 +476,36 @@ class TestPushRefusal:
         connection alive (M5). Uses hyper-h2 (a declared dev
         dependency) as the pushing server."""
         client = session_client_new()
-        peer = h2.connection.H2Connection(
-            config=h2.config.H2Configuration(client_side=False))
+        peer = h2.connection.H2Connection(config=h2.config.H2Configuration(client_side=False))
         peer.initiate_connection()
 
         stream_id, frames = client.submit_request(get_headers())
         peer.receive_data(frames)
         promised_id = 2
-        peer.push_stream(stream_id, promised_id, [
-            (b":method", b"GET"),
-            (b":scheme", b"https"),
-            (b":path", b"/pushed"),
-            (b":authority", b"example.com"),
-        ])
+        peer.push_stream(
+            stream_id,
+            promised_id,
+            [
+                (b":method", b"GET"),
+                (b":scheme", b"https"),
+                (b":path", b"/pushed"),
+                (b":authority", b"example.com"),
+            ],
+        )
         _, outbound = client.recv(peer.data_to_send())
 
         # The client must have queued a refusal for the promised stream.
         reset_events = peer.receive_data(outbound)
-        resets = [e for e in reset_events
-                  if isinstance(e, h2.events.StreamReset)
-                  and e.stream_id == promised_id]
+        resets = [
+            e
+            for e in reset_events
+            if isinstance(e, h2.events.StreamReset) and e.stream_id == promised_id
+        ]
         assert resets, "promised stream must be reset"
         assert resets[0].error_code == 0x7  # REFUSED_STREAM
 
         # The connection stays usable: the regular response flows.
-        peer.send_headers(stream_id, [(b":status", b"200")],
-                          end_stream=True)
+        peer.send_headers(stream_id, [(b":status", b"200")], end_stream=True)
         events, _ = client.recv(peer.data_to_send())
         headers = find(events, "headers")
         assert headers
@@ -528,8 +521,7 @@ class TestWindowSizes:
     def test_stream_windows_and_unknown_stream(self):
         client = session_client_new()
         server = session_server_new()
-        stream_id, frames = client.submit_request(
-            post_headers(), with_body=True)
+        stream_id, frames = client.submit_request(post_headers(), with_body=True)
         exchange(client, server, frames)
 
         assert client.get_stream_remote_window_size(stream_id) == 65535
@@ -546,12 +538,10 @@ class TestWindowSizes:
         server = session_server_new()
         stream_id, frames = client.submit_request(get_headers())
         exchange(client, server, frames)
-        response = server.submit_response(
-            stream_id, [(":status", "200")], with_body=True)
+        response = server.submit_response(stream_id, [(":status", "200")], with_body=True)
         pump_frames(client, server, to_client=response)
 
-        body = server.submit_data(stream_id, b"y" * 1000,
-                                  end_stream=False)
+        body = server.submit_data(stream_id, b"y" * 1000, end_stream=False)
         client.recv(body)
         # The receive window only recovers once the application
         # consumes via nghttp2's automatic window update; either way
