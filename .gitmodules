@@ -1,6 +1,6 @@
 [submodule "llhttp"]
-	path = llhttp
+	path = vendor/llhttp
 	url = https://github.com/nodejs/llhttp
-[submodule "third-party/nghttp2"]
-	path = third-party/nghttp2
+[submodule "nghttp2"]
+	path = vendor/nghttp2
 	url = https://github.com/nghttp2/nghttp2.git
