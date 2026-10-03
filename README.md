@@ -29,7 +29,7 @@ requests.get("https://github.com").text
 - **Modern packaging.** Python 3.11-3.14, wheels for common platforms, fully type annotated (`py.typed`).
 
 > **What it is not:** a full replacement for `requests` or `httpx`. It covers the common cases (cookies, form data,
-> compressed bodies, proxies), but is not as feature rich, and has no HTTP/2 support.
+> compressed bodies, proxies), but is not as feature rich.
 
 ## Installation
 
@@ -113,8 +113,9 @@ with httpx.Client() as client:
         ...
 ```
 
-Limitations: per-request options are not plumbed through (the engine is configured at session level); HTTP/2 and mounts
-are out of scope.
+Limitations: per-request options are not plumbed through (the engine is configured at session level); mounts are out of
+scope. HTTP/2 is configured at session level as well: `httpx.Client(http2=True)`, see
+[HTTP/2](#http2-experimental).
 
 ### http.client / httplib
 
@@ -141,6 +142,22 @@ import httplib2
 > `gevent.httplib` support for patching `http.client` was removed in
 > [gevent 1.0](https://github.com/surfly/gevent/commit/b45b83b1bc4de14e3c4859362825044b8e3df7d6). `geventhttpclient`
 > provides that missing functionality.
+
+## HTTP/2 (experimental)
+
+HTTP/2 is opt-in per client, mirroring `httpx`: pass `http2=True`. Nothing changes until you ask for it.
+
+```python
+from geventhttpclient import Session
+
+with Session(http2=True) as s:
+    r = s.get("https://nghttp2.org/")
+    print(r.status_code, r.content)
+```
+
+The client then advertises ALPN `h2` and `http/1.1`, multiplexes requests over one connection when the server picks
+`h2`, and falls back to HTTP/1.1 transparently when it does not. Failures on the h2 path raise `HTTP2Error`, a
+`ConnectionError` subclass, so `except ConnectionError` keeps catching both protocols.
 
 ## Low-level HTTPClient
 
@@ -306,8 +323,8 @@ Details and instructions to reproduce: [benchmarks/README.md](benchmarks/README.
 
 ## Development
 
-The `llhttp` parser is vendored as a git submodule. Clone with `--recurse-submodules` (or run
-`git submodule update --init`), then:
+The `llhttp` HTTP/1.1 parser and the `nghttp2` HTTP/2 library are vendored as git submodules under `vendor/`. Clone
+with `--recurse-submodules` (or run `git submodule update --init`), then:
 
 ```bash
 uv sync                      # the dev group: pytest, mypy, requests, …

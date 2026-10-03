@@ -17,6 +17,11 @@ left out unless it affects users of the package.
 - `insecure` on `UserAgent`, for TLS targets without a verified chain
 - `CompatRequest` derives from `urllib.request.Request`, so cookie jars
   work without workarounds
+- Experimental HTTP/2 support, opt-in with `http2=True` on
+  `UserAgent`, `Session`, `HTTPClient` and `httpx.Client`, backed by a
+  vendored nghttp2 C extension. ALPN picks the protocol, HTTP/1.1
+  fallback is automatic; h2 transport errors raise `HTTP2Error`, a
+  `ConnectionError` subclass
 
 ### Changed
 
