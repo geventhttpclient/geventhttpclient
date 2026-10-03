@@ -25,7 +25,6 @@ Design goals:
   one test do not pollute the next.
 """
 
-
 import os
 
 # Default location of the test certs. The bundled self-signed cert
@@ -203,7 +202,9 @@ class H2TestServer:
 
     @staticmethod
     def _join_all(
-        greenlets: list[gevent.Greenlet], *, per_greenlet: float,
+        greenlets: list[gevent.Greenlet],
+        *,
+        per_greenlet: float,
     ) -> None:
         for g in greenlets:
             g.join(timeout=per_greenlet)
@@ -378,9 +379,6 @@ class H2TestServer:
             )
 
 
-
-
-
 class H1OnlyTestServer:
     """A co-operative HTTP/1.1-only TLS test server.
 
@@ -405,9 +403,7 @@ class H1OnlyTestServer:
             {"hello":"http1.1","method":"GET"}
     """
 
-    BODY = (
-        b'{"hello":"http1.1","method":"GET"}'
-    )
+    BODY = b'{"hello":"http1.1","method":"GET"}'
 
     def __init__(
         self,
@@ -530,6 +526,8 @@ class H1OnlyTestServer:
                 client.close()
             except Exception:
                 pass
+
+
 __all__ = [
     "H1OnlyTestServer",
     "H2ServerConfig",

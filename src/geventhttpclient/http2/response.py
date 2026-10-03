@@ -133,19 +133,19 @@ class HTTP2Response:
         """
         seen_now = len(self._handle.body_parts)
         if self._body is None or seen_now != self._body_seen:
-            new_body = b"".join(self._handle.body_parts[self._body_seen:])
+            new_body = b"".join(self._handle.body_parts[self._body_seen :])
             if self._body is None:
                 self._body = new_body
             else:
                 # Keep the unread remainder; the rebuilt buffer starts
                 # at the read position, so reset the cursor.
-                self._body = self._body[self._cursor:] + new_body
+                self._body = self._body[self._cursor :] + new_body
                 self._cursor = 0
             self._body_seen = seen_now
         return self._body
 
     def _remaining(self) -> bytes:
-        return self._body_cached()[self._cursor:]
+        return self._body_cached()[self._cursor :]
 
     def read(self, n: int | None = None) -> bytes:
         """Read up to ``n`` bytes. ``n=None`` reads the remainder.
@@ -158,10 +158,10 @@ class HTTP2Response:
         """
         body = self._body_cached()
         if n is None:
-            chunk = bytes(body[self._cursor:])
+            chunk = bytes(body[self._cursor :])
             self._cursor = len(body)
             return chunk
-        chunk = bytes(body[self._cursor:self._cursor + n])
+        chunk = bytes(body[self._cursor : self._cursor + n])
         self._cursor += len(chunk)
         return chunk
 
@@ -199,7 +199,7 @@ class HTTP2Response:
         total = len(body)
         while self._cursor < total:
             end = min(self._cursor + chunk_size, total)
-            chunk = bytes(body[self._cursor:end])
+            chunk = bytes(body[self._cursor : end])
             self._cursor = end
             yield chunk
 

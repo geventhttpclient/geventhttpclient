@@ -65,7 +65,8 @@ class TestH2DefaultTimeout:
         ua = UserAgent(http2=True, insecure=True)
         try:
             r = ua.urlopen(
-                f"https://{HTTPBIN_HOST}/get", method="GET",
+                f"https://{HTTPBIN_HOST}/get",
+                method="GET",
             )
             assert r.status_code == 200
         finally:
@@ -89,6 +90,7 @@ class TestH3ErrorTaxonomy:
         # on inheritance from it -- the connection hierarchy is split
         # between this class and useragent-side BadStatusCode.
         from geventhttpclient.useragent import ConnectionError as UAConnectionError
+
         # Smoke: the useragent-side ``ConnectionError`` is a class with
         # a different shape (``url`` attribute, etc.) than ``OSError``;
         # we just confirm both names are accessible without conflict.
@@ -100,7 +102,8 @@ class TestH3ErrorTaxonomy:
             # Point at a closed port so the connection fails.
             with pytest.raises((HTTP2Error, OSError)):
                 ua.urlopen(
-                    "https://127.0.0.1:1/", method="GET",
+                    "https://127.0.0.1:1/",
+                    method="GET",
                 )
         finally:
             ua.close()

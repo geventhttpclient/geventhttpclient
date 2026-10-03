@@ -19,7 +19,6 @@ The tests verify:
 * A non-TLS scheme does not enter the h2 path.
 """
 
-
 import pytest
 
 from geventhttpclient.useragent import UserAgent
@@ -33,11 +32,7 @@ def _json_echo(method: str, path: str, headers, body: bytes) -> dict[str, object
         "status": 200,
         "headers": [("content-type", "application/json")],
         "body": (
-            b'{"hello":"http2","method":"'
-            + method.encode()
-            + b'","path":"'
-            + path.encode()
-            + b'"}'
+            b'{"hello":"http2","method":"' + method.encode() + b'","path":"' + path.encode() + b'"}'
         ),
     }
 
@@ -60,6 +55,7 @@ class TestUserAgentH2:
         r = ua.urlopen(f"https://127.0.0.1:{port}/get", method="GET")
         assert r.status_code == 200
         import json
+
         body = json.loads(r.content)
         assert body == {"hello": "http2", "method": "GET", "path": "/get"}
 
@@ -82,6 +78,7 @@ class TestUserAgentH2:
         )
         assert r.status_code == 200
         import json
+
         body = json.loads(r.content)
         assert body["method"] == "POST"
         assert body["path"] == "/post"

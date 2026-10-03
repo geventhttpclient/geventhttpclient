@@ -13,7 +13,6 @@ connection. Server availability is outside our control, so a test
 skips when its host is unreachable rather than failing.
 """
 
-
 import socket
 import ssl
 
@@ -87,7 +86,8 @@ class TestMultiplexing:
 
             def fetch(i: int) -> tuple[int, int]:
                 h = c.request_h2(
-                    "GET", f"/?i={i}",
+                    "GET",
+                    f"/?i={i}",
                     headers={"host": "nghttp2.org"},
                 )
                 return i, h.status_code
@@ -109,7 +109,8 @@ class TestLargeDownloads:
         c = HTTPClient("proof.ovh.net", port=443, ssl=True, http2=True)
         try:
             h = c.request_h2(
-                "GET", "/files/1Mb.dat",
+                "GET",
+                "/files/1Mb.dat",
                 headers={"host": "proof.ovh.net"},
             )
             assert h.status_code == 200
@@ -120,10 +121,12 @@ class TestLargeDownloads:
     def test_streaming_read(self) -> None:
         _skip_if_no_h2("proof.ovh.net")
         from geventhttpclient.http2.response import HTTP2Response
+
         c = HTTPClient("proof.ovh.net", port=443, ssl=True, http2=True)
         try:
             h = c.request_h2(
-                "GET", "/files/1Mb.dat",
+                "GET",
+                "/files/1Mb.dat",
                 headers={"host": "proof.ovh.net"},
             )
             resp = HTTP2Response(h)
@@ -145,7 +148,8 @@ class TestFallbackOnH1OnlyServer:
         c = HTTPClient(host, port=443, ssl=True, http2=True)
         try:
             r = c.request_h2(
-                "GET", "/100MB.bin",
+                "GET",
+                "/100MB.bin",
                 headers={"host": host, "range": "bytes=0-1023"},
             )
             assert not isinstance(r, HTTP2ResponseHandle)
@@ -164,6 +168,7 @@ class TestContentEncoding:
     def test_gzip_content(self, http2: bool) -> None:
         _skip_if_no_h2("httpbin.org")
         import json
+
         ua = UserAgent(insecure=True, http2=http2)
         try:
             r = ua.urlopen(
@@ -179,6 +184,7 @@ class TestContentEncoding:
     def test_brotli_content(self, http2: bool) -> None:
         _skip_if_no_h2("httpbin.org")
         import json
+
         ua = UserAgent(insecure=True, http2=http2)
         try:
             r = ua.urlopen(

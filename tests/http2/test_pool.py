@@ -23,14 +23,18 @@ def test_pool_key_reuses_session() -> None:
 
     def fake_open(host, port):
         opened["count"] += 1
+
         # Return a stub that satisfies the small surface HTTP2Session uses.
         class _S:
             def settimeout(self, _timeout):
                 pass
+
             def sendall(self, _data):
                 pass
+
             def close(self):
                 pass
+
         return _S()
 
     pool._open_socket = fake_open  # type: ignore[assignment]
@@ -48,13 +52,17 @@ def test_pool_keys_are_per_endpoint() -> None:
 
     def fake_open(host, port):
         opened.append((host, port))
+
         class _S:
             def settimeout(self, _):
                 pass
+
             def sendall(self, _):
                 pass
+
             def close(self):
                 pass
+
         return _S()
 
     pool._open_socket = fake_open  # type: ignore[assignment]
@@ -79,10 +87,13 @@ def test_close_after_use() -> None:
     class _FakeSock:
         def __init__(self):
             self.closed = False
+
         def settimeout(self, _):
             pass
+
         def sendall(self, _):
             pass
+
         def close(self):
             self.closed = True
             closed_socks.append(True)
@@ -118,6 +129,7 @@ def test_close_submits_goaway_frame() -> None:
     server's accept loop saw the GOAWAY and exited cleanly.
     """
     from .servers import H2TestServer
+
     with H2TestServer() as server:
         pool = HTTP2ConnectionPool(insecure=True)
         session = pool.get_session("127.0.0.1", server.port)

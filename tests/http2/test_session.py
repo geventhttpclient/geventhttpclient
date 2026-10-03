@@ -7,7 +7,6 @@ server-side socket, replies via the raw nghttp2 C session, and writes
 the resulting frames back through the same fake socket.
 """
 
-
 import errno
 import threading
 from collections.abc import Callable
@@ -104,16 +103,24 @@ class FakeSocket:
         self.non_blocking = True
 
     def side_a(self) -> "FakeSocketEnd":
-        return FakeSocketEnd(self, write=self.a_to_b, read=self.b_to_a,
-                             is_closed=lambda: self._peer_closed_b,
-                             close_other=lambda: setattr(self, "_peer_closed_a", True),
-                             lock=self._lock)
+        return FakeSocketEnd(
+            self,
+            write=self.a_to_b,
+            read=self.b_to_a,
+            is_closed=lambda: self._peer_closed_b,
+            close_other=lambda: setattr(self, "_peer_closed_a", True),
+            lock=self._lock,
+        )
 
     def side_b(self) -> "FakeSocketEnd":
-        return FakeSocketEnd(self, write=self.b_to_a, read=self.a_to_b,
-                             is_closed=lambda: self._peer_closed_a,
-                             close_other=lambda: setattr(self, "_peer_closed_b", True),
-                             lock=self._lock)
+        return FakeSocketEnd(
+            self,
+            write=self.b_to_a,
+            read=self.a_to_b,
+            is_closed=lambda: self._peer_closed_a,
+            close_other=lambda: setattr(self, "_peer_closed_b", True),
+            lock=self._lock,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -382,9 +389,7 @@ class TestHTTP2SessionRoundTrip:
 
         _server_drive(server_sock, server_session, server_events, on_request)
 
-        handle = session.submit_request(
-            "POST", "/upload", "example.com", body=b"the request body"
-        )
+        handle = session.submit_request("POST", "/upload", "example.com", body=b"the request body")
 
         for _ in range(50):
             if handle.is_closed:

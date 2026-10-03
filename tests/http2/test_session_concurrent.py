@@ -8,7 +8,6 @@ fake socket pair, and verify that the new locks do not deadlock and
 that they actually serialise the pump-and-flush cycle.
 """
 
-
 import errno
 import sys
 from typing import Any
@@ -58,6 +57,7 @@ class TestPoolLockWithIoyield:
             # Simulate the DNS/TLS work that would actually yield in
             # real sockets.
             gevent.sleep(0.05)
+
             # Return a fake socket that satisfies the surface
             # ``HTTP2Session.flush_outbound`` uses.
             class _S:
@@ -69,6 +69,7 @@ class TestPoolLockWithIoyield:
 
                 def close(self) -> None:
                     pass
+
             return _S()
 
         pool._open_socket = slow_open  # type: ignore[assignment]
@@ -209,7 +210,9 @@ class TestTrailerHandling:
                 with_body=True,
             )
             response += server_session.submit_data(
-                stream_id, b"body", end_stream=False,
+                stream_id,
+                b"body",
+                end_stream=False,
             )
             response += server_session.submit_trailer(
                 stream_id,

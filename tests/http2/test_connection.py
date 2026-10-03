@@ -8,7 +8,6 @@ raw dicts to dataclasses, the per-stream state machine, the
 gate.
 """
 
-
 import pytest
 
 from geventhttpclient.http2 import (
@@ -144,8 +143,7 @@ class TestRequestResponse:
         server_headers = [e for e in s_events if e.get("_kind") == "headers"]
         assert len(server_headers) == 1
 
-        response = s.submit_response(sid, [(":status", "200"),
-                                           ("content-type", "text/plain")])
+        response = s.submit_response(sid, [(":status", "200"), ("content-type", "text/plain")])
         c_events, _ = _pump(c, s, to_client=response)
 
         # The first event must be the typed HeadersReceived. We filter
@@ -172,8 +170,7 @@ class TestRequestResponse:
         # ``submit_data(end_stream=True)`` immediately, so the extra
         # ``submit_data`` call from the previous test would either be
         # rejected (stream already finished) or duplicate the body.
-        sid = c.submit_request("POST", "/upload", "example.com",
-                               body=b"hello http2")
+        sid = c.submit_request("POST", "/upload", "example.com", body=b"hello http2")
         assert c.streams[sid].state is StreamLifecycle.HALF_CLOSED_LOCAL
 
         _, s_events = _pump(c, s, to_server=c.bytes_to_send())
@@ -341,12 +338,14 @@ class TestMalformedHeaders:
         compliant peer lets such a block onto the wire for an idle
         stream, so the raw event is fabricated directly."""
         c = HTTP2Connection()
-        event = c._convert_event({  # type: ignore[arg-type]
-            "_kind": "headers",
-            "stream_id": 99,
-            "headers": [("x-junk", "1")],
-            "end_stream": False,
-        })
+        event = c._convert_event(
+            {  # type: ignore[arg-type]
+                "_kind": "headers",
+                "stream_id": 99,
+                "headers": [("x-junk", "1")],
+                "end_stream": False,
+            }
+        )
         assert event is None
         assert 99 not in c.streams
 
@@ -411,8 +410,7 @@ class TestEventTypes:
         # at least one *new* one for the user's submit.
         assert any(e.get("settings", {}).get(0x3) == 64 for e in server_settings)
 
-        client_acks = [e for e in c_events
-                       if isinstance(e, SettingsReceived) and e.ack]
+        client_acks = [e for e in c_events if isinstance(e, SettingsReceived) and e.ack]
         assert client_acks
 
     def test_connection_level_window_update(self):
@@ -443,10 +441,13 @@ class TestEventTypes:
         # therefore assert on the server-side events, not the client.
         frames = c.session.submit_window_update(sid, 4096)
         _, s_events = _pump(c, s, to_server=frames)
-        updates = [e for e in s_events
-                   if e.get("_kind") == "window_update"
-                   and e.get("stream_id") == sid
-                   and e.get("increment") == 4096]
+        updates = [
+            e
+            for e in s_events
+            if e.get("_kind") == "window_update"
+            and e.get("stream_id") == sid
+            and e.get("increment") == 4096
+        ]
         assert updates
 
 
@@ -471,12 +472,15 @@ class TestReviewHttp2_3:
         _pump(c, s, to_server=c.bytes_to_send())
 
         # Server-side: 103 Early Hints first, then 200 OK.
-        early = s.submit_headers(sid, [
-            (":status", "103"),
-            ("link", "</style.css>; rel=preload"),
-        ], 0)
-        response = s.submit_response(sid, [(":status", "200"),
-                                          ("content-type", "text/plain")])
+        early = s.submit_headers(
+            sid,
+            [
+                (":status", "103"),
+                ("link", "</style.css>; rel=preload"),
+            ],
+            0,
+        )
+        response = s.submit_response(sid, [(":status", "200"), ("content-type", "text/plain")])
         c_events, _ = _pump(c, s, to_client=early + response)
 
         infos = [e for e in c_events if isinstance(e, InformationalResponseReceived)]
@@ -510,15 +514,22 @@ class TestReviewHttp2_3:
         # response data.
         sid = c.submit_request("GET", "/file", "example.com", body=b"")
         _pump(c, s, to_server=c.bytes_to_send())
-        response = s.submit_response(sid, [
-            (":status", "200"),
-            ("content-type", "text/plain"),
-        ], with_body=True)
+        response = s.submit_response(
+            sid,
+            [
+                (":status", "200"),
+                ("content-type", "text/plain"),
+            ],
+            with_body=True,
+        )
         body = s.submit_data(sid, b"hello world", end_stream=False)
-        trailer = s.submit_trailer(sid, [
-            ("digest", "sha-256=..."),
-            ("server-timing", "cache;dur=12"),
-        ])
+        trailer = s.submit_trailer(
+            sid,
+            [
+                ("digest", "sha-256=..."),
+                ("server-timing", "cache;dur=12"),
+            ],
+        )
         c_events, _ = _pump(c, s, to_client=response + body + trailer)
 
         trailers = [e for e in c_events if isinstance(e, TrailerReceived)]

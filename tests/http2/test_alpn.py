@@ -24,12 +24,16 @@ class TestHttpxStyleEnable:
     @pytest.mark.network
     def test_default_is_http1(self) -> None:
         c = HTTPClient(
-            HTTPBIN_HOST, ssl=True, insecure=True,
+            HTTPBIN_HOST,
+            ssl=True,
+            insecure=True,
         )
         try:
             assert c._h2_pool is None
             r = c.request(
-                "GET", "/get", headers={"host": HTTPBIN_HOST},
+                "GET",
+                "/get",
+                headers={"host": HTTPBIN_HOST},
             )
             assert r.status_code == 200
         finally:
@@ -38,15 +42,21 @@ class TestHttpxStyleEnable:
     @pytest.mark.network
     def test_http2_then_h2_succeeds(self) -> None:
         c = HTTPClient(
-            HTTPBIN_HOST, ssl=True, insecure=True, http2=True,
+            HTTPBIN_HOST,
+            ssl=True,
+            insecure=True,
+            http2=True,
         )
         try:
             assert c._h2_pool is not None
             r = c.request_h2(
-                "GET", "/get", headers={"host": HTTPBIN_HOST},
+                "GET",
+                "/get",
+                headers={"host": HTTPBIN_HOST},
             )
             assert r.status_code == 200
             from geventhttpclient.http2.session import HTTP2ResponseHandle
+
             assert isinstance(r, HTTP2ResponseHandle)
         finally:
             c.close()
@@ -57,18 +67,25 @@ class TestHttpxStyleEnable:
         ``_sent_request``), not a stream handle.
         """
         from .servers import H1OnlyTestServer
+
         with H1OnlyTestServer() as server:
             c = HTTPClient(
-                "127.0.0.1", port=server.port, ssl=True, insecure=True,
+                "127.0.0.1",
+                port=server.port,
+                ssl=True,
+                insecure=True,
                 http2=True,
                 # Generous timeouts: the in-process TLS server takes
                 # a moment to schedule on a busy hub and we don't
                 # want the handshake to race the 5s default.
-                connection_timeout=15.0, network_timeout=15.0,
+                connection_timeout=15.0,
+                network_timeout=15.0,
             )
             try:
                 r = c.request_h2(
-                    "GET", "/get", headers={"host": f"127.0.0.1:{server.port}"},
+                    "GET",
+                    "/get",
+                    headers={"host": f"127.0.0.1:{server.port}"},
                 )
                 assert r.status_code == 200
                 assert r.read() == H1OnlyTestServer.BODY
@@ -80,9 +97,13 @@ class TestHttpxStyleEnable:
 
     def test_http2_then_unreachable_raises_http2_error(self) -> None:
         from geventhttpclient.http2.errors import HTTP2Error
+
         c = HTTPClient(
-            "127.0.0.1", port=1,  # closed port -> connection refused
-            ssl=True, insecure=True, http2=True,
+            "127.0.0.1",
+            port=1,  # closed port -> connection refused
+            ssl=True,
+            insecure=True,
+            http2=True,
         )
         try:
             with pytest.raises((HTTP2Error, ConnectionError)):
@@ -100,27 +121,40 @@ class TestALPNNeverForcesH2:
     def test_h1_pool_offers_http11_only(self) -> None:
         from geventhttpclient.connectionpool import SSLConnectionPool
         from tests.common import free_port
+
         port = free_port()
         pool = SSLConnectionPool(
-            "127.0.0.1", port, "127.0.0.1", port, insecure=True,
+            "127.0.0.1",
+            port,
+            "127.0.0.1",
+            port,
+            insecure=True,
         )
         assert pool.ssl_context is not None
         pool2 = SSLConnectionPool(
-            "127.0.0.1", port, "127.0.0.1", port,
-            insecure=True, alpn_protocols=None,
+            "127.0.0.1",
+            port,
+            "127.0.0.1",
+            port,
+            insecure=True,
+            alpn_protocols=None,
         )
         assert pool2 is not None  # constructed without error
 
     @pytest.mark.network
     def test_h1_client_against_h2_capable_server_stays_h1(self) -> None:
         c = HTTPClient(
-            HTTPBIN_HOST, ssl=True, insecure=True,
+            HTTPBIN_HOST,
+            ssl=True,
+            insecure=True,
         )
         try:
             assert c.http2 is False
             assert c._h2_pool is None
             r = c.request(
-                "GET", "/get", headers={"host": HTTPBIN_HOST},
+                "GET",
+                "/get",
+                headers={"host": HTTPBIN_HOST},
             )
             assert r.status_code == 200
         finally:
@@ -137,6 +171,7 @@ class TestErrorTaxonomy:
         import ssl
 
         from .servers import CERT_FILE, KEY_FILE
+
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
         ctx.set_alpn_protocols(["h2"])
@@ -167,7 +202,9 @@ class TestErrorTaxonomy:
         try:
             with pytest.raises(HTTP2Error, match="did not arrive"):
                 c.request_h2(
-                    "GET", "/", headers={"host": f"127.0.0.1:{port}"},
+                    "GET",
+                    "/",
+                    headers={"host": f"127.0.0.1:{port}"},
                     timeout=1.0,
                 )
         finally:
@@ -197,7 +234,9 @@ class TestErrorTaxonomy:
         try:
             with pytest.raises(ConnectionError):
                 c.request_h2(
-                    "GET", "/", headers={"host": f"127.0.0.1:{port}"},
+                    "GET",
+                    "/",
+                    headers={"host": f"127.0.0.1:{port}"},
                     timeout=5.0,
                 )
         finally:
