@@ -1,22 +1,73 @@
-"""Type stubs for the geventhttpclient._http2_parser C extension.
+"""Type stubs for the geventhttpclient.http2._parser C extension.
 
 Sans-IO HTTP/2 session backed by the vendored nghttp2 library. All
 ``submit_*`` methods return the outbound frame bytes to send; ``recv``
 consumes inbound bytes and returns ``(events, outbound_frames)``.
+
+The raw events are plain dicts at runtime; the TypedDicts below (with
+``_kind`` as discriminator) let type checkers narrow them.
 """
 
-from typing import Any, TypeAlias
+from typing import Literal, TypeAlias, TypedDict
 
-#: Event dict kind values as produced by ``Session.recv``.
-HeadersEvent: TypeAlias = dict[str, Any]      # _kind="headers": stream_id, headers, end_stream
-DataEvent: TypeAlias = dict[str, Any]         # _kind="data": stream_id, data, end_stream
-StreamResetEvent: TypeAlias = dict[str, Any]  # _kind="stream_reset": stream_id, error_code
-StreamClosedEvent: TypeAlias = dict[str, Any]  # _kind="stream_closed": stream_id, error_code, end_stream
-SettingsEvent: TypeAlias = dict[str, Any]     # _kind="settings": stream_id, settings, ack
-PingEvent: TypeAlias = dict[str, Any]         # _kind="ping": stream_id, opaque_data, ack
-GoAwayEvent: TypeAlias = dict[str, Any]       # _kind="goaway": stream_id, last_stream_id, error_code, debug_data
-WindowUpdateEvent: TypeAlias = dict[str, Any]  # _kind="window_update": stream_id, increment
 
+class HeadersEvent(TypedDict):
+    _kind: Literal["headers"]
+    stream_id: int
+    headers: list[tuple[str, str]]
+    end_stream: bool
+
+
+class DataEvent(TypedDict):
+    _kind: Literal["data"]
+    stream_id: int
+    data: bytes
+    end_stream: bool
+
+
+class StreamResetEvent(TypedDict):
+    _kind: Literal["stream_reset"]
+    stream_id: int
+    error_code: int
+
+
+class StreamClosedEvent(TypedDict):
+    _kind: Literal["stream_closed"]
+    stream_id: int
+    error_code: int
+    end_stream: bool
+
+
+class SettingsEvent(TypedDict):
+    _kind: Literal["settings"]
+    stream_id: int
+    settings: dict[int, int]
+    ack: bool
+
+
+class PingEvent(TypedDict):
+    _kind: Literal["ping"]
+    stream_id: int
+    opaque_data: bytes
+    ack: bool
+
+
+class GoAwayEvent(TypedDict):
+    _kind: Literal["goaway"]
+    stream_id: int
+    last_stream_id: int
+    error_code: int
+    debug_data: bytes
+
+
+class WindowUpdateEvent(TypedDict):
+    _kind: Literal["window_update"]
+    stream_id: int
+    increment: int
+
+
+#: Raw event dicts as produced by ``Session.recv`` (discriminated by
+#: the ``_kind`` field).
 Http2Event: TypeAlias = (
     HeadersEvent
     | DataEvent
