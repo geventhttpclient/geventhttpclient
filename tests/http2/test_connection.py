@@ -331,6 +331,26 @@ class TestGoAwayGate:
         assert c.last_accepted_stream_id == 2**31 - 1
 
 
+class TestMalformedHeaders:
+    def test_headers_without_status_on_unknown_stream_are_dropped(self):
+        """RFC 9113 §8.1: the first HEADERS frame of a response must
+        carry :status. A block without one on a stream we never opened
+        must not create bogus stream state (P5).
+
+        Tested at the conversion boundary: neither nghttp2 nor a
+        compliant peer lets such a block onto the wire for an idle
+        stream, so the raw event is fabricated directly."""
+        c = HTTP2Connection()
+        event = c._convert_event({  # type: ignore[arg-type]
+            "_kind": "headers",
+            "stream_id": 99,
+            "headers": [("x-junk", "1")],
+            "end_stream": False,
+        })
+        assert event is None
+        assert 99 not in c.streams
+
+
 # ---------------------------------------------------------------------------
 # Stream reset
 # ---------------------------------------------------------------------------
