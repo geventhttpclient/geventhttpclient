@@ -313,14 +313,39 @@ class TestErrors:
         with pytest.raises(TypeError, match="list"):
             client.submit_request("GET / HTTP/1.1")
 
-    def test_settings_out_of_range_raise(self):
+    @pytest.mark.parametrize(
+        "settings",
+        [
+            {-1: 1},  # negative id
+            {0x10000: 1},  # id beyond the 16-bit field
+            {0x3: -1},  # negative value
+            {0x3: 2**32},  # value beyond the 32-bit field
+        ],
+    )
+    def test_settings_out_of_range_raise(self, settings: dict[int, int]):
         """SETTINGS ids are 16-bit and values 32-bit (RFC 9113
-        §6.5.2) — out-of-range input must not silently truncate."""
+        §6.5.2) — out-of-range input must not silently truncate.
+
+        Negative numbers surface as OverflowError from the integer
+        conversion, out-of-range positives as ValueError."""
         client = session_client_new()
-        with pytest.raises(ValueError, match="16-bit"):
-            client.submit_settings({0x1FFFF: 1})
-        with pytest.raises(ValueError, match="16-bit"):
-            client.submit_settings({0x3: 2**40})
+        with pytest.raises((ValueError, OverflowError)):
+            client.submit_settings(settings)
+
+    @pytest.mark.parametrize(
+        "settings",
+        [
+            {0x0: 1},  # unassigned id: legal, peers ignore it
+            {0xFFFF: 1},  # highest 16-bit id
+            {0x6: 2**32 - 1},  # highest 32-bit value (MAX_HEADER_LIST_SIZE)
+        ],
+    )
+    def test_settings_in_range_accepted(self, settings: dict[int, int]):
+        """Boundary values are accepted, including unassigned ids
+        (RFC 9113 §6.5.2: unknown parameters may be sent and are
+        ignored by the peer)."""
+        client = session_client_new()
+        assert isinstance(client.submit_settings(settings), bytes)
 
 
 class TestWindowUpdate:
