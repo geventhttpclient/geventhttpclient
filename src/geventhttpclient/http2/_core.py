@@ -19,8 +19,6 @@ touched here. Bytes flow in through ``feed()``, frames flow out through
 ``bytes_to_send()``; the caller pumps both sides.
 """
 
-from __future__ import annotations
-
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -597,7 +595,7 @@ class HTTP2Connection:
 
     # -- Helpers -----------------------------------------------------------
 
-    def _convert_event(self, raw: RawHttp2Event) -> Http2Event:
+    def _convert_event(self, raw: "RawHttp2Event") -> Http2Event:
         # ``_kind`` discriminates the raw TypedDict union; the type
         # checker narrows ``raw`` in each branch.
         if raw["_kind"] == "headers":
