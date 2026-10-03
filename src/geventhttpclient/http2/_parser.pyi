@@ -75,6 +75,21 @@ class Session:
 
     def next_stream_id(self) -> int: ...
 
+    def get_stream_remote_window_size(self, stream_id: int) -> int | None:
+        """Bytes we may still send on ``stream_id`` (None if unknown).
+
+        Use for upload backpressure: pace ``submit_data`` calls so the
+        collected body stays bounded when the peer's window is small."""
+
+    def get_stream_local_window_size(self, stream_id: int) -> int | None:
+        """Bytes the peer may still send on ``stream_id`` (None if unknown)."""
+
+    def get_remote_window_size(self) -> int:
+        """Connection-level bytes we may still send."""
+
+    def get_local_window_size(self) -> int:
+        """Connection-level bytes the peer may still send."""
+
     def get_local_settings(self) -> dict[int, int]: ...
 
     def get_remote_settings(self) -> dict[int, int]: ...

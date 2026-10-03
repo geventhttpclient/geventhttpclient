@@ -1290,6 +1290,58 @@ session_next_stream_id(PyObject *self_obj, PyObject *Py_UNUSED(ignored))
     return PyLong_FromLong(nghttp2_session_get_next_stream_id(self->session));
 }
 
+/* Flow-control introspection (backpressure): window sizes in bytes.
+ * Stream-level getters return None when the stream is unknown
+ * (nghttp2 reports -1), connection-level getters always succeed. */
+
+typedef int32_t (*stream_window_getter)(nghttp2_session *, int32_t);
+typedef int32_t (*conn_window_getter)(nghttp2_session *);
+
+static PyObject *
+stream_window_as_object(PyHTTP2Session *self, PyObject *args,
+                        stream_window_getter getter)
+{
+    int stream_id = 0;
+    if (!PyArg_ParseTuple(args, "i", &stream_id)) return NULL;
+    int32_t size = getter(self->session, (int32_t)stream_id);
+    if (size < 0) Py_RETURN_NONE;
+    return PyLong_FromLong(size);
+}
+
+static PyObject *
+session_get_stream_remote_window_size(PyObject *self_obj, PyObject *args)
+{
+    return stream_window_as_object(
+        (PyHTTP2Session *)self_obj, args,
+        nghttp2_session_get_stream_remote_window_size);
+}
+
+static PyObject *
+session_get_stream_local_window_size(PyObject *self_obj, PyObject *args)
+{
+    return stream_window_as_object(
+        (PyHTTP2Session *)self_obj, args,
+        nghttp2_session_get_stream_local_window_size);
+}
+
+static PyObject *
+session_get_remote_window_size(PyObject *self_obj,
+                               PyObject *Py_UNUSED(ignored))
+{
+    PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
+    return PyLong_FromLong(
+        nghttp2_session_get_remote_window_size(self->session));
+}
+
+static PyObject *
+session_get_local_window_size(PyObject *self_obj,
+                              PyObject *Py_UNUSED(ignored))
+{
+    PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
+    return PyLong_FromLong(
+        nghttp2_session_get_local_window_size(self->session));
+}
+
 static PyObject *
 settings_as_dict(PyHTTP2Session *self,
                  uint32_t (*getter)(nghttp2_session *,
@@ -1370,6 +1422,16 @@ static PyMethodDef session_methods[] = {
      "submit_shutdown_notice() -> frames (first GOAWAY of a graceful shutdown)."},
     {"next_stream_id", session_next_stream_id, METH_NOARGS,
      "Next client-initiated stream ID."},
+    {"get_stream_remote_window_size", session_get_stream_remote_window_size,
+     METH_VARARGS,
+     "Bytes we may still send on the stream (None if unknown)."},
+    {"get_stream_local_window_size", session_get_stream_local_window_size,
+     METH_VARARGS,
+     "Bytes the peer may still send on the stream (None if unknown)."},
+    {"get_remote_window_size", session_get_remote_window_size, METH_NOARGS,
+     "Connection-level bytes we may still send."},
+    {"get_local_window_size", session_get_local_window_size, METH_NOARGS,
+     "Connection-level bytes the peer may still send."},
     {"get_local_settings", session_get_local_settings, METH_NOARGS,
      "Local SETTINGS as {setting_id: value}."},
     {"get_remote_settings", session_get_remote_settings, METH_NOARGS,
