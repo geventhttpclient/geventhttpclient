@@ -35,14 +35,6 @@ dependencies = [
     "certifi",
     "brotli",
 ]
-optional-dependencies.dev = [
-    "mypy",
-    "pytest",
-    "pytest-rerunfailures",
-    "dpkt",
-    "requests",
-    "httplib2",
-]
 optional-dependencies.benchmarks = [
     "requests",
     "httpx",
@@ -50,10 +42,30 @@ optional-dependencies.benchmarks = [
     "httplib2",
 ]
 
+[dependency-groups]
+# PEP 735 group instead of a `dev` extra: uv resolves the `dev` group on a
+# plain `uv sync`, so a fresh clone is ready for `uv run pytest` without
+# remembering a flag. Extras are distribution metadata, and nothing outside
+# this repository installs `[dev]`.
+dev = [
+    "mypy",
+    "pytest",
+    "pytest-rerunfailures",
+    "dpkt",
+    "requests",
+    "httplib2",
+]
+
 [project.urls]
 homepage = "https://github.com/geventhttpclient/geventhttpclient"
 repository = "https://github.com/geventhttpclient/geventhttpclient"
 issues = "https://github.com/geventhttpclient/geventhttpclient/issues"
+
+[tool.uv]
+# Belt and braces: uv already defaults to the `dev` group, spelling it out
+# keeps `uv sync --no-default-groups` from quietly producing a tree without
+# the test tools.
+default-groups = ["dev"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

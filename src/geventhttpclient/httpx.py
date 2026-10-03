@@ -12,16 +12,18 @@ Not every httpx feature has an equivalent here. Per-request ``auth``,
 
 from __future__ import annotations
 
-import base64
 import json as jsonlib
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from typing import Any, cast
 from urllib.parse import urljoin
 
 from geventhttpclient import useragent
+from geventhttpclient.auth import BasicAuth, resolve_auth
+from geventhttpclient.header import HeadersDataType
 from geventhttpclient.requests import RequestsResponse, Session
-from geventhttpclient.useragent import CompatRequest
+from geventhttpclient.url import URL, ParamsDataType
+from geventhttpclient.useragent import CompatRequest, FilesInput, Payload
 
 __all__ = [
     "BasicAuth",
@@ -184,34 +186,6 @@ def _translate(error: BaseException, request: CompatRequest | None) -> HTTPError
     return translated
 
 
-# ---------------------------------------------------------------------------
-# Auth
-# ---------------------------------------------------------------------------
-
-
-class BasicAuth:
-    """HTTP Basic authentication for a client: ``BasicAuth("user", "pass")``."""
-
-    def __init__(self, username: str, password: str) -> None:
-        credentials = f"{username}:{password}".encode("latin-1")
-        self.token = b"Basic " + base64.b64encode(credentials)
-
-    def auth_header(self) -> str:
-        return self.token.decode("latin-1")
-
-
-def _resolve_auth(auth: Any) -> str | None:
-    """Normalize the auth parameter into an Authorization header value."""
-    if auth is None:
-        return None
-    if isinstance(auth, BasicAuth):
-        return auth.auth_header()
-    if isinstance(auth, tuple):
-        return BasicAuth(*auth).auth_header()
-    raise NotImplementedError(
-        f"Unsupported auth type: {type(auth).__name__}. Use BasicAuth or a (username, password) tuple."
-    )
-
 
 # ---------------------------------------------------------------------------
 # Response
@@ -335,20 +309,31 @@ class Client(Session):
     """
 
     response_type = Response
+    session_params: ParamsDataType | None
+    follow_redirects: bool
+    base_url: str | None
+    auth_header: str | None
 
     def __init__(
         self,
         *,
         base_url: str | None = None,
         auth: Any = None,
-        params: dict[str, Any] | None = None,
+        params: ParamsDataType | None = None,
         follow_redirects: bool = False,
         timeout: float | tuple[float, float] | None = None,
         **kw: Any,
     ) -> None:
         self.base_url = base_url.rstrip("/") if base_url else None
-        self.auth_header = _resolve_auth(auth)
-        self.session_params = dict(params) if params else None
+        self.auth_header = resolve_auth(auth)
+        if params is None:
+            self.session_params = None
+        elif isinstance(params, Mapping):
+            self.session_params = dict(params)
+        else:
+            # ParamsDataType also covers query-string / bytes /
+            # iterable-of-tuples; carry them through unchanged.
+            self.session_params = params
         self.follow_redirects = follow_redirects
         if isinstance(timeout, tuple):
             if len(timeout) == 2:
@@ -358,10 +343,9 @@ class Client(Session):
                 raise ValueError("timeout tuple must be (connect, read)")
         elif timeout is not None:
             kw.setdefault("network_timeout", timeout)
-        kw.setdefault("max_redirects", 30)
         super().__init__(**kw)
 
-    def _resolve_url(self, url: str | Any) -> str:
+    def _resolve_url(self, url: str | URL) -> str:
         resolved = str(url)
         if self.base_url and not resolved.lower().startswith(("http://", "https://", "//")):
             resolved = urljoin(self.base_url + "/", resolved.lstrip("/"))
@@ -369,30 +353,37 @@ class Client(Session):
 
     def _merge_params(
         self,
-        request_params: dict[str, Any] | None,
-    ) -> dict[str, Any] | None:
+        request_params: ParamsDataType | None,
+    ) -> ParamsDataType | None:
         if self.session_params and request_params:
-            merged = dict(self.session_params)
-            merged.update(request_params)
-            return merged
+            # ``ParamsDataType`` is too wide for ``dict.update`` (it
+            # includes ``str`` / ``bytes`` / ``Iterable[tuple]`` which
+            # have no ``__getitem__``); we only merge when both sides
+            # are mappings.
+            if isinstance(self.session_params, Mapping) and isinstance(
+                request_params, Mapping
+            ):
+                merged = dict(self.session_params)
+                merged.update(request_params)
+                return merged
+            return request_params or self.session_params
         return request_params or self.session_params
 
     def request(  # type: ignore[override]  # httpx takes keyword-only arguments
         self,
         method: str,
-        url: str | Any,
+        url: str | URL,
         *,
-        params: dict[str, Any] | None = None,
-        content: Any = None,
-        data: Any = None,
-        headers: Any = None,
+        params: ParamsDataType | None = None,
+        content: Payload = None,
+        data: Payload = None,
+        headers: HeadersDataType | None = None,
         cookies: Any = None,
-        files: Any = None,
+        files: FilesInput | None = None,
         json: Any = None,
         follow_redirects: bool | None = None,
-        allow_redirects: bool | None = None,
         auth: Any = None,
-        timeout: Any = None,
+        timeout: float | tuple[float, float] | None = None,
     ) -> Response:
         if cookies is not None:
             raise NotImplementedError(
@@ -406,15 +397,10 @@ class Client(Session):
             raise NotImplementedError(
                 "per-request auth is not supported; configure auth on the client"
             )
-        # httpx naming wins; allow_redirects is accepted as the requests-style
-        # alias. Session.get() from the requests surface defaults it to True,
-        # which would break the httpx default of not following redirects.
         if follow_redirects is None:
-            follow_redirects = (
-                allow_redirects if allow_redirects is not None else self.follow_redirects
-            )
+            follow_redirects = self.follow_redirects
 
-        payload: Any = data if data is not None else content
+        payload: Payload | None = data if data is not None else content
         if json is not None:
             if payload is not None:
                 raise ValueError("Can send either data/content or json, not both at once")
@@ -457,6 +443,43 @@ class Client(Session):
             yield response
         finally:
             response.close()
+
+    def get(self, url: str | URL, **kw: Any) -> Response:
+        return self.request("GET", url, **kw)
+
+    def options(self, url: str | URL, **kw: Any) -> Response:
+        return self.request("OPTIONS", url, **kw)
+
+    def head(self, url: str | URL, **kw: Any) -> Response:
+        return self.request("HEAD", url, **kw)
+
+    def post(
+        self,
+        url: str | URL,
+        data: Payload = None,
+        json: Any = None,
+        **kw: Any,
+    ) -> Response:
+        return self.request("POST", url, data=data, json=json, **kw)
+
+    def put(
+        self,
+        url: str | URL,
+        data: Payload = None,
+        **kw: Any,
+    ) -> Response:
+        return self.request("PUT", url, data=data, **kw)
+
+    def patch(
+        self,
+        url: str | URL,
+        data: Payload = None,
+        **kw: Any,
+    ) -> Response:
+        return self.request("PATCH", url, data=data, **kw)
+
+    def delete(self, url: str | URL, **kw: Any) -> Response:
+        return self.request("DELETE", url, **kw)
 
     @property
     def is_closed(self) -> bool:

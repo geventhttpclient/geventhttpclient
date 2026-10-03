@@ -8,7 +8,7 @@ from typing import Any, cast
 
 from geventhttpclient import useragent
 from geventhttpclient.auth import resolve_auth
-from geventhttpclient.header import HeadersDataType, parse_content_type_charset
+from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType
 
@@ -32,7 +32,7 @@ class _CookieHeadersInfo:
     """The ``get_all()`` view http.cookiejar expects from a response's
     ``info()``."""
 
-    def __init__(self, headers: Any) -> None:
+    def __init__(self, headers: Headers) -> None:
         self._headers = headers
 
     def get_all(self, name: str, default: list[str] | None = None) -> list[str] | None:
@@ -47,7 +47,7 @@ class _CookieHeadersInfo:
 class _CookieJarResponse:
     """http.client-like response view for ``CookieJar.extract_cookies``."""
 
-    def __init__(self, headers: Any) -> None:
+    def __init__(self, headers: Headers) -> None:
         self._headers = headers
 
     def info(self) -> _CookieHeadersInfo:
@@ -180,7 +180,7 @@ class RequestsResponse(useragent.CompatResponse):
         jar = CookieJar()
         request = self._request
         if request is not None:
-            jar.extract_cookies(cast(Any, _CookieJarResponse(self.headers)), request)
+            jar.extract_cookies(_CookieJarResponse(self.headers), request)  # type: ignore[arg-type]
         return jar
 
     def iter_content(
