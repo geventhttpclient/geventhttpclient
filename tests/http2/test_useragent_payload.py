@@ -16,7 +16,8 @@ from geventhttpclient.useragent import (
     UserAgent,
     _make_request,
 )
-from tests.test_http2_session_live import (
+
+from .test_session_live import (
     NGINX_HOST,
     NGINX_PORT,
     _start_nginx,

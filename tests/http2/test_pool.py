@@ -12,7 +12,7 @@ import pytest
 from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
 
 # Reuse the live-test fixtures via direct invocation.
-from tests.test_http2_session_live import (
+from .test_session_live import (
     NGINX_HOST,
     NGINX_PORT,
     _drive_until_closed,
