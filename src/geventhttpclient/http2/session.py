@@ -315,22 +315,23 @@ class HTTP2Session(HTTP2Wire):
 
     def _dispatch(self, events: list[Http2Event]) -> None:
         for event in events:
-            kind = event.kind
-            if kind == "headers":
-                self._on_headers(event)  # type: ignore[arg-type]
-            elif kind == "data":
-                self._on_data(event)  # type: ignore[arg-type]
-            elif kind == "informational":
-                self._on_informational(event)  # type: ignore[arg-type]
-            elif kind == "trailer":
-                self._on_trailer_event(event)  # type: ignore[arg-type]
-            elif kind == "stream_reset":
-                self._on_reset(event)  # type: ignore[arg-type]
-            elif kind == "stream_closed":
-                self._on_closed(event)  # type: ignore[arg-type]
-            # SETTINGS, PING, GOAWAY, WINDOW_UPDATE are surfaced on the
-            # HTTP2Connection for inspection but not turned into events
-            # at this layer.
+            # Class-pattern matching narrows the event union for the
+            # type checker; SETTINGS, PING, GOAWAY and WINDOW_UPDATE
+            # are surfaced on the HTTP2Connection for inspection but
+            # not turned into per-stream callbacks at this layer.
+            match event:
+                case HeadersReceived():
+                    self._on_headers(event)
+                case DataReceived():
+                    self._on_data(event)
+                case InformationalResponseReceived():
+                    self._on_informational(event)
+                case TrailerReceived():
+                    self._on_trailer_event(event)
+                case StreamReset():
+                    self._on_reset(event)
+                case StreamClosed():
+                    self._on_closed(event)
 
     def _handle_for(self, stream_id: int) -> HTTP2ResponseHandle | None:
         return self._handles.get(stream_id)
