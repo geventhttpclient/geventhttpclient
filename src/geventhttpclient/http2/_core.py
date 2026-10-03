@@ -33,11 +33,15 @@ CONNECTION_STREAM_ID = 0
 #: streams anyway — we just gate against a conservative default.
 DEFAULT_MAX_CONCURRENT_STREAMS = 100
 
-#: HTTP/2 client default for the ENABLE_PUSH setting (RFC 9113 §8.2).
-#: A client should advertise push as disabled. Callers wanting to
-#: override may pass a ``local_settings`` dict to :class:`HTTP2Connection`
-#: that includes ``{0x2: 1}``.
-DEFAULT_LOCAL_SETTINGS: dict[int, int] = {0x2: 0}  # ENABLE_PUSH = 0
+#: Client-side SETTINGS defaults. Empty on purpose: the C extension
+#: already queues the initial SETTINGS frame on session creation
+#: (advertising MAX_HEADER_LIST_SIZE), so no second frame is needed
+#: here. Push is *not* disabled via ENABLE_PUSH=0: the C extension
+#: refuses each pushed stream individually with RST_STREAM
+#: REFUSED_STREAM (RFC 9113 §8.2), which keeps the connection alive
+#: when a server pushes anyway. Callers may still pass explicit
+#: ``local_settings`` overrides to :class:`HTTP2Connection`.
+DEFAULT_LOCAL_SETTINGS: dict[int, int] = {}
 
 
 class StreamLifecycle(IntEnum):
@@ -327,16 +331,19 @@ class HTTP2Connection:
         # The C extension queues an empty initial-SETTINGS frame on
         # session creation so the connection preface is on the wire.
         # We only submit our own SETTINGS when the caller passed
-        # overrides; merging in the client default (ENABLE_PUSH=0 per
-        # RFC 9113 §8.2) here as well keeps the canonical defaults at
-        # this layer. Note that nghttp2 itself currently ignores the
-        # ENABLE_PUSH submission on read paths -- the value gets dropped
-        # silently. We document it for forward compatibility.
+        # overrides; the canonical defaults live at the C layer (see
+        # DEFAULT_LOCAL_SETTINGS).
         merged: dict[int, int] = dict(DEFAULT_LOCAL_SETTINGS)
         if local_settings:
             merged.update(local_settings)
         if merged:
             frames = self._session.submit_settings(merged)
+            if frames:
+                self._outbound.append(frames)
+        else:
+            # Drain the C-queued connection preface + initial SETTINGS
+            # (a zero-length recv produces no events, only outbound).
+            _, frames = self._session.recv(b"")
             if frames:
                 self._outbound.append(frames)
         # Track how many streams we have opened against the peer budget.
