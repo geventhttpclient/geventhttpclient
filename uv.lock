@@ -420,6 +420,8 @@ benchmarks = [
     { name = "requests" },
     { name = "urllib3" },
 ]
+
+[package.dev-dependencies]
 dev = [
     { name = "dpkt" },
     { name = "httplib2" },
@@ -433,19 +435,23 @@ dev = [
 requires-dist = [
     { name = "brotli" },
     { name = "certifi" },
-    { name = "dpkt", marker = "extra == 'dev'" },
     { name = "gevent", specifier = ">=25.9" },
     { name = "httplib2", marker = "extra == 'benchmarks'" },
-    { name = "httplib2", marker = "extra == 'dev'" },
     { name = "httpx", marker = "extra == 'benchmarks'" },
-    { name = "mypy", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-rerunfailures", marker = "extra == 'dev'" },
     { name = "requests", marker = "extra == 'benchmarks'" },
-    { name = "requests", marker = "extra == 'dev'" },
     { name = "urllib3", marker = "extra == 'benchmarks'" },
 ]
-provides-extras = ["dev", "benchmarks"]
+provides-extras = ["benchmarks"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "dpkt" },
+    { name = "httplib2" },
+    { name = "mypy" },
+    { name = "pytest" },
+    { name = "pytest-rerunfailures" },
+    { name = "requests" },
+]
 
 [[package]]
 name = "greenlet"

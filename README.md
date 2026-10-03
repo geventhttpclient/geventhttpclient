@@ -310,10 +310,12 @@ The `llhttp` parser is vendored as a git submodule. Clone with `--recurse-submod
 `git submodule update --init`), then:
 
 ```bash
-uv sync --extra dev
+uv sync                      # the dev group: pytest, mypy, requests, …
 uv run pytest                # gevent-monkey-patched (default)
 NON_GEVENT=1 uv run pytest   # without patching (see issue #241)
 ```
+
+The benchmark harness needs the extra on top: `uv sync --extra benchmarks`.
 
 See also [CHANGELOG.md](CHANGELOG.md), [RELEASING.md](RELEASING.md) and [SECURITY.md](SECURITY.md).
 
