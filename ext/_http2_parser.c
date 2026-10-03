@@ -450,6 +450,18 @@ on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
         if (emit_event(self, event) < 0) return NGHTTP2_ERR_CALLBACK_FAILURE;
         break;
     }
+    case NGHTTP2_PUSH_PROMISE: {
+        /* Refuse the pushed stream per RFC 9113 section 8.2: reset it
+         * with REFUSED_STREAM and keep the connection alive, instead
+         * of disabling push outright (a client-side ENABLE_PUSH=0
+         * makes nghttp2 treat PUSH_PROMISE as a fatal connection
+         * error before it ever reaches this callback). */
+        if (nghttp2_submit_rst_stream(session, NGHTTP2_FLAG_NONE,
+                                      frame->push_promise.promised_stream_id,
+                                      NGHTTP2_REFUSED_STREAM) != 0)
+            return NGHTTP2_ERR_CALLBACK_FAILURE;
+        break;
+    }
     case NGHTTP2_WINDOW_UPDATE: {
         PyObject *event = new_event(KIND_WINDOW_UPDATE, sid);
         if (event == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;

@@ -205,7 +205,8 @@ class TestSettings:
                 ssl=True, insecure=True, http2=True,
             )
             try:
-                # Default settings include ENABLE_PUSH=0 (RFC 9113 §8.2).
+                # Defaults come from the C layer (MAX_HEADER_LIST_SIZE
+                # advertised; push is refused per stream, not disabled).
                 assert client._h2_pool  # h2 pool is active
                 # Touch a connection so local settings are populated
                 # (the h2-pool constructor emits our SETTINGS to the

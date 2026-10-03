@@ -466,6 +466,48 @@ class TestStreamClosedSingleSource:
         assert data_events[-1]["end_stream"] is True
 
 
+class TestPushRefusal:
+    def test_pushed_stream_is_refused_and_connection_survives(self):
+        """PUSH_PROMISE must be answered with RST_STREAM
+        (REFUSED_STREAM) on the promised stream, keeping the
+        connection alive (M5). Uses hyper-h2 as the pushing server."""
+        h2 = pytest.importorskip("h2.connection")
+        h2_config = pytest.importorskip("h2.config")
+        h2_events = pytest.importorskip("h2.events")
+
+        client = session_client_new()
+        peer = h2.H2Connection(
+            config=h2_config.H2Configuration(client_side=False))
+        peer.initiate_connection()
+
+        stream_id, frames = client.submit_request(get_headers())
+        peer.receive_data(frames)
+        promised_id = 2
+        peer.push_stream(stream_id, promised_id, [
+            (b":method", b"GET"),
+            (b":scheme", b"https"),
+            (b":path", b"/pushed"),
+            (b":authority", b"example.com"),
+        ])
+        _, outbound = client.recv(peer.data_to_send())
+
+        # The client must have queued a refusal for the promised stream.
+        reset_events = peer.receive_data(outbound)
+        resets = [e for e in reset_events
+                  if isinstance(e, h2_events.StreamReset)
+                  and e.stream_id == promised_id]
+        assert resets, "promised stream must be reset"
+        assert resets[0].error_code == 0x7  # REFUSED_STREAM
+
+        # The connection stays usable: the regular response flows.
+        peer.send_headers(stream_id, [(b":status", b"200")],
+                          end_stream=True)
+        events, _ = client.recv(peer.data_to_send())
+        headers = find(events, "headers")
+        assert headers
+        assert dict(headers[0]["headers"])[":status"] == "200"
+
+
 class TestHeaderEncoding:
     """Header names/values are opaque octets on the wire; the binding
     speaks latin-1 in both directions (1:1 byte mapping), matching the
