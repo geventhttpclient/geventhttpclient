@@ -24,6 +24,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Cap on the accumulated header bytes accepted per stream
+ * (RFC 9113 section 6.5.2 MAX_HEADER_LIST_SIZE, counting name+value
+ * lengths). Both advertised in the initial SETTINGS frame and enforced
+ * in on_header: a peer that ignores the advertisement cannot exhaust
+ * client memory with an unbounded header block. 64 KiB matches the
+ * common ecosystem default (hpack, hyper-h2). */
+#define PYHTTP2_MAX_HEADER_LIST_SIZE 65536L
+
 /* === Event kind names, interned once at module init === */
 
 static PyObject *KIND_HEADERS;
@@ -58,6 +66,9 @@ typedef struct {
     /* stream_id -> {"headers": [(name, value), ...]} accumulating the
      * header block of the HEADERS frame currently being received. */
     PyObject *stream_headers;
+    /* stream_id -> int: header bytes accumulated for the block
+     * currently being received (MAX_HEADER_LIST_SIZE enforcement). */
+    PyObject *stream_header_sizes;
     /* Fatal-error latch: set once nghttp2 reported an unrecoverable
      * failure (mem_recv/mem_send error). All mutating entry points
      * refuse to run afterwards -- mirrors the error latch of the
@@ -224,6 +235,32 @@ on_header(nghttp2_session *session, const nghttp2_frame *frame,
         }
         Py_DECREF(acc_list); /* stream_dict holds it */
     }
+    /* Enforce MAX_HEADER_LIST_SIZE: accumulate name+value lengths
+     * across the whole header block (including CONTINUATION frames).
+     * Exceeding the advertised cap is fatal for the connection; a
+     * stream-local RST is not reachable from this callback. */
+    PyObject *size_obj = PyDict_GetItemWithError(self->stream_header_sizes,
+                                                 sid_key);
+    if (size_obj == NULL && PyErr_Occurred()) goto fail;
+    long acc_size = 0;
+    if (size_obj != NULL) {
+        acc_size = PyLong_AsLong(size_obj);
+        if (acc_size == -1 && PyErr_Occurred()) goto fail;
+    }
+    acc_size += (long)namelen + (long)valuelen;
+    if (acc_size > PYHTTP2_MAX_HEADER_LIST_SIZE) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "peer exceeded MAX_HEADER_LIST_SIZE");
+        goto fail;
+    }
+    size_obj = PyLong_FromLong(acc_size);
+    if (size_obj == NULL) goto fail;
+    if (PyDict_SetItem(self->stream_header_sizes, sid_key, size_obj) < 0) {
+        Py_DECREF(size_obj);
+        goto fail;
+    }
+    Py_DECREF(size_obj);
+
     /* borrowed list; must exist now */
     acc_list = PyDict_GetItemString(stream_dict, "headers");
     if (acc_list == NULL) goto fail;
@@ -294,7 +331,8 @@ on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
         if (emit_event(self, event) < 0) return NGHTTP2_ERR_CALLBACK_FAILURE;
 
         /* Reset the accumulator: the event now owns the collected
-         * list; a following trailer block starts a fresh one. */
+         * list; a following trailer block starts a fresh one. The
+         * header-size counter starts fresh for the next block, too. */
         PyObject *fresh = PyList_New(0);
         if (fresh == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
         if (PyDict_SetItemString(stream_dict, "headers", fresh) < 0) {
@@ -302,6 +340,14 @@ on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
             return NGHTTP2_ERR_CALLBACK_FAILURE;
         }
         Py_DECREF(fresh);
+        {
+            PyObject *zero = PyLong_FromLong(0);
+            if (zero == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
+            int rc = PyDict_SetItem(self->stream_header_sizes, sid_key,
+                                    zero);
+            Py_DECREF(zero);
+            if (rc < 0) return NGHTTP2_ERR_CALLBACK_FAILURE;
+        }
         break;
     }
     case NGHTTP2_DATA: {
@@ -439,6 +485,10 @@ on_stream_close(nghttp2_session *session, int32_t stream_id,
     PyObject *sid_key = PyLong_FromLong(stream_id);
     if (sid_key == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
     if (PyDict_DelItem(self->stream_headers, sid_key) < 0 &&
+        PyErr_ExceptionMatches(PyExc_KeyError)) {
+        PyErr_Clear();
+    }
+    if (PyDict_DelItem(self->stream_header_sizes, sid_key) < 0 &&
         PyErr_ExceptionMatches(PyExc_KeyError)) {
         PyErr_Clear();
     }
@@ -651,11 +701,14 @@ session_new(int is_client)
     if (self == NULL) return NULL;
     self->session = NULL;
     self->stream_headers = PyDict_New();
+    self->stream_header_sizes = PyDict_New();
     self->pending_events = PyList_New(0);
     self->bodies = NULL;
     self->failed = 0;
-    if (self->stream_headers == NULL || self->pending_events == NULL) {
+    if (self->stream_headers == NULL || self->stream_header_sizes == NULL ||
+        self->pending_events == NULL) {
         Py_XDECREF(self->stream_headers);
+        Py_XDECREF(self->stream_header_sizes);
         Py_XDECREF(self->pending_events);
         Py_DECREF(self);
         return NULL;
@@ -704,9 +757,15 @@ session_new(int is_client)
     /* RFC 9113 section 3.4: the first frame after the connection
      * preface MUST be SETTINGS. nghttp2 sends the preface magic on its
      * own but leaves the initial SETTINGS frame to the application, so
-     * we queue defaults (all values RFC defaults; submit_settings can
-     * override later ones). */
-    if (nghttp2_submit_settings(self->session, NGHTTP2_FLAG_NONE, NULL, 0)
+     * we queue defaults here: MAX_HEADER_LIST_SIZE advertises the cap
+     * that on_header enforces (submit_settings can override later
+     * ones; everything else stays at RFC defaults). */
+    nghttp2_settings_entry initial_iv[] = {
+        {NGHTTP2_SETTINGS_MAX_HEADER_LIST_SIZE,
+         (uint32_t)PYHTTP2_MAX_HEADER_LIST_SIZE},
+    };
+    if (nghttp2_submit_settings(self->session, NGHTTP2_FLAG_NONE,
+                                initial_iv, 1)
         != 0) {
         PyErr_SetString(PyExc_RuntimeError,
                         "queueing the initial SETTINGS frame failed");
@@ -738,6 +797,7 @@ session_dealloc(PyObject *self_obj)
     }
     bodies_free_all(self);
     Py_XDECREF(self->stream_headers);
+    Py_XDECREF(self->stream_header_sizes);
     Py_XDECREF(self->pending_events);
     PyObject_Del(self);
 }
