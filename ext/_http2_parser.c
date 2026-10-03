@@ -1150,6 +1150,18 @@ session_submit_settings(PyObject *self_obj, PyObject *args)
             Py_DECREF(items);
             return NULL;
         }
+        /* RFC 9113 section 6.5.2: identifiers are 16-bit, values
+         * 32-bit. Reject out-of-range input instead of silently
+         * truncating it on the wire. */
+        if (id < 0 || id > 0xFFFF || value > 0xFFFFFFFFUL) {
+            PyErr_Format(PyExc_ValueError,
+                         "invalid SETTINGS entry (id=%ld, value=%lu): "
+                         "ids are 16-bit, values 32-bit",
+                         id, value);
+            PyMem_Free(entries);
+            Py_DECREF(items);
+            return NULL;
+        }
         entries[i].settings_id = (int32_t)id;
         entries[i].value = (uint32_t)value;
     }

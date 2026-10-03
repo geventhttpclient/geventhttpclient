@@ -316,6 +316,15 @@ class TestErrors:
         with pytest.raises(TypeError, match="list"):
             client.submit_request("GET / HTTP/1.1")
 
+    def test_settings_out_of_range_raise(self):
+        """SETTINGS ids are 16-bit and values 32-bit (RFC 9113
+        §6.5.2) — out-of-range input must not silently truncate."""
+        client = session_client_new()
+        with pytest.raises(ValueError, match="16-bit"):
+            client.submit_settings({0x1FFFF: 1})
+        with pytest.raises(ValueError, match="16-bit"):
+            client.submit_settings({0x3: 2**40})
+
 
 class TestWindowUpdate:
     def test_connection_level_window_update(self):
