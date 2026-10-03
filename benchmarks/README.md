@@ -62,7 +62,7 @@ httpx is asyncio-native. Running its synchronous API under gevent monkey
 patching penalizes it disproportionately (see the loopback numbers above).
 For its native concurrency model, use the separate unpatched harness:
 
-```
+```bash
 uv run python benchmarks/httpx_async_bench.py
 ```
 
