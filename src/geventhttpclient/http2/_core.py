@@ -605,11 +605,15 @@ class HTTP2Connection:
         events, outbound = self._session.recv(bytes(data))
         if outbound:
             self._outbound.append(outbound)
-        return [self._convert_event(raw) for raw in events]
+        return [
+            event
+            for raw in events
+            if (event := self._convert_event(raw)) is not None
+        ]
 
     # -- Helpers -----------------------------------------------------------
 
-    def _convert_event(self, raw: "RawHttp2Event") -> Http2Event:
+    def _convert_event(self, raw: "RawHttp2Event") -> Http2Event | None:
         # ``_kind`` discriminates the raw TypedDict union; the type
         # checker narrows ``raw`` in each branch.
         if raw["_kind"] == "headers":
@@ -641,6 +645,14 @@ class HTTP2Connection:
                 if end_stream:
                     self._mark_remote_closed(state)
                 return TrailerReceived(stream_id, trailers)
+            if state is None and status_code is None:
+                # RFC 9113 §8.1: the first HEADERS frame of a response
+                # must carry :status. A HEADERS block without one on a
+                # stream we have no state for is malformed (e.g. a
+                # stray block on a stream we never opened) -- drop it
+                # instead of creating bogus stream state that would
+                # also break trailer detection on follow-up blocks.
+                return None
             self._update_stream_state_on_headers(
                 stream_id, all_headers, end_stream, status_code)
             # Surface to the user: the :status pseudo-header has been
