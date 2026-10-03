@@ -58,6 +58,10 @@ dev = [
     # library; without it the entire test collection fails
     # (review_http2_3.md follow-up K1).
     "h2>=4.0",
+    # Hard per-test timeout: converts a hung test (the Windows libuv
+    # deadlock burned a 6-hour job once) into a fast red failure with
+    # a stack dump.
+    "pytest-timeout",
 ]
 
 [project.urls]
@@ -112,6 +116,18 @@ archs = ["x86_64", "universal2", "arm64"]
 markers = [
     "network: tests which require internet access"
 ]
+# Dump the stacks of every thread/greenlet to the log when a single
+# test exceeds 60 s, then keep going. CI jobs are bounded by
+# ``timeout-minutes: 15``; this makes a hang diagnosable (e.g. the
+# Windows deadlock at test_httplib.py that ran the job into the
+# 6-hour default timeout) instead of silently burning the quota.
+faulthandler_timeout = 60
+# Per-test ceiling: 60 s. The full suite runs in ~10 s locally and
+# under 2 min on CI; a genuine hang needs far longer than that.
+# ``thread`` is the only method that works on Windows (no SIGALRM) and
+# force-exits after dumping stacks -- a hung gevent hub never unwinds
+# on its own.
+addopts = ["--timeout=60", "--timeout-method=thread"]
 
 [tool.ruff]
 fix = false

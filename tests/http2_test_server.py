@@ -105,6 +105,12 @@ class H2TestServer:
         self._sock: gevent.socket.socket | None = None
         self._acceptor: gevent.Greenlet | None = None
         self._active_connections: list[gevent.Greenlet] = []
+        # Live client sockets, so ``stop()`` can break handlers out of
+        # a parked ``recv()`` via ``shutdown()`` instead of killing the
+        # greenlets mid-I/O (killing them left the libuv loop on
+        # Windows in a state where later accept watchers never fired --
+        # the next test's StreamServer hung forever).
+        self._client_socks: set[gevent.ssl.SSLSocket] = set()
         self._stop_event = gevent.event.Event()
         self._client_connection: h2.connection.H2Connection | None = None
 
@@ -149,28 +155,69 @@ class H2TestServer:
             gevent.sleep(0)
 
     def stop(self) -> None:
+        """Cooperative shutdown.
+
+        Never kills a greenlet that is parked inside a socket call:
+        on Windows/libuv, ``GreenletExit`` delivered into a pending
+        accept/recv leaves the loop's watcher in a state where later
+        servers never observe their events (the accept watcher is
+        retired only on a loop tick). Instead we (1) signal the
+        acceptor, which polls ``_stop_event`` on a short accept
+        timeout, (2) break parked handlers via ``shutdown()`` so they
+        unwind themselves through their ``finally``, and (3) wait for
+        both to finish -- killing only as a last resort and then
+        blocking, so unwinding completes before we return. A final
+        loop tick retires the watcher (same workaround as
+        ``tests/common.py``).
+        """
         self._stop_event.set()
         if self._sock is not None:
             try:
                 self._sock.close()
             except OSError:
                 pass
-        for g in self._active_connections:
+        # Break handlers parked in recv(): a half-close makes recv
+        # return b"" / raise, and each handler closes its client in
+        # its own ``finally``.
+        for sock in list(self._client_socks):
             try:
-                g.kill(block=False)
-            except Exception:
+                sock.shutdown(gevent.socket.SHUT_RDWR)
+            except OSError:
                 pass
+        self._join_all(self._active_connections, per_greenlet=5.0)
         if self._acceptor is not None:
-            try:
-                self._acceptor.kill(block=False)
-            except Exception:
-                pass
+            self._acceptor.join(timeout=5.0)
+            if not self._acceptor.ready():
+                # Acceptor ignored the stop signal -- force it, but
+                # block so the GreenletExit unwinds right now.
+                self._acceptor.kill(block=True, timeout=1.0)
+        self._active_connections.clear()
+        self._client_socks.clear()
+        # libuv on Windows needs a loop tick to retire the accept
+        # watcher, otherwise the next server never accepts (see
+        # ``tests/common.py`` for the same workaround).
+        gevent.sleep(0.001)
+
+    @staticmethod
+    def _join_all(
+        greenlets: list[gevent.Greenlet], *, per_greenlet: float,
+    ) -> None:
+        for g in greenlets:
+            g.join(timeout=per_greenlet)
+            if not g.ready():
+                g.kill(block=True, timeout=1.0)
 
     def _accept_loop(self, ctx: gevent.ssl.SSLContext) -> None:
         assert self._sock is not None
+        # Short accept timeout: the acceptor must wake up regularly to
+        # observe ``_stop_event`` instead of being parked in accept()
+        # when ``stop()`` closes the listening socket under it.
+        self._sock.settimeout(0.1)
         while not self._stop_event.is_set():
             try:
                 client, _ = self._sock.accept()
+            except gevent.socket.timeout:
+                continue
             except OSError:
                 return
             try:
@@ -187,6 +234,7 @@ class H2TestServer:
                 except Exception:
                     pass
                 continue
+            self._client_socks.add(client)
             g = gevent.spawn(self._handle_connection, client)
             self._active_connections.append(g)
 
@@ -248,6 +296,7 @@ class H2TestServer:
                 client.sendall(h2_conn.data_to_send())
                 gevent.sleep(0)
         finally:
+            self._client_socks.discard(client)
             try:
                 client.close()
             except Exception:
