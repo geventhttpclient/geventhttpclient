@@ -145,9 +145,10 @@ Behaviour when `http2=True`:
 Transport failures on the h2 path raise `HTTP2Error`, a subclass of
 `ConnectionError`, so `except ConnectionError` catches both protocol
 versions uniformly. 1xx informational responses (`103 Early Hints`)
-are collected on `response.informational` and never overwrite the
-final status; trailer headers end up in `response.trailers`,
-separate from `response.headers`.
+and trailer headers live on the raw `HTTP2Response` object that
+`HTTPClient.request_h2()` returns -- the `UserAgent`/`CompatResponse`
+wrapper does not surface them; use the lower-level call when you need
+them.
 
 The implementation uses a vendored [nghttp2](https://nghttp2.org)
 (nghttp2 v1.70.0) C extension with a sans-IO core (`HTTP2Connection`,
@@ -309,9 +310,9 @@ The same keyword arguments are accepted by `UserAgent` and `HTTPClientPool`.
 
 ## Development
 
-The `llhttp` parser is vendored as a git submodule; clone with
-`--recurse-submodules` (or run `git submodule update --init`) and set up
-the test environment with:
+The `llhttp` and `nghttp2` parsers are vendored as git submodules; clone
+with `--recurse-submodules` (or run `git submodule update --init`) and
+set up the test environment with:
 
 ```
 uv sync --extra dev

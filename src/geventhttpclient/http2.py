@@ -583,6 +583,12 @@ class HTTP2Connection:
         seen_stream_closed: set[int] = set()
         for raw in events:
             event = self._convert_event(raw)
+            # nghttp2 fires ``stream_closed`` twice for streams that end
+            # via DATA + END_STREAM: once from ``on_frame_recv``, once
+            # from ``on_stream_close``. The state machine is idempotent
+            # on the second event, but the event itself would still be
+            # delivered to callers -- the set below suppresses the
+            # duplicate at the boundary.
             if isinstance(event, StreamClosed):
                 if event.stream_id in seen_stream_closed:
                     continue

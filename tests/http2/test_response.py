@@ -265,11 +265,11 @@ class TestRetry:
         # and succeed on the second. We rely on the live nginx server
         # (skipped when nginx is not running).
         from .test_session_live import (
+            NGINX_H2_PORT,
             NGINX_HOST,
-            NGINX_PORT,
-            _start_nginx,
+            _require_nginx,
         )
-        _start_nginx()
+        _require_nginx(NGINX_H2_PORT)
 
         from geventhttpclient import client as client_module
 
@@ -287,7 +287,7 @@ class TestRetry:
             client = _make_http_client(
                 client_module.HTTP2ConnectionPool(insecure=True),
                 host=NGINX_HOST,
-                port=NGINX_PORT,
+                port=NGINX_H2_PORT,
             )
             handle = client.request_h2(
                 "GET", "/get", max_retries=1, timeout=5.0,

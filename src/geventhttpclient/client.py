@@ -826,11 +826,7 @@ class HTTPClient:
         not advertise ALPN (RFC 7301 says the responder may leave the
         protocol list empty).
         """
-        try:
-            sock = session._sock  # type: ignore[attr-defined]
-        except AttributeError:
-            return None
-        return getattr(sock, "selected_alpn_protocol", lambda: None)()
+        return getattr(session.sock, "selected_alpn_protocol", lambda: None)()
 
     def _http1_fallback(self, method: str, request_uri: str, body: bytes | None,
                         headers: HeadersDataType | None) -> "HTTPSocketPoolResponse":
