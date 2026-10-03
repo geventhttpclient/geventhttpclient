@@ -19,15 +19,19 @@ touched here. Bytes flow in through ``feed()``, frames flow out through
 ``bytes_to_send()``; the caller pumps both sides.
 """
 
+from __future__ import annotations
+
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import IntEnum
+from typing import TYPE_CHECKING
 
-from geventhttpclient.http2._parser import (
-    Http2Event as RawHttp2Event,
-    Session,
-    session_client_new,
-)
+from geventhttpclient.http2._parser import Session, session_client_new
+
+if TYPE_CHECKING:
+    # Stub-only alias (TypedDict union); the compiled module does not
+    # export it at runtime.
+    from geventhttpclient.http2._parser import Http2Event as RawHttp2Event
 
 #: Stream-id 0 means "connection-level", not an actual stream.
 CONNECTION_STREAM_ID = 0
