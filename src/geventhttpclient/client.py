@@ -10,17 +10,17 @@ import gevent
 import gevent.socket
 
 from geventhttpclient import __version__
+from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
+from geventhttpclient.header import Headers, HeadersDataType
 
 # Review_http2_3.md H3: h2 transport failures are wrapped in a
 # subclass of ``ConnectionError`` so the UserAgent retry loop and
 # locust-style callers can catch them uniformly. The class lives in
 # ``useragent.py`` to avoid a circular import; we re-export it under
 # the same name for documentation.
-from geventhttpclient._http2_errors import HTTP2Error
-from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
-from geventhttpclient.header import Headers, HeadersDataType
-from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
-from geventhttpclient.http2_session import HTTP2ResponseHandle, HTTP2Session
+from geventhttpclient.http2 import HTTP2Error
+from geventhttpclient.http2.pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
+from geventhttpclient.http2.session import HTTP2ResponseHandle, HTTP2Session
 from geventhttpclient.response import (
     HTTPConnectionClosed,
     HTTPParseError,

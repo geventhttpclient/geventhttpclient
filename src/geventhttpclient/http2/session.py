@@ -23,7 +23,7 @@ import gevent.lock
 import gevent.socket
 import gevent.ssl
 
-from geventhttpclient.http2 import (
+from geventhttpclient.http2._core import (
     CONNECTION_STREAM_ID,
     DataReceived,
     HeadersReceived,

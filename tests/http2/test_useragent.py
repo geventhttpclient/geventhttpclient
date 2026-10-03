@@ -19,13 +19,12 @@ The tests verify:
 * A non-TLS scheme does not enter the h2 path.
 """
 
-from __future__ import annotations
 
 import pytest
 
 from geventhttpclient.useragent import UserAgent
 
-from .test_server import H2ServerConfig, H2TestServer
+from .servers import H2ServerConfig, H2TestServer
 
 
 def _json_echo(method: str, path: str, headers, body: bytes) -> dict[str, object]:

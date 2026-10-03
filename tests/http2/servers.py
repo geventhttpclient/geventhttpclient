@@ -1,11 +1,18 @@
-"""Tiny HTTP/2 test server backed by ``h2`` + ``gevent``.
+"""In-process test servers for the HTTP/2 client tests.
 
-Spawned as a per-test greenlet by ``tests/test_http2_spec.py``.
-Listens on ``127.0.0.1`` with TLS+ALPN ``h2`` and a fixed
-self-signed certificate. The behaviour per request is configured
-via the ``config`` argument the harness passes in -- most tests only
-need the default echo-ish behaviour, but ``routing`` lets us customise
-the responses per path for specific RFC-feature tests.
+Two flavours:
+
+* :class:`H2TestServer` -- HTTP/2-only, TLS+ALPN ``h2``, backed by
+  the ``h2`` library. Used by ``tests/http2/test_spec.py``,
+  ``test_useragent.py``, ``test_pool.py`` and ``test_response.py``.
+* :class:`H1OnlyTestServer` -- HTTP/1.1-only, no ALPN ``h2`` (so
+  ``HTTPClient.request_h2`` falls back to the h1 pool). Used by
+  ``tests/http2/test_alpn.py``.
+
+Both bind the bundled self-signed cert at
+``tests/http2/certs/server.{crt,key}`` and are driven by gevent
+greenlets, so the calling test greenlet can interleave assertions
+between read/write events.
 
 Design goals:
 
@@ -18,7 +25,6 @@ Design goals:
   one test do not pollute the next.
 """
 
-from __future__ import annotations
 
 import os
 
@@ -372,4 +378,161 @@ class H2TestServer:
             )
 
 
-__all__ = ["H2ServerConfig", "H2TestServer", "_make_response"]
+
+
+
+class H1OnlyTestServer:
+    """A co-operative HTTP/1.1-only TLS test server.
+
+    Same lifecycle and cert reuse as :class:`H2TestServer`, but the
+    context advertises no ALPN protocols -- so an h2-aware client
+    (which always offers ``["h2", "http/1.1"]``) negotiates h1 and
+    the rest of the connection is plain HTTP/1.1.
+
+    Used to test the httpx-style ALPN auto-fallback in
+    ``HTTPClient.request_h2``: the client opens one socket, sees the
+    server picked ``http/1.1``, closes it, and retries on the h1 pool
+    against this same listener. So we keep accepting connections
+    until ``stop()`` -- unlike :class:`H2TestServer` which quits after
+    the first request.
+
+    The body is a fixed JSON envelope so tests can assert on shape::
+
+            HTTP/1.1 200 OK\r\n
+            Content-Length: ...\r\n
+            Content-Type: application/json\r\n
+            \r\n
+            {"hello":"http1.1","method":"GET"}
+    """
+
+    BODY = (
+        b'{"hello":"http1.1","method":"GET"}'
+    )
+
+    def __init__(
+        self,
+        listen: tuple[str, int] = ("127.0.0.1", 0),
+    ) -> None:
+        self._listen_addr = listen
+        self._sock: gevent.socket.socket | None = None
+        self._acceptor: gevent.Greenlet | None = None
+        self._active_connections: list[gevent.Greenlet] = []
+        self._client_socks: set[gevent.ssl.SSLSocket] = set()
+        self._stop_event = gevent.event.Event()
+
+    @property
+    def address(self) -> tuple[str, int]:
+        assert self._sock is not None, "server not started"
+        return self._sock.getsockname()[:2]
+
+    @property
+    def port(self) -> int:
+        return self.address[1]
+
+    def __enter__(self) -> Self:
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        self.stop()
+
+    def start(self) -> None:
+        if not os.path.exists(CERT_FILE) or not os.path.exists(KEY_FILE):
+            raise RuntimeError(
+                f"missing test certs at {CERT_FILE} and {KEY_FILE}; "
+                "generate them with openssl before running h2 tests"
+            )
+        ctx = gevent.ssl.SSLContext(gevent.ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+        # No ``set_alpn_protocols`` call -- the server does not
+        # advertise any ALPN protocol, so an h2-aware client's
+        # ``selected_alpn_protocol()`` returns ``None`` and the
+        # auto-fallback path engages.
+        self._sock = gevent.socket.socket()
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(self._listen_addr)
+        self._sock.listen(64)
+        self._acceptor = gevent.spawn(self._accept_loop, ctx)
+
+    def stop(self) -> None:
+        """Mirror :meth:`H2TestServer.stop` -- cooperative, never kills."""
+        self._stop_event.set()
+        if self._sock is not None:
+            try:
+                self._sock.close()
+            except OSError:
+                pass
+        for sock in list(self._client_socks):
+            try:
+                sock.shutdown(gevent.socket.SHUT_RDWR)
+            except OSError:
+                pass
+        for g in self._active_connections:
+            g.join(timeout=5.0)
+            if not g.ready():
+                g.kill(block=True, timeout=1.0)
+        if self._acceptor is not None:
+            self._acceptor.join(timeout=5.0)
+            if not self._acceptor.ready():
+                self._acceptor.kill(block=True, timeout=1.0)
+        self._active_connections.clear()
+        self._client_socks.clear()
+        gevent.sleep(0.001)
+
+    def _accept_loop(self, ctx: gevent.ssl.SSLContext) -> None:
+        assert self._sock is not None
+        self._sock.settimeout(0.1)
+        while not self._stop_event.is_set():
+            try:
+                client, _ = self._sock.accept()
+            except gevent.socket.timeout:
+                continue
+            except OSError:
+                return
+            try:
+                client = ctx.wrap_socket(client, server_side=True)
+            except (OSError, gevent.ssl.SSLError):
+                try:
+                    client.close()
+                except Exception:
+                    pass
+                continue
+            self._client_socks.add(client)
+            g = gevent.spawn(self._handle, client)
+            self._active_connections.append(g)
+
+    def _handle(self, client: gevent.ssl.SSLSocket) -> None:
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    data = client.recv(65536)
+                except (OSError, gevent.ssl.SSLError):
+                    return
+                if not data:
+                    return
+                # We don't actually parse the request -- the fixed
+                # canned response is what the ALPN-fallback test
+                # asserts on. Drain until the peer is done sending.
+                if b"\r\n\r\n" in data:
+                    break
+            body = self.BODY
+            response = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Connection: close\r\n"
+                b"\r\n" + body
+            )
+            client.sendall(response)
+        finally:
+            self._client_socks.discard(client)
+            try:
+                client.close()
+            except Exception:
+                pass
+__all__ = [
+    "H1OnlyTestServer",
+    "H2ServerConfig",
+    "H2TestServer",
+    "_make_response",
+]

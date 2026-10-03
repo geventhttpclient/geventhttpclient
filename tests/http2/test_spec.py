@@ -19,7 +19,6 @@ Every test starts its own server on ``127.0.0.1:0`` so the suite
 runs in parallel without conflict.
 """
 
-from __future__ import annotations
 
 import sys
 
@@ -29,9 +28,9 @@ import pytest
 
 sys.path.insert(0, "tests")
 from geventhttpclient.client import HTTPClient
-from geventhttpclient.http2_session import HTTP2ResponseHandle, HTTP2Session
+from geventhttpclient.http2.session import HTTP2ResponseHandle, HTTP2Session
 
-from .test_server import H2ServerConfig, H2TestServer
+from .servers import H2ServerConfig, H2TestServer
 
 
 def _drive(handle: HTTP2ResponseHandle, session: HTTP2Session) -> None:

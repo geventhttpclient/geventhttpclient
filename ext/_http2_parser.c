@@ -175,7 +175,7 @@ fail:
 /* === nghttp2 callbacks === */
 
 static int
-on_header_callback(nghttp2_session *session, const nghttp2_frame *frame,
+on_header(nghttp2_session *session, const nghttp2_frame *frame,
                    const uint8_t *name, size_t namelen,
                    const uint8_t *value, size_t valuelen, uint8_t flags,
                    void *user_data)
@@ -236,7 +236,7 @@ fail:
 }
 
 static int
-on_frame_recv_callback(nghttp2_session *session, const nghttp2_frame *frame,
+on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
                        void *user_data)
 {
     PyHTTP2Session *self = (PyHTTP2Session *)user_data;
@@ -282,7 +282,7 @@ on_frame_recv_callback(nghttp2_session *session, const nghttp2_frame *frame,
         break;
     }
     case NGHTTP2_DATA: {
-        /* DATA chunks are emitted by on_data_chunk_recv_callback; here
+        /* DATA chunks are emitted by on_data_chunk_recv; here
          * we only need the (rare) end-of-stream notification for a
          * frame without chunk callback invocations (empty DATA). */
         if ((frame->hd.flags & NGHTTP2_FLAG_END_STREAM) != 0) {
@@ -395,7 +395,7 @@ on_frame_recv_callback(nghttp2_session *session, const nghttp2_frame *frame,
 }
 
 static int
-on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
+on_stream_close(nghttp2_session *session, int32_t stream_id,
                          uint32_t error_code, void *user_data)
 {
     PyHTTP2Session *self = (PyHTTP2Session *)user_data;
@@ -427,7 +427,7 @@ on_stream_close_callback(nghttp2_session *session, int32_t stream_id,
 }
 
 static int
-on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
+on_data_chunk_recv(nghttp2_session *session, uint8_t flags,
                             int32_t stream_id, const uint8_t *data,
                             size_t len, void *user_data)
 {
@@ -445,7 +445,7 @@ on_data_chunk_recv_callback(nghttp2_session *session, uint8_t flags,
 }
 
 static ssize_t
-send_callback(nghttp2_session *session, const uint8_t *data, size_t length,
+send(nghttp2_session *session, const uint8_t *data, size_t length,
               int flags, void *user_data)
 {
     /* Never used: we drain via nghttp2_session_mem_send(). nghttp2
@@ -455,7 +455,7 @@ send_callback(nghttp2_session *session, const uint8_t *data, size_t length,
 }
 
 static ssize_t
-body_read_callback(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
+body_read(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
                    size_t length, uint32_t *data_flags,
                    nghttp2_data_source *source, void *user_data)
 {
@@ -625,15 +625,15 @@ session_new(int is_client)
         Py_DECREF(self);
         return NULL;
     }
-    nghttp2_session_callbacks_set_send_callback(callbacks, send_callback);
+    nghttp2_session_callbacks_set_send_callback(callbacks, send);
     nghttp2_session_callbacks_set_on_header_callback(callbacks,
-                                                     on_header_callback);
+                                                     on_header);
     nghttp2_session_callbacks_set_on_frame_recv_callback(callbacks,
-                                                         on_frame_recv_callback);
+                                                         on_frame_recv);
     nghttp2_session_callbacks_set_on_stream_close_callback(
-        callbacks, on_stream_close_callback);
+        callbacks, on_stream_close);
     nghttp2_session_callbacks_set_on_data_chunk_recv_callback(
-        callbacks, on_data_chunk_recv_callback);
+        callbacks, on_data_chunk_recv);
 
     int rv;
     if (is_client) {
@@ -793,7 +793,7 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
             return NULL;
         }
         provider.source.ptr = body;
-        provider.read_callback = body_read_callback;
+        provider.read_callback = body_read;
         provider_ptr = &provider;
     }
     int32_t stream_id = nghttp2_submit_request(self->session, NULL, nva,
@@ -905,7 +905,7 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
         }
         body->stream_id = stream_id;
         provider.source.ptr = body;
-        provider.read_callback = body_read_callback;
+        provider.read_callback = body_read;
         provider_ptr = &provider;
     }
     int rv = nghttp2_submit_response(self->session, stream_id, nva, nvlen,
@@ -1240,7 +1240,7 @@ static struct PyModuleDef module_def = {
 };
 
 PyMODINIT_FUNC
-PyInit__http2_parser(void)
+PyInit__parser(void)
 {
     KIND_HEADERS = PyUnicode_InternFromString("headers");
     KIND_DATA = PyUnicode_InternFromString("data");

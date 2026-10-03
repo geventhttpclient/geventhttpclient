@@ -11,7 +11,7 @@ The :class:`HTTP2ConnectionPool` here owns one HTTP/2 session per
 when a request needs a different endpoint; it does **not** spawn
 its own greenlets — the caller is expected to drive each session
 externally (typically one per host:port) or via the synchronous API
-in :mod:`geventhttpclient.http2_session` which loops ``drive_once()``
+in :mod:`geventhttpclient.http2.session` which loops ``drive_once()``
 until the response handle closes.
 
 The pool is intentionally small: it does **not** try to limit
@@ -25,8 +25,8 @@ import gevent.lock
 import gevent.socket
 import gevent.ssl
 
-from geventhttpclient.http2 import HTTP2Connection
-from geventhttpclient.http2_session import HTTP2Session
+from geventhttpclient.http2._core import HTTP2Connection
+from geventhttpclient.http2.session import HTTP2Session
 
 
 class HTTP2ConnectionPoolError(ConnectionError):

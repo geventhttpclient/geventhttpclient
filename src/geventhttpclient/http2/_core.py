@@ -23,7 +23,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import IntEnum
 
-from geventhttpclient._http2_parser import Session, session_client_new
+from geventhttpclient.http2._parser import Session, session_client_new
 
 #: Stream-id 0 means "connection-level", not an actual stream.
 CONNECTION_STREAM_ID = 0

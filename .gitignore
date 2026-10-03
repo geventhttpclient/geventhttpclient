@@ -18,3 +18,4 @@ dist/
 .cache
 .venv
 wheelhouse
+review*.md

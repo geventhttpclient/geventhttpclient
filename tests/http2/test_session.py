@@ -1,4 +1,4 @@
-"""Sans-IO tests for :mod:`geventhttpclient.http2_session`.
+"""Sans-IO tests for :mod:`geventhttpclient.http2.session`.
 
 The tests wire an :class:`HTTP2Session` against a *fake* socket whose
 two ends swap bytes through in-memory buffers. We then spawn a small
@@ -7,7 +7,6 @@ server-side socket, replies via the raw nghttp2 C session, and writes
 the resulting frames back through the same fake socket.
 """
 
-from __future__ import annotations
 
 import errno
 import threading
@@ -16,9 +15,9 @@ from typing import Any
 
 import pytest
 
-from geventhttpclient._http2_parser import session_server_new
 from geventhttpclient.http2 import HTTP2Connection
-from geventhttpclient.http2_session import (
+from geventhttpclient.http2._parser import session_server_new
+from geventhttpclient.http2.session import (
     HTTP2ResponseHandle,
     HTTP2Session,
     HTTP2Wire,
@@ -30,37 +29,6 @@ from geventhttpclient.http2_session import (
 # ---------------------------------------------------------------------------
 
 
-class FakeSocket:
-    """A pair of "sockets" connected to each other through bytes queues.
-
-    ``a_to_b`` is the buffer carrying bytes written by side A and
-    readable by side B, and vice versa. The lock is necessary because
-    the I/O-side greenlets may interleave with the test thread.
-    """
-
-    def __init__(self) -> None:
-        self.a_to_b = bytearray()
-        self.b_to_a = bytearray()
-        self._lock = threading.Lock()
-        self._peer_closed_a = False
-        self._peer_closed_b = False
-        # recv raises EAGAIN instead of returning empty bytes when no
-        # data is available, mimicking a non-blocking socket.
-        self.non_blocking = True
-
-    def side_a(self) -> FakeSocketEnd:
-        return FakeSocketEnd(self, write=self.a_to_b, read=self.b_to_a,
-                             is_closed=lambda: self._peer_closed_b,
-                             close_other=lambda: setattr(self, "_peer_closed_a", True),
-                             lock=self._lock)
-
-    def side_b(self) -> FakeSocketEnd:
-        return FakeSocketEnd(self, write=self.b_to_a, read=self.a_to_b,
-                             is_closed=lambda: self._peer_closed_a,
-                             close_other=lambda: setattr(self, "_peer_closed_b", True),
-                             lock=self._lock)
-
-
 class FakeSocketEnd:
     """One end of a :class:`FakeSocket`.
 
@@ -70,7 +38,7 @@ class FakeSocketEnd:
 
     def __init__(
         self,
-        parent: FakeSocket,
+        parent: "FakeSocket",
         *,
         write: bytearray,
         read: bytearray,
@@ -115,6 +83,37 @@ class FakeSocketEnd:
         # Not used in tests; HTTP2Wire uses gevent.socket.timeout, but
         # the FakeSocket.recv raises OSError(EAGAIN) instead.
         pass
+
+
+class FakeSocket:
+    """A pair of "sockets" connected to each other through bytes queues.
+
+    ``a_to_b`` is the buffer carrying bytes written by side A and
+    readable by side B, and vice versa. The lock is necessary because
+    the I/O-side greenlets may interleave with the test thread.
+    """
+
+    def __init__(self) -> None:
+        self.a_to_b = bytearray()
+        self.b_to_a = bytearray()
+        self._lock = threading.Lock()
+        self._peer_closed_a = False
+        self._peer_closed_b = False
+        # recv raises EAGAIN instead of returning empty bytes when no
+        # data is available, mimicking a non-blocking socket.
+        self.non_blocking = True
+
+    def side_a(self) -> "FakeSocketEnd":
+        return FakeSocketEnd(self, write=self.a_to_b, read=self.b_to_a,
+                             is_closed=lambda: self._peer_closed_b,
+                             close_other=lambda: setattr(self, "_peer_closed_a", True),
+                             lock=self._lock)
+
+    def side_b(self) -> "FakeSocketEnd":
+        return FakeSocketEnd(self, write=self.b_to_a, read=self.a_to_b,
+                             is_closed=lambda: self._peer_closed_a,
+                             close_other=lambda: setattr(self, "_peer_closed_b", True),
+                             lock=self._lock)
 
 
 # ---------------------------------------------------------------------------

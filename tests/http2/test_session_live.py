@@ -1,74 +1,19 @@
-"""Live HTTP/2 integration tests against a local nginx instance.
+"""Live HTTP/2 round-trips against ``httpbingo.org``.
 
-These tests are **not** part of CI -- they require a local nginx already
-running on the expected ports. If nothing answers on the port the
-test asks for, the whole module skips cleanly via
-:func:`_require_nginx`. There is no in-test nginx setup, no config
-generation, no fixtures beyond the skip -- the test simply assumes
-nginx is up and configured for HTTP/2 on one port and HTTP/1.1 on
-another.
+Tagged ``@pytest.mark.network`` so the pytest-rerunfailures fixture
+in ``conftest.py`` retries transient blips. Endpoints used:
+
+* ``GET  /get``         -- 200, JSON body
+* ``POST /post``        -- 200, JSON body
+* ``GET  /status/404``  -- 404
 """
 
-from __future__ import annotations
-
-import socket
-
-import gevent
 import pytest
 
-from geventhttpclient.http2_session import HTTP2ResponseHandle, HTTP2Session, HTTP2WireError
+from geventhttpclient.http2.session import HTTP2ResponseHandle, HTTP2Session
+from tests.common import HTTPBIN_HOST
 
-NGINX_HOST = "127.0.0.1"
-# HTTP/2-capable listener. The server's SSL config must advertise
-# ``h2`` in ALPN.
-NGINX_H2_PORT = 8443
-# HTTP/1.1-only listener. Tests use this to verify the
-# ``http2=True`` + h1-only-server fallback path.
-NGINX_H1_PORT = 8444
-
-DRIVE_TIMEOUT = 5.0
-
-
-def _require_nginx(*ports: int) -> None:
-    """Skip the test if none of the listed ports answers a TCP connect.
-
-    The check is a single ``create_connection`` per port with a 0.5 s
-    timeout, so a CI run with no nginx takes a couple of seconds at
-    most and reports each affected test as skipped.
-    """
-    for port in ports:
-        try:
-            with socket.create_connection((NGINX_HOST, port), timeout=0.5):
-                return
-        except OSError:
-            pass
-    pytest.skip(f"no nginx reachable on {NGINX_HOST}:{','.join(str(p) for p in ports)}")
-
-
-@pytest.fixture(autouse=True)
-def _h2_alive():
-    """All tests in this module need an h2-capable nginx."""
-    _require_nginx(NGINX_H2_PORT)
-    yield
-
-
-def _connect_h2() -> gevent.ssl.SSLSocket:
-    """Open a TLS+ALPN-negotiated connection to the test nginx."""
-    import gevent.socket
-    import gevent.ssl
-
-    ctx = gevent.ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = gevent.ssl.CERT_NONE
-    ctx.set_alpn_protocols(["h2", "http/1.1"])
-
-    sock = gevent.socket.create_connection((NGINX_HOST, NGINX_H2_PORT), timeout=DRIVE_TIMEOUT)
-    sock = ctx.wrap_socket(sock, server_hostname="localhost")
-    selected = sock.selected_alpn_protocol()
-    if selected != "h2":
-        sock.close()
-        pytest.skip(f"server at {NGINX_HOST}:{NGINX_H2_PORT} did not negotiate h2 (got {selected!r})")
-    return sock
+DRIVE_TIMEOUT = 15.0
 
 
 def _drive_until_closed(
@@ -83,66 +28,103 @@ def _drive_until_closed(
     while not handle.is_closed:
         if time.time() - start_time > timeout:
             pytest.fail(f"response did not close in {timeout}s (status={handle.status_code})")
-        try:
-            session.drive_once()
-        except HTTP2WireError as e:
-            pytest.fail(f"wire error: {e}")
+        session.drive_once()
+        import gevent
         gevent.sleep(0)
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+def _connect_h2(host: str = HTTPBIN_HOST, port: int = 443) -> object:
+    """Open a TLS+ALPN-negotiated connection. Skips if the peer did
+    not pick ``h2``."""
+    import gevent.socket
+    import gevent.ssl
+
+    ctx = gevent.ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = gevent.ssl.CERT_NONE
+    ctx.set_alpn_protocols(["h2", "http/1.1"])
+
+    sock = gevent.socket.create_connection((host, port), timeout=DRIVE_TIMEOUT)
+    sock = ctx.wrap_socket(sock, server_hostname=host)
+    selected = sock.selected_alpn_protocol()
+    if selected != "h2":
+        sock.close()
+        pytest.skip(f"server at {host}:{port} did not negotiate h2 (got {selected!r})")
+    return sock
+
+
+def _default_headers() -> list[tuple[str, str]]:
+    """Match what HTTPClient sends in production (User-Agent). Without
+    a User-Agent httpbingo.org's Fly.io middleware answers 402
+    Payment Required for what it treats as a bot."""
+    return [("user-agent", "curl/8.5.0")]
 
 
 class TestLiveRoundTrip:
+    @pytest.mark.network
     def test_get_returns_json_body(self) -> None:
         sock = _connect_h2()
         try:
             session = HTTP2Session(sock)
-            handle = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
+            handle = session.submit_request(
+                "GET", "/get", HTTPBIN_HOST, headers=_default_headers(),
+            )
             _drive_until_closed(session, handle)
             assert handle.status_code == 200
-            assert handle.body == b'{"hello":"http2","method":"GET"}'
+            assert b'"url"' in handle.body
         finally:
             sock.close()
 
+    @pytest.mark.network
     def test_post_request(self) -> None:
         sock = _connect_h2()
         try:
             session = HTTP2Session(sock)
             handle = session.submit_request(
-                "POST", "/post", f"{NGINX_HOST}:{NGINX_H2_PORT}",
+                "POST", "/post", HTTPBIN_HOST, headers=_default_headers(),
             )
             _drive_until_closed(session, handle)
             assert handle.status_code == 200
-            assert b'"method":"POST"' in handle.body
+            assert b'"form"' in handle.body
+            assert b'"data"' in handle.body
         finally:
             sock.close()
 
+    @pytest.mark.network
     def test_concurrent_streams_over_one_connection(self) -> None:
-        """Two requests share one h2 session -- verifies multiplexing."""
+        """Two requests share one h2 session -- verifies the
+        sans-ink-out multiplexer against a real server."""
         sock = _connect_h2()
         try:
             session = HTTP2Session(sock)
-            h1 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
-            h2 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
+            hdrs = _default_headers()
+            h1 = session.submit_request("GET", "/get", HTTPBIN_HOST, headers=hdrs)
+            h2 = session.submit_request("GET", "/get", HTTPBIN_HOST, headers=hdrs)
             # Different stream ids because HTTP/2 increments client streams by 2.
             assert h1.stream_id != h2.stream_id
             _drive_until_closed(session, h1)
             _drive_until_closed(session, h2)
             assert h1.status_code == 200
             assert h2.status_code == 200
-            assert h1.body == h2.body
+            # Bodies are NOT byte-identical because httpbingo echoes
+            # the request's ``X-Request-Start`` timestamp which differs
+            # per request. We assert on shape instead.
+            import json
+            for body, label in ((h1.body, "h1"), (h2.body, "h2")):
+                parsed = json.loads(body)
+                assert parsed["method"] == "GET"
+                assert parsed["url"].endswith("/get")
+                assert "origin" in parsed
         finally:
             sock.close()
 
+    @pytest.mark.network
     def test_404_path_returns_404(self) -> None:
         sock = _connect_h2()
         try:
             session = HTTP2Session(sock)
             handle = session.submit_request(
-                "GET", "/no-such-path", f"{NGINX_HOST}:{NGINX_H2_PORT}",
+                "GET", "/status/404", HTTPBIN_HOST, headers=_default_headers(),
             )
             _drive_until_closed(session, handle)
             assert handle.status_code == 404

@@ -8,11 +8,9 @@ raw dicts to dataclasses, the per-stream state machine, the
 gate.
 """
 
-from __future__ import annotations
 
 import pytest
 
-from geventhttpclient._http2_parser import session_server_new
 from geventhttpclient.http2 import (
     DEFAULT_MAX_CONCURRENT_STREAMS,
     DataReceived,
@@ -27,6 +25,7 @@ from geventhttpclient.http2 import (
     StreamReset,
     TrailerReceived,
 )
+from geventhttpclient.http2._parser import session_server_new
 
 
 def _pump(
