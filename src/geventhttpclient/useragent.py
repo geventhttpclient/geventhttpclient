@@ -83,10 +83,13 @@ class RetriesExceeded(ConnectionError):
 
 class BadStatusCode(ConnectionError):
     # populated by raise_for_status() and the urlopen status check: the
-    # failing status code plus the response/request that caused it
-    code: int
-    response: Any
-    request: Any
+    # failing status code plus the response/request that caused it.
+    # The annotations are only for documentation; mypy cannot see
+    # the dynamic attribute writes inside the except branches, so
+    # the assignments below keep a # type: ignore marker.
+    code: int = 0
+    response: "CompatResponse | None"
+    request: "CompatRequest | None"
 
 
 class EmptyResponse(ConnectionError):
@@ -481,6 +484,8 @@ class UserAgent:
         retry_delay: float = 0,
         cookiejar: CookieJarLike = None,
         headers: HeadersDataType | None = None,
+        *,
+        insecure: bool = False,
         **kw: Any,
     ) -> None:
         self.max_redirects = int(max_redirects)
@@ -490,6 +495,15 @@ class UserAgent:
         if headers:
             self.default_headers.update(headers)
         self.cookiejar = cookiejar
+        # Forward the explicit args so HTTPClient / HTTPClientPool pick
+        # them up; previously only ``**kw`` carried them, which made
+        # ``insecure=True`` silently drop on the floor if the caller
+        # did not also set the other kwargs. Higher-level clients
+        # (``Session``, ``httpx.Client``) translate their own
+        # ``follow_redirects=False`` into ``max_redirects=0`` on
+        # this constructor.
+        if insecure:
+            kw["insecure"] = True
         self.clientpool = HTTPClientPool(**kw)
 
     def close(self) -> None:
@@ -552,7 +566,6 @@ class UserAgent:
         self,
         url: str | URL,
         method: str = "GET",
-        response_codes: frozenset[int] = valid_response_codes,
         headers: HeadersDataType | None = None,
         payload: Payload = None,
         to_string: Literal[False] = False,
@@ -569,7 +582,6 @@ class UserAgent:
         self,
         url: str | URL,
         method: str = "GET",
-        response_codes: frozenset[int] = valid_response_codes,
         headers: HeadersDataType | None = None,
         payload: Payload = None,
         to_string: Literal[True] = True,
@@ -585,7 +597,6 @@ class UserAgent:
         self,
         url: str | URL,
         method: str = "GET",
-        response_codes: frozenset[int] = valid_response_codes,
         headers: HeadersDataType | None = None,
         payload: Payload = None,
         to_string: bool = False,
@@ -671,7 +682,11 @@ class UserAgent:
                 redirection = resp.headers.get("location")
                 if not isinstance(redirection, str):
                     redirection = None
-                if resp.status_code in self.redirect_response_codes and redirection:
+                if (
+                    max_redirects > 0
+                    and resp.status_code in self.redirect_response_codes
+                    and redirection
+                ):
                     history.append(resp)
                     resp.release()
                     try:

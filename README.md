@@ -41,8 +41,10 @@ with a C compiler otherwise; it is fully type annotated (`py.typed`).
 `geventhttpclient` features a largely `requests`
 compatible interface. It covers basic HTTP usage including cookie
 management, form data encoding or decoding of compressed data,
-but otherwise isn't as feature rich as the original `requests`. For
-simple use-cases, it can serve as a drop-in replacement.
+but otherwise isn't as feature rich as the original `requests`.
+In many simple use-cases it can serve as a drop-in replacement;
+for the rest, the [feature list](https://requests.readthedocs.io/)
+is the source of truth.
 
 ```python
 import geventhttpclient as requests
@@ -98,9 +100,16 @@ import httplib2
 ## httpx-compatible interface
 
 `geventhttpclient` also features a largely `httpx` compatible
-interface. Same engine, gevent concurrency, and a 5-7x parser-speed
-advantage over `httpx`'s default. For code already written against
-`httpx.Client`, it can serve as a drop-in replacement.
+interface. Same engine, gevent concurrency. The surface is a
+deliberate subset: we omit async, mounts, and a few of the more
+advanced features, so `httpx` and `requests` remain the right
+choice when those are needed. Under gevent monkey patching the
+loopback benchmark reports roughly 7x the throughput of
+`httpx.Client` (5600 vs. 757 requests/second) -- this is the
+client-side CPU cost under load, see
+[Benchmarks](#benchmarks) for the regime caveats. In many cases
+the subset is enough to serve as a drop-in replacement for code
+written against `httpx.Client`.
 
 ```python
 from geventhttpclient import httpx
@@ -289,16 +298,14 @@ a couple of popular clients is given in the table below. Please read
 for more details. Note that this setup is client-CPU-bound (the loopback
 server answers in microseconds): it compares parsing and per-request client
 efficiency. Over real network connections, latency dominates and the
-differences between clients largely disappear. Also note,
-[HTTPX](https://www.python-httpx.org/) is better be
-used with `asyncio`, not `gevent`.
+differences between clients largely disappear.
 
 | HTTP Client        | RPS    |
 | ------------------ | ------ |
-| GeventHTTPClient   | 5063.4 |
-| Httplib2 (patched) | 1995.7 |
-| Urllib3            | 1665.8 |
-| Requests           | 941.2  |
-| Httpx              | 753.5  |
+| GeventHTTPClient   | 5600   |
+| Httplib2 (patched) | 1990   |
+| Urllib3            | 1630   |
+| Requests           | 957    |
+| Httpx (sync)       | 757    |
 
-_Linux(x86_64), Python 3.14.7, gevent 26.9.0_
+_Linux(x86_64), Python 3.14.7, gevent 26.9.0, nginx 1.24, 10 concurrent keep-alive connections, small static page; loopback (so client CPU is the bottleneck)._

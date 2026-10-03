@@ -25,15 +25,33 @@ follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
   httpx-named exception hierarchy (`HTTPError`/`RequestError`/
   `HTTPStatusError`/`TooManyRedirects`/`ConnectError`/...) and
   `raise_for_status` carrying the failing request and response
-- `UserAgent(..., follow_redirects=True)` and
-  `raise_for_status` are also available on the requests surface:
+- `Session` (the `requests`-style surface) is now feature-rich:
   `response.history` collects the redirect chain (oldest first),
   `response.elapsed` is a `datetime.timedelta`, `response.cookies`
   parses the response's `Set-Cookie` headers into an
-  `http.cookiejar.CookieJar`, and `raise_for_status` raises with
-  the failing response and request attached; per-request `auth`
+  `http.cookiejar.CookieJar`, `raise_for_status` raises with the
+  failing response and request attached, and per-request `auth`
   accepts the requests-style `(username, password)` tuple and
   sets the `Authorization` header for that request
+- `UserAgent` gained `insecure: bool = False` (forwards to the
+  underlying HTTPClient pool, used by TLS h1 targets without a
+  verified chain). UserAgent itself stays a single-purpose
+  primitive keyed on `max_redirects`; the higher-level clients
+  (``httpx.Client``) apply their own ``follow_redirects`` flag
+  per request through ``Session.request``'s ``allow_redirects``,
+  which translates to ``max_redirects=0`` or ``None`` so a
+  per-request override of a session-wide default works as it does
+  in `requests`
+- `httpx.Client.get` / `.post` / `.put` / `.patch` / `.delete`
+  / `.head` / `.options` now route through the httpx-style
+  `request` so the `follow_redirects` translation above actually
+  fires; previously they inherited from `Session.get` etc., which
+  sets `allow_redirects=True` unconditionally before dispatching
+  and silently overrode the client-level `follow_redirects=False`
+  (review of the follow-redirects mechanism turned up the bug).
+  `UserAgent.urlopen` now also skips the redirect-follow path when
+  `max_redirects=0` instead of falling into the for/else and
+  raising `RetriesExceeded` on a single 3xx response
 - `iter_content()`, `iter_lines()` and `json(**kw)` on `RequestsResponse`,
   mirroring the `requests` API: chunked streaming with an incremental
   unicode decoder, line splitting on `\r\n`/`\r`/`\n` across chunk
@@ -61,9 +79,11 @@ follow_redirects, timeout)`, the `is_success`/`is_client_error`/.../
 - A list or tuple header value becomes one field line per element:
   `{'X-Multi': ['a', 'b']}` sends `X-Multi: a` and `X-Multi: b` (RFC 9110
   section 5.2) instead of the Python repr of the list; `__setitem__` and
-  `update()` replace all lines of the field, `add()` and `extend()` append;
-  merging one `Headers` instance into another replaces a field as a whole
-  so multi line fields survive the merge
+  `update({...})` replace all lines of the field, `add()` and `extend()`
+  append; merging one `Headers` instance into another (`other.update(h2)`
+  where `h2` is a `Headers`) replaces a field as a whole so multi line
+  fields survive, while `other.update({"X": ...})` from a plain mapping
+  still collapses them — the distinction is per source type
 - Redirect resolution follows RFC 3986 section 5.2: dot segments are
   removed (`/a/b/c/../up` now resolves to `/a/b/up`), relative paths merge
   against all but the last base path segment (`/dir/page` + `test.html`
