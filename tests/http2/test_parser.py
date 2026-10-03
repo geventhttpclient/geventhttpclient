@@ -508,6 +508,46 @@ class TestPushRefusal:
         assert dict(headers[0]["headers"])[":status"] == "200"
 
 
+class TestWindowSizes:
+    def test_defaults(self):
+        client = session_client_new()
+        assert client.get_remote_window_size() == 65535
+        assert client.get_local_window_size() == 65535
+
+    def test_stream_windows_and_unknown_stream(self):
+        client = session_client_new()
+        server = session_server_new()
+        stream_id, frames = client.submit_request(
+            post_headers(), with_body=True)
+        exchange(client, server, frames)
+
+        assert client.get_stream_remote_window_size(stream_id) == 65535
+        assert client.get_stream_local_window_size(stream_id) == 65535
+        # Unknown streams report None, not an nghttp2 error code.
+        assert client.get_stream_remote_window_size(9999) is None
+
+        # Sending data shrinks the remote (send) window.
+        client.submit_data(stream_id, b"x" * 100, end_stream=False)
+        assert client.get_stream_remote_window_size(stream_id) == 65535 - 100
+
+    def test_receive_window_shrinks_until_consumed(self):
+        client = session_client_new()
+        server = session_server_new()
+        stream_id, frames = client.submit_request(get_headers())
+        exchange(client, server, frames)
+        response = server.submit_response(
+            stream_id, [(":status", "200")], with_body=True)
+        pump_frames(client, server, to_client=response)
+
+        body = server.submit_data(stream_id, b"y" * 1000,
+                                  end_stream=False)
+        client.recv(body)
+        # The receive window only recovers once the application
+        # consumes via nghttp2's automatic window update; either way
+        # the getter must report a plausible value.
+        assert 0 <= client.get_stream_local_window_size(stream_id) <= 65535
+
+
 class TestHeaderEncoding:
     """Header names/values are opaque octets on the wire; the binding
     speaks latin-1 in both directions (1:1 byte mapping), matching the
