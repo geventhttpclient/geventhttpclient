@@ -315,6 +315,23 @@ class TestHTTP2Wire:
         with pytest.raises(HTTP2WireError):
             wire.drive_once()
 
+    def test_fatal_error_latches_the_wire(self) -> None:
+        """After a fatal failure (peer close, parser error, ...),
+        drive/flush must fail fast instead of feeding the broken
+        session again (P6)."""
+        fs = FakeSocket()
+        sock = fs.side_a()
+        conn = HTTP2Connection()
+        wire = HTTP2Wire(sock, conn)
+        fs.side_b().close()
+        with pytest.raises(HTTP2WireError, match="peer closed"):
+            wire.drive_once()
+        # Latched: follow-up calls raise immediately, naming the cause.
+        with pytest.raises(HTTP2WireError, match="unusable"):
+            wire.drive_once()
+        with pytest.raises(HTTP2WireError, match="unusable"):
+            wire.flush_outbound()
+
 
 class TestHTTP2SessionRoundTrip:
     def test_get_round_trip(self) -> None:
