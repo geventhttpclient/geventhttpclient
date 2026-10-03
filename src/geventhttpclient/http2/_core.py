@@ -1,6 +1,6 @@
 """Sans-IO HTTP/2 connection layer.
 
-Wraps :mod:`geventhttpclient._http2_parser` (the raw nghttp2 binding) and
+Wraps :mod:`geventhttpclient.http2._parser` (the raw nghttp2 binding) and
 adds:
 
 * Typed ``@dataclass`` events instead of ``dict``-shaped records.
@@ -19,10 +19,11 @@ touched here. Bytes flow in through ``feed()``, frames flow out through
 ``bytes_to_send()``; the caller pumps both sides.
 """
 
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import TYPE_CHECKING
+from types import MappingProxyType
+from typing import TYPE_CHECKING, ClassVar
 
 from geventhttpclient.http2._parser import Session, session_client_new
 
@@ -91,9 +92,7 @@ class HeadersReceived:
     headers: tuple[tuple[str, str], ...]
     end_stream: bool
 
-    @property
-    def kind(self) -> str:
-        return "headers"
+    kind: ClassVar[str] = "headers"
 
 
 @dataclass(slots=True, frozen=True)
@@ -109,9 +108,7 @@ class DataReceived:
     data: bytes
     end_stream: bool
 
-    @property
-    def kind(self) -> str:
-        return "data"
+    kind: ClassVar[str] = "data"
 
 
 @dataclass(slots=True, frozen=True)
@@ -126,9 +123,7 @@ class StreamReset:
     stream_id: int
     error_code: int
 
-    @property
-    def kind(self) -> str:
-        return "stream_reset"
+    kind: ClassVar[str] = "stream_reset"
 
 
 @dataclass(slots=True, frozen=True)
@@ -139,9 +134,7 @@ class StreamClosed:
     error_code: int
     end_stream: bool
 
-    @property
-    def kind(self) -> str:
-        return "stream_closed"
+    kind: ClassVar[str] = "stream_closed"
 
 
 @dataclass(slots=True, frozen=True)
@@ -152,9 +145,7 @@ class SettingsReceived:
     settings: dict[int, int]
     ack: bool
 
-    @property
-    def kind(self) -> str:
-        return "settings"
+    kind: ClassVar[str] = "settings"
 
 
 @dataclass(slots=True, frozen=True)
@@ -165,9 +156,7 @@ class PingReceived:
     opaque_data: bytes
     ack: bool
 
-    @property
-    def kind(self) -> str:
-        return "ping"
+    kind: ClassVar[str] = "ping"
 
 
 @dataclass(slots=True, frozen=True)
@@ -186,9 +175,7 @@ class GoAwayReceived:
     error_code: int
     debug_data: bytes
 
-    @property
-    def kind(self) -> str:
-        return "goaway"
+    kind: ClassVar[str] = "goaway"
 
 
 @dataclass(slots=True, frozen=True)
@@ -203,9 +190,7 @@ class WindowUpdateReceived:
     stream_id: int
     delta: int
 
-    @property
-    def kind(self) -> str:
-        return "window_update"
+    kind: ClassVar[str] = "window_update"
 
 
 def _parse_status_code(headers: tuple[tuple[str, str], ...]) -> int | None:
@@ -241,9 +226,7 @@ class InformationalResponseReceived:
     status_code: int
     headers: tuple[tuple[str, str], ...]
 
-    @property
-    def kind(self) -> str:
-        return "informational"
+    kind: ClassVar[str] = "informational"
 
 
 @dataclass(slots=True, frozen=True)
@@ -262,9 +245,7 @@ class TrailerReceived:
     stream_id: int
     headers: tuple[tuple[str, str], ...]
 
-    @property
-    def kind(self) -> str:
-        return "trailer"
+    kind: ClassVar[str] = "trailer"
 
 
 Http2Event = (
@@ -390,10 +371,9 @@ class HTTP2Connection:
         return self._session.get_remote_settings()
 
     @property
-    def streams(self) -> dict[int, StreamState]:
-        """Read-only view of the streams we have seen. Mutating the
-        returned dict is undefined behaviour."""
-        return self._streams
+    def streams(self) -> Mapping[int, StreamState]:
+        """Read-only view of the streams we have seen."""
+        return MappingProxyType(self._streams)
 
     @property
     def last_accepted_stream_id(self) -> int:
@@ -409,9 +389,10 @@ class HTTP2Connection:
         """Number of streams currently held against the
         ``MAX_CONCURRENT_STREAMS`` budget.
 
-        Note: includes streams that are half-closed or fully closed but
-        not yet pruned from the dict. Use :meth:`prune_closed_streams`
-        if memory growth is a concern.
+        Counts streams from request submission until close/reset --
+        half-closed streams still count (RFC 9113 §5.1.2); fully
+        closed ones are already decremented. Use
+        :meth:`prune_closed_streams` if the streams dict itself grows.
         """
         return self._open_streams
 
@@ -500,8 +481,7 @@ class HTTP2Connection:
         # the HEADERS frame and the local side is therefore immediately
         # HALF_CLOSED_LOCAL; otherwise it stays OPEN until we submit a
         # final DATA frame (see ``submit_data``).
-        initial_state = (StreamLifecycle.HALF_CLOSED_LOCAL
-                         if body is None else StreamLifecycle.OPEN)
+        initial_state = StreamLifecycle.HALF_CLOSED_LOCAL if body is None else StreamLifecycle.OPEN
         state = StreamState(stream_id=stream_id, state=initial_state)
         self._streams[stream_id] = state
         self._open_streams += 1
@@ -605,11 +585,7 @@ class HTTP2Connection:
         events, outbound = self._session.recv(bytes(data))
         if outbound:
             self._outbound.append(outbound)
-        return [
-            event
-            for raw in events
-            if (event := self._convert_event(raw)) is not None
-        ]
+        return [event for raw in events if (event := self._convert_event(raw)) is not None]
 
     # -- Helpers -----------------------------------------------------------
 
@@ -627,13 +603,12 @@ class HTTP2Connection:
             # early hints without confusing them for the real answer.
             status_code = _parse_status_code(all_headers)
             state = self._streams.get(stream_id)
-            if (
-                status_code is not None
-                and 100 <= status_code < 200
-            ):
+            if status_code is not None and 100 <= status_code < 200:
                 headers = tuple(h for h in all_headers if h[0] != ":status")
                 return InformationalResponseReceived(
-                    stream_id, status_code, headers,
+                    stream_id,
+                    status_code,
+                    headers,
                 )
             # Trailer detection (RFC 9113 §8.1): a HEADERS frame on a
             # stream whose final response was already delivered is the
@@ -653,8 +628,7 @@ class HTTP2Connection:
                 # instead of creating bogus stream state that would
                 # also break trailer detection on follow-up blocks.
                 return None
-            self._update_stream_state_on_headers(
-                stream_id, all_headers, end_stream, status_code)
+            self._update_stream_state_on_headers(stream_id, all_headers, end_stream, status_code)
             # Surface to the user: the :status pseudo-header has been
             # captured into ``StreamState.response_status_code`` and is
             # filtered out of the public headers tuple. See also the
@@ -682,14 +656,12 @@ class HTTP2Connection:
             self._update_settings(settings, raw["ack"])
             return SettingsReceived(stream_id, settings, raw["ack"])
         if raw["_kind"] == "ping":
-            return PingReceived(
-                raw["stream_id"], raw["opaque_data"], raw["ack"])
+            return PingReceived(raw["stream_id"], raw["opaque_data"], raw["ack"])
         if raw["_kind"] == "goaway":
             stream_id = raw["stream_id"]
             last = raw["last_stream_id"]
             self._update_last_accepted(last)
-            return GoAwayReceived(
-                stream_id, last, raw["error_code"], raw["debug_data"])
+            return GoAwayReceived(stream_id, last, raw["error_code"], raw["debug_data"])
         if raw["_kind"] == "window_update":
             return WindowUpdateReceived(raw["stream_id"], raw["increment"])
         raise RuntimeError(f"unknown HTTP/2 event kind: {raw['_kind']!r}")
@@ -727,9 +699,7 @@ class HTTP2Connection:
         # aggregation. The pseudo-header itself is *not* stored in
         # ``response_headers``.
         state.response_status_code = status_code
-        state.response_headers.extend(
-            (name, value) for name, value in headers if name != ":status"
-        )
+        state.response_headers.extend((name, value) for name, value in headers if name != ":status")
         if end_stream:
             self._mark_remote_closed(state)
 
