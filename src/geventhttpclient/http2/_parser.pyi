@@ -92,7 +92,14 @@ class Session:
     def submit_goaway(
         self, last_stream_id: int, error_code: int, debug_data: bytes = b""
     ) -> bytes: ...
-    def submit_window_update(self, stream_id: int, increment: int) -> bytes: ...
+    def submit_window_update(self, stream_id: int, increment: int) -> bytes:
+        """Send a WINDOW_UPDATE granting ``increment`` additional bytes.
+
+        nghttp2 acknowledges received DATA automatically (automatic
+        window update) but never *tunes* the receive window: raising or
+        lowering it beyond the initial size is the application's job,
+        and the flow-control getters below only *observe* the current
+        window -- they never grant one."""
     def submit_rst_stream(self, stream_id: int, error_code: int) -> bytes: ...
     def submit_priority_update(self, stream_id: int, field_value: bytes) -> bytes: ...
     def submit_shutdown_notice(self) -> bytes: ...
@@ -100,8 +107,10 @@ class Session:
     def get_stream_remote_window_size(self, stream_id: int) -> int | None:
         """Bytes we may still send on ``stream_id`` (None if unknown).
 
-        Use for upload backpressure: pace ``submit_data`` calls so the
-        collected body stays bounded when the peer's window is small."""
+        Observation only: to *increase* the peer's sending allowance,
+        submit a WINDOW_UPDATE. Use this for upload backpressure --
+        pace ``submit_data`` calls so the collected body stays bounded
+        when the peer's window is small."""
 
     def get_stream_local_window_size(self, stream_id: int) -> int | None:
         """Bytes the peer may still send on ``stream_id`` (None if unknown)."""

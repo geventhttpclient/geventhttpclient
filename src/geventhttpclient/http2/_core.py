@@ -342,8 +342,11 @@ class HTTP2Connection:
             if frames:
                 self._outbound.append(frames)
         else:
-            # Drain the C-queued connection preface + initial SETTINGS
-            # (a zero-length recv produces no events, only outbound).
+            # Drain the C-queued connection preface + initial SETTINGS.
+            # bytes_to_send() only empties the Python-side queue, so a
+            # C-level call is required to surface them; a zero-length
+            # recv produces no events, only outbound frames. Covered
+            # by test_starts_with_connection_preface_in_outbound.
             _, frames = self._session.recv(b"")
             if frames:
                 self._outbound.append(frames)
