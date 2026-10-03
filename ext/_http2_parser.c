@@ -66,9 +66,12 @@ typedef struct {
     /* stream_id -> {"headers": [(name, value), ...]} accumulating the
      * header block of the HEADERS frame currently being received. */
     PyObject *stream_headers;
-    /* stream_id -> int: header bytes accumulated for the block
-     * currently being received (MAX_HEADER_LIST_SIZE enforcement). */
-    PyObject *stream_header_sizes;
+    /* Bytes accumulated for the header block currently being received
+     * (MAX_HEADER_LIST_SIZE enforcement). Header blocks are atomic
+     * per RFC 9113 section 6.10 (CONTINUATION sequences never
+     * interleave with other frames), so a single session-level
+     * counter suffices; it resets when a block completes. */
+    long header_block_size;
     /* Fatal-error latch: set once nghttp2 reported an unrecoverable
      * failure (mem_recv/mem_send error). All mutating entry points
      * refuse to run afterwards -- mirrors the error latch of the
@@ -238,28 +241,15 @@ on_header(nghttp2_session *session, const nghttp2_frame *frame,
     /* Enforce MAX_HEADER_LIST_SIZE: accumulate name+value lengths
      * across the whole header block (including CONTINUATION frames).
      * Exceeding the advertised cap is fatal for the connection; a
-     * stream-local RST is not reachable from this callback. */
-    PyObject *size_obj = PyDict_GetItemWithError(self->stream_header_sizes,
-                                                 sid_key);
-    if (size_obj == NULL && PyErr_Occurred()) goto fail;
-    long acc_size = 0;
-    if (size_obj != NULL) {
-        acc_size = PyLong_AsLong(size_obj);
-        if (acc_size == -1 && PyErr_Occurred()) goto fail;
-    }
-    acc_size += (long)namelen + (long)valuelen;
-    if (acc_size > PYHTTP2_MAX_HEADER_LIST_SIZE) {
+     * stream-local RST is not reachable from this callback. The
+     * counter cannot overflow: it trips the cap long before the
+     * bounded per-frame lengths could accumulate near LONG_MAX. */
+    self->header_block_size += (long)namelen + (long)valuelen;
+    if (self->header_block_size > PYHTTP2_MAX_HEADER_LIST_SIZE) {
         PyErr_SetString(PyExc_RuntimeError,
                         "peer exceeded MAX_HEADER_LIST_SIZE");
         goto fail;
     }
-    size_obj = PyLong_FromLong(acc_size);
-    if (size_obj == NULL) goto fail;
-    if (PyDict_SetItem(self->stream_header_sizes, sid_key, size_obj) < 0) {
-        Py_DECREF(size_obj);
-        goto fail;
-    }
-    Py_DECREF(size_obj);
 
     /* borrowed list; must exist now */
     acc_list = PyDict_GetItemString(stream_dict, "headers");
@@ -340,14 +330,7 @@ on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
             return NGHTTP2_ERR_CALLBACK_FAILURE;
         }
         Py_DECREF(fresh);
-        {
-            PyObject *zero = PyLong_FromLong(0);
-            if (zero == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
-            int rc = PyDict_SetItem(self->stream_header_sizes, sid_key,
-                                    zero);
-            Py_DECREF(zero);
-            if (rc < 0) return NGHTTP2_ERR_CALLBACK_FAILURE;
-        }
+        self->header_block_size = 0;
         break;
     }
     case NGHTTP2_DATA: {
@@ -460,6 +443,8 @@ on_frame_recv(nghttp2_session *session, const nghttp2_frame *frame,
                                       frame->push_promise.promised_stream_id,
                                       NGHTTP2_REFUSED_STREAM) != 0)
             return NGHTTP2_ERR_CALLBACK_FAILURE;
+        /* The promised header block ended; next block counts fresh. */
+        self->header_block_size = 0;
         break;
     }
     case NGHTTP2_WINDOW_UPDATE: {
@@ -502,10 +487,6 @@ on_stream_close(nghttp2_session *session, int32_t stream_id,
     PyObject *sid_key = PyLong_FromLong(stream_id);
     if (sid_key == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
     if (PyDict_DelItem(self->stream_headers, sid_key) < 0 &&
-        PyErr_ExceptionMatches(PyExc_KeyError)) {
-        PyErr_Clear();
-    }
-    if (PyDict_DelItem(self->stream_header_sizes, sid_key) < 0 &&
         PyErr_ExceptionMatches(PyExc_KeyError)) {
         PyErr_Clear();
     }
@@ -718,14 +699,12 @@ session_new(int is_client)
     if (self == NULL) return NULL;
     self->session = NULL;
     self->stream_headers = PyDict_New();
-    self->stream_header_sizes = PyDict_New();
     self->pending_events = PyList_New(0);
     self->bodies = NULL;
     self->failed = 0;
-    if (self->stream_headers == NULL || self->stream_header_sizes == NULL ||
-        self->pending_events == NULL) {
+    self->header_block_size = 0;
+    if (self->stream_headers == NULL || self->pending_events == NULL) {
         Py_XDECREF(self->stream_headers);
-        Py_XDECREF(self->stream_header_sizes);
         Py_XDECREF(self->pending_events);
         Py_DECREF(self);
         return NULL;
@@ -814,7 +793,6 @@ session_dealloc(PyObject *self_obj)
     }
     bodies_free_all(self);
     Py_XDECREF(self->stream_headers);
-    Py_XDECREF(self->stream_header_sizes);
     Py_XDECREF(self->pending_events);
     PyObject_Del(self);
 }

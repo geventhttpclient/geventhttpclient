@@ -10,7 +10,6 @@ The raw events are plain dicts at runtime; the TypedDicts below (with
 
 from typing import Literal, TypeAlias, TypedDict
 
-
 class HeadersEvent(TypedDict):
     _kind: Literal["headers"]
     stream_id: int
