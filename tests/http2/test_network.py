@@ -13,7 +13,6 @@ connection. Server availability is outside our control, so a test
 skips when its host is unreachable rather than failing.
 """
 
-from __future__ import annotations
 
 import socket
 import ssl
@@ -22,7 +21,7 @@ import gevent.pool
 import pytest
 
 from geventhttpclient.client import HTTPClient
-from geventhttpclient.http2_session import HTTP2ResponseHandle
+from geventhttpclient.http2.session import HTTP2ResponseHandle
 from geventhttpclient.useragent import UserAgent
 
 
@@ -120,7 +119,7 @@ class TestLargeDownloads:
 
     def test_streaming_read(self) -> None:
         _skip_if_no_h2("proof.ovh.net")
-        from geventhttpclient.http2_response import HTTP2Response
+        from geventhttpclient.http2.response import HTTP2Response
         c = HTTPClient("proof.ovh.net", port=443, ssl=True, http2=True)
         try:
             h = c.request_h2(

@@ -1,24 +1,23 @@
-"""Tests for :mod:`geventhttpclient.http2_response`.
+"""Tests for :mod:`geventhttpclient.http2.response`.
 
 Covers the :class:`HTTP2Response` read/iter API and the retry logic in
 :meth:`HTTPClient.request_h2` (Sprint 3c).
 """
 
-from __future__ import annotations
 
 import sys
 from typing import Any
 
 import pytest
 
-from geventhttpclient._http2_errors import HTTP2Error
-from geventhttpclient.http2_response import HTTP2Response, HTTP2ResponseError
+from geventhttpclient.http2.errors import HTTP2Error
+from geventhttpclient.http2.response import HTTP2Response, HTTP2ResponseError
 
 # Reuse the FakeSocket helpers from test_http2_session
 sys.path.insert(0, "tests")
-from geventhttpclient._http2_parser import session_server_new
-from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
-from geventhttpclient.http2_session import (
+from geventhttpclient.http2._parser import session_server_new
+from geventhttpclient.http2.pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
+from geventhttpclient.http2.session import (
     HTTP2ResponseHandle,
     HTTP2Session,
     HTTP2WireError,
@@ -158,7 +157,7 @@ class TestReviewHttp2_3Regressions:
     def test_readline_does_not_eat_remainder(self) -> None:
         """M3: ``HTTP2SocketResponseBridge.readline`` must leave the
         rest of the body for subsequent ``read()`` calls."""
-        from geventhttpclient.http2_response import HTTP2SocketResponseBridge
+        from geventhttpclient.http2.response import HTTP2SocketResponseBridge
         h = _make_round_trip(b"zeile1\r\nzeile2\r\nzeile3")
         r = HTTP2Response(h)
         bridge = HTTP2SocketResponseBridge(r)
@@ -262,40 +261,37 @@ class TestRetry:
     def test_get_retries_then_succeeds(self) -> None:
         # The retry path needs the second attempt to actually succeed
         # — we monkey-patch _open_socket to raise on the first call
-        # and succeed on the second. We rely on the live nginx server
-        # (skipped when nginx is not running).
-        from .test_session_live import (
-            NGINX_H2_PORT,
-            NGINX_HOST,
-            _require_nginx,
-        )
-        _require_nginx(NGINX_H2_PORT)
+        # and succeed on the second. We point at an in-process
+        # H2TestServer so the test is deterministic (a live-server
+        # round trip plus transient-failure injection would be flaky
+        # -- the network error path is unit-level by nature).
+        from .servers import H2TestServer
+        with H2TestServer() as server:
+            from geventhttpclient import client as client_module
 
-        from geventhttpclient import client as client_module
+            real_open = client_module.HTTP2ConnectionPool._open_socket
+            calls = {"n": 0}
 
-        real_open = client_module.HTTP2ConnectionPool._open_socket
-        calls = {"n": 0}
+            def flaky_open(self, host, port):  # type: ignore[no-untyped-def]
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    raise HTTP2ConnectionPoolError("transient")
+                return real_open(self, host, port)
 
-        def flaky_open(self, host, port):  # type: ignore[no-untyped-def]
-            calls["n"] += 1
-            if calls["n"] == 1:
-                raise HTTP2ConnectionPoolError("transient")
-            return real_open(self, host, port)
-
-        client_module.HTTP2ConnectionPool._open_socket = flaky_open  # type: ignore[method-assign]
-        try:
-            client = _make_http_client(
-                client_module.HTTP2ConnectionPool(insecure=True),
-                host=NGINX_HOST,
-                port=NGINX_H2_PORT,
-            )
-            handle = client.request_h2(
-                "GET", "/get", max_retries=1, timeout=5.0,
-            )
-            assert handle.status_code == 200
-            assert calls["n"] == 2
-        finally:
-            client_module.HTTP2ConnectionPool._open_socket = real_open  # type: ignore[method-assign]
+            client_module.HTTP2ConnectionPool._open_socket = flaky_open  # type: ignore[method-assign]
+            try:
+                client = _make_http_client(
+                    client_module.HTTP2ConnectionPool(insecure=True),
+                    host="127.0.0.1",
+                    port=server.port,
+                )
+                handle = client.request_h2(
+                    "GET", "/get", max_retries=1, timeout=5.0,
+                )
+                assert handle.status_code == 200
+                assert calls["n"] == 2
+            finally:
+                client_module.HTTP2ConnectionPool._open_socket = real_open  # type: ignore[method-assign]
 
     def test_post_does_not_retry_on_send_error(self) -> None:
         # Even with max_retries > 0, POST must not auto-retry on a

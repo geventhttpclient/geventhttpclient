@@ -1,27 +1,24 @@
-"""UserAgent h2 payload/timeout/error-taxonomy regression tests.
+"""UserAgent h2 payload/error-taxonomy regression tests.
 
-Review_http2_3.md flagged three high-severity issues that did not have
-CI coverage: H1 (payload normalisation), H2 (no end-to-end
-timeout), H3 (raw ``RuntimeError`` instead of ``HTTPError``). The
-H1 path uses local nginx when available and the H3 path uses
-in-process error injection.
+H1 (payload normalisation) exercises ``_make_request`` without making
+a real request; H3 uses an in-process closed-port error injection.
+H2 (end-to-end timeout) is covered by the TLS-listener fixture in
+``test_alpn.py::TestErrorTaxonomy``.
+
+The network-marked ``test_request_without_timeout_uses_pool_default``
+verifies that a UserAgent round-trip against httpbingo.org succeeds
+without an explicit per-request timeout -- the pool's network_timeout
+is used as the default.
 """
-
-from __future__ import annotations
 
 import pytest
 
-from geventhttpclient._http2_errors import HTTP2Error
+from geventhttpclient.http2.errors import HTTP2Error
 from geventhttpclient.useragent import (
     UserAgent,
     _make_request,
 )
-
-from .test_session_live import (
-    NGINX_H2_PORT,
-    NGINX_HOST,
-    _require_nginx,
-)
+from tests.common import HTTPBIN_HOST
 
 
 class TestH1PayloadNormalisation:
@@ -32,7 +29,7 @@ class TestH1PayloadNormalisation:
         ua = UserAgent(http2=True, insecure=True)
         try:
             req = _make_request(
-                f"https://{NGINX_HOST}:{NGINX_H2_PORT}/post",
+                f"https://{HTTPBIN_HOST}/post",
                 method="POST",
                 payload="raw-string-body",
             )
@@ -45,7 +42,7 @@ class TestH1PayloadNormalisation:
         ua = UserAgent(http2=True, insecure=True)
         try:
             req = _make_request(
-                f"https://{NGINX_HOST}:{NGINX_H2_PORT}/post",
+                f"https://{HTTPBIN_HOST}/post",
                 method="POST",
                 payload={"key": "value", "n": "1"},
             )
@@ -59,16 +56,16 @@ class TestH2DefaultTimeout:
     """The UserAgent h2 path inherits the pool's network_timeout when
     the request did not set one explicitly."""
 
+    @pytest.mark.network
     def test_request_without_timeout_uses_pool_default(self) -> None:
-        # We don't actually trigger the timeout here -- the
-        # server replies quickly. The point is that the call does
-        # not blow up with ``None`` from request.timeout and that
-        # the round trip completes against nginx.
-        _require_nginx(NGINX_H2_PORT)
+        # We don't actually trigger the timeout here -- the server
+        # replies quickly. The point is that the call does not blow
+        # up with ``None`` from request.timeout and the round trip
+        # completes against httpbingo.org.
         ua = UserAgent(http2=True, insecure=True)
         try:
             r = ua.urlopen(
-                f"https://{NGINX_HOST}:{NGINX_H2_PORT}/get", method="GET",
+                f"https://{HTTPBIN_HOST}/get", method="GET",
             )
             assert r.status_code == 200
         finally:

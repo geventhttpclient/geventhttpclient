@@ -165,12 +165,8 @@ def test_elapsed_and_cookies_are_inherited_from_requests_surface():
 
 
 def test_connection_error_is_translated():
-    import socket
+    from tests.common import free_port
 
-    probe = socket.socket()
-    probe.bind(("127.0.0.1", 0))
-    dead_port = probe.getsockname()[1]
-    probe.close()
-
+    dead_port = free_port()
     with Client(max_retries=0) as client, pytest.raises(ConnectError):
         client.request("GET", f"http://127.0.0.1:{dead_port}/")

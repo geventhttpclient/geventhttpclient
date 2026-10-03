@@ -7,7 +7,7 @@ round-trips, event emission and the streaming body provider.
 
 import pytest
 
-from geventhttpclient._http2_parser import session_client_new, session_server_new
+from geventhttpclient.http2._parser import session_client_new, session_server_new
 
 
 def drain(session):

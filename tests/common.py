@@ -1,9 +1,30 @@
+import socket
 import sys
 from contextlib import contextmanager
 
 import gevent.pywsgi
 import gevent.queue
 import gevent.server
+
+
+def free_port() -> int:
+    """Return a free TCP port on 127.0.0.1.
+
+    The kernel hands out a port while the probe socket is bound; we
+    close it before returning so the test's listener can rebind the
+    same port. There is an unavoidable race window (another process
+    could grab the port between probe-close and live-bind) but on
+    the test runners it is tight enough to be reliable.
+
+    The probe socket is closed in a ``finally`` block so a bind
+    error does not leak the descriptor.
+    """
+    probe = socket.socket()
+    try:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+    finally:
+        probe.close()
 
 
 def _raise_stored_exception(exception_queue):

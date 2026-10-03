@@ -1,6 +1,6 @@
 """HTTP/2 response wrapper.
 
-The :class:`HTTP2ResponseHandle` from :mod:`geventhttpclient.http2_session`
+The :class:`HTTP2ResponseHandle` from :mod:`geventhttpclient.http2.session`
 already exposes :attr:`status_code`, :attr:`headers`, :attr:`body` and
 synchronous waiting on :attr:`is_closed`. This module wraps it in a
 small adapter that mirrors the ``http.client`` ergonomics used by
@@ -24,7 +24,7 @@ from collections.abc import Iterator
 from typing import Any, Self
 
 from geventhttpclient.header import Headers
-from geventhttpclient.http2_session import HTTP2ResponseHandle
+from geventhttpclient.http2.session import HTTP2ResponseHandle
 
 
 class HTTP2Response:

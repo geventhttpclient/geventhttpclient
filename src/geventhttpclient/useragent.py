@@ -19,7 +19,7 @@ import gevent
 
 from geventhttpclient.client import IDEMPOTENT_METHODS, HTTPClient, HTTPClientPool
 from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
-from geventhttpclient.http2_response import HTTP2Response, HTTP2SocketResponseBridge
+from geventhttpclient.http2.response import HTTP2Response, HTTP2SocketResponseBridge
 from geventhttpclient.response import HTTPSocketPoolResponse, HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
 

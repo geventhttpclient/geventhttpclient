@@ -8,7 +8,6 @@ fake socket pair, and verify that the new locks do not deadlock and
 that they actually serialise the pump-and-flush cycle.
 """
 
-from __future__ import annotations
 
 import errno
 import sys
@@ -19,9 +18,9 @@ import pytest
 
 # Reuse the FakeSocket and helpers from test_http2_session.py
 sys.path.insert(0, "tests")
-from geventhttpclient._http2_parser import session_server_new
-from geventhttpclient.http2_pool import HTTP2ConnectionPool
-from geventhttpclient.http2_session import (
+from geventhttpclient.http2._parser import session_server_new
+from geventhttpclient.http2.pool import HTTP2ConnectionPool
+from geventhttpclient.http2.session import (
     HTTP2ResponseHandle,
     HTTP2Session,
 )
@@ -189,7 +188,7 @@ class TestTrailerHandling:
     headers instead of being merged into the trailer list."""
 
     def test_trailers_do_not_overwrite_headers(self) -> None:
-        from geventhttpclient._http2_parser import session_server_new
+        from geventhttpclient.http2._parser import session_server_new
 
         fs = FakeSocket()
         client_sock = fs.side_a()

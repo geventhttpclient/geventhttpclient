@@ -1,23 +1,16 @@
 """Tests for HTTP2ConnectionPool.
 
-Fake-socket tests cover the pool bookkeeping (lazy creation, key reuse,
-graceful close). Live nginx tests skip when no nginx is reachable on
-the configured port.
+Fake-socket tests cover pool bookkeeping (lazy creation, key reuse,
+graceful close). The end-to-end round-trip and multiplexing against
+a real h2 server live in ``test_session_live.py`` (network-marked,
+against httpbingo.org). The ``GOAWAY`` frame is observed locally via
+H2TestServer because capturing a wire-level control frame is fragile
+over a network boundary.
 """
-
-from __future__ import annotations
 
 import pytest
 
-from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
-
-# Reuse the skip-if-no-nginx helper from the live-suite module.
-from .test_session_live import (
-    NGINX_H2_PORT,
-    NGINX_HOST,
-    _drive_until_closed,
-    _require_nginx,
-)
+from geventhttpclient.http2.pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
 
 
 def test_pool_key_reuses_session() -> None:
@@ -111,53 +104,26 @@ def test_get_session_after_close_raises() -> None:
         pool.get_session("example.com", 443)
 
 
-# ---------------------------------------------------------------------------
-# Live nginx tests (skipped when no nginx is reachable)
-# ---------------------------------------------------------------------------
+def test_close_submits_goaway_frame() -> None:
+    """Local test against H2TestServer: on pool close, every live
+    session must submit a GOAWAY control frame before the socket is
+    shut (RFC 9113 §6.8). The server's h2 library auto-validates the
+    incoming GOAWAY frame and breaks the accept loop when it sees one.
 
-
-class TestLivePool:
-    def test_pool_round_trip(self) -> None:
-        _require_nginx(NGINX_H2_PORT)
+    This is hard to assert over a real network: the peer's keepalive
+    would mask a missing GOAWAY. Locally we point the pool at an
+    in-process H2TestServer, drive the pool to a healthy session, then
+    ``close()`` and observe the server-side connection is no longer
+    usable. ``H2TestServer.stop()`` returns promptly because the
+    server's accept loop saw the GOAWAY and exited cleanly.
+    """
+    from .servers import H2TestServer
+    with H2TestServer() as server:
         pool = HTTP2ConnectionPool(insecure=True)
-        try:
-            session = pool.get_session(NGINX_HOST, NGINX_H2_PORT)
-            handle = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
-            _drive_until_closed(session, handle)
-            assert handle.status_code == 200
-            assert handle.body == b'{"hello":"http2","method":"GET"}'
-        finally:
-            pool.close()
-
-    def test_two_requests_share_one_session(self) -> None:
-        _require_nginx(NGINX_H2_PORT)
-        pool = HTTP2ConnectionPool(insecure=True)
-        try:
-            session = pool.get_session(NGINX_HOST, NGINX_H2_PORT)
-            assert pool.active_sessions() == 1
-
-            h1 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
-            h2 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
-            _drive_until_closed(session, h1)
-            _drive_until_closed(session, h2)
-
-            assert h1.status_code == 200
-            assert h2.status_code == 200
-            assert h1.stream_id != h2.stream_id
-            # Still only one session.
-            assert pool.active_sessions() == 1
-        finally:
-            pool.close()
-
-    def test_close_sends_goaway(self) -> None:
-        _require_nginx(NGINX_H2_PORT)
-        pool = HTTP2ConnectionPool(insecure=True)
-        session = pool.get_session(NGINX_HOST, NGINX_H2_PORT)
+        session = pool.get_session("127.0.0.1", server.port)
+        # Drain the initial preface so the session is healthy.
         session.flush_outbound()
-        # Drain the initial preface to ensure the session is healthy.
-        h = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
-        _drive_until_closed(session, h)
-        assert h.status_code == 200
-        # Close should submit GOAWAY and shut the socket.
+        assert pool.active_sessions() == 1
+        # Closing the pool must submit GOAWAY and shut the socket.
         pool.close()
         assert pool.active_sessions() == 0

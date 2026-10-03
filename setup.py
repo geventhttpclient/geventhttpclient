@@ -110,7 +110,7 @@ else:
     )
 
 http2_parser = Extension(
-    "geventhttpclient._http2_parser",
+    "geventhttpclient.http2._parser",
     sources=[
         "ext/_http2_parser.c",
         *_nghttp2_sources(),
