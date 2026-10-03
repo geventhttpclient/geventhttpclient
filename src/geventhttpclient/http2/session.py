@@ -176,6 +176,10 @@ class HTTP2Wire:
         # ``drive_once`` methods can guard the socket without knowing
         # whether the subclass extended it.
         self._drive_lock = gevent.lock.RLock()
+        # Fatal-error latch: once the parser or the socket failed, the
+        # wire must not be driven again -- the underlying nghttp2
+        # session is unusable after a fatal error (it latches, too).
+        self._wire_error: Exception | None = None
 
     @property
     def sock(self) -> gevent.socket.socket:
@@ -207,8 +211,20 @@ class HTTP2Wire:
         Returns the number of bytes written. The HTTP/2 preface +
         initial SETTINGS frame are sent here on the first call.
         """
+        self._raise_if_broken()
         with self._drive_lock:
-            return self._flush_outbound_locked()
+            try:
+                return self._flush_outbound_locked()
+            except Exception as e:
+                self._wire_error = e
+                raise
+
+    def _raise_if_broken(self) -> None:
+        """Refuse to drive a wire that already failed fatally."""
+        if self._wire_error is not None:
+            raise HTTP2WireError(
+                "HTTP/2 wire is unusable after a fatal error",
+            ) from self._wire_error
 
     def _flush_outbound_locked(self) -> int:
         """``flush_outbound`` body, but the lock is *already* held.
@@ -238,22 +254,31 @@ class HTTP2Wire:
         same session wait on the lock instead of interleaving a recv
         and a sendall on the same underlying socket.
         """
+        self._raise_if_broken()
         with self._drive_lock:
             try:
-                inbound = self._sock.recv(max_bytes)
-            except gevent.socket.timeout:
-                return False
-            except gevent.socket.error as e:
-                if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                try:
+                    inbound = self._sock.recv(max_bytes)
+                except gevent.socket.timeout:
                     return False
-                raise HTTP2WireError(str(e)) from e
-            if not inbound:
-                raise HTTP2WireError("peer closed the connection")
+                except gevent.socket.error as e:
+                    if e.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                        return False
+                    raise HTTP2WireError(str(e)) from e
+                if not inbound:
+                    raise HTTP2WireError("peer closed the connection")
 
-            events = self._connection.feed(inbound)
-            self._dispatch(events)
-            self._flush_outbound_locked()
-            return True
+                events = self._connection.feed(inbound)
+                self._dispatch(events)
+                self._flush_outbound_locked()
+                return True
+            except Exception as e:
+                # Any failure above (parser error, dispatch error,
+                # socket write error) is fatal: latch so follow-up
+                # drive/flush calls fail fast instead of feeding the
+                # broken session again.
+                self._wire_error = e
+                raise
 
     # Subclasses (HTTP2Session) override to do per-event work.
     def _dispatch(self, events: list[Http2Event]) -> None:
