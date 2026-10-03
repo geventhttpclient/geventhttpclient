@@ -24,7 +24,8 @@ from __future__ import annotations
 import pytest
 
 from geventhttpclient.useragent import UserAgent
-from tests.http2_test_server import H2ServerConfig, H2TestServer
+
+from .test_server import H2ServerConfig, H2TestServer
 
 
 def _json_echo(method: str, path: str, headers, body: bytes) -> dict[str, object]:

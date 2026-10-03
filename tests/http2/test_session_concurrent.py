@@ -19,17 +19,17 @@ import pytest
 
 # Reuse the FakeSocket and helpers from test_http2_session.py
 sys.path.insert(0, "tests")
-from test_http2_session import (
-    FakeSocket,
-    _server_drive,
-    _server_replies_with,
-)
-
 from geventhttpclient._http2_parser import session_server_new
 from geventhttpclient.http2_pool import HTTP2ConnectionPool
 from geventhttpclient.http2_session import (
     HTTP2ResponseHandle,
     HTTP2Session,
+)
+
+from .test_session import (
+    FakeSocket,
+    _server_drive,
+    _server_replies_with,
 )
 
 

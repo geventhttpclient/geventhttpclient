@@ -16,18 +16,18 @@ from geventhttpclient.http2_response import HTTP2Response, HTTP2ResponseError
 
 # Reuse the FakeSocket helpers from test_http2_session
 sys.path.insert(0, "tests")
-from test_http2_session import (
-    FakeSocket,
-    _server_drive,
-    _server_replies_with,
-)
-
 from geventhttpclient._http2_parser import session_server_new
 from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
 from geventhttpclient.http2_session import (
     HTTP2ResponseHandle,
     HTTP2Session,
     HTTP2WireError,
+)
+
+from .test_session import (
+    FakeSocket,
+    _server_drive,
+    _server_replies_with,
 )
 
 # ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ class TestRetry:
         # — we monkey-patch _open_socket to raise on the first call
         # and succeed on the second. We rely on the live nginx server
         # (skipped when nginx is not running).
-        from tests.test_http2_session_live import (
+        from .test_session_live import (
             NGINX_HOST,
             NGINX_PORT,
             _start_nginx,

@@ -25,11 +25,11 @@ from geventhttpclient.client import HTTPClient
 # Reuse the shared nginx lifecycle from the live-suite module: same
 # daemon, same skip semantics, and the session finalizer stops nginx
 # again when this run was the one that started it.
-from tests.test_http2_session_live import (
+from .test_session_live import (
     NGINX_HOST,
     _start_nginx,
 )
-from tests.test_http2_session_live import (
+from .test_session_live import (
     NGINX_PORT as NGINX_H2_PORT,
 )
 
@@ -159,7 +159,7 @@ class TestErrorTaxonomy:
         """A TLS listener with a valid cert, for hang/abort servers."""
         import ssl
 
-        from tests.http2_test_server import CERT_FILE, KEY_FILE
+        from .test_server import CERT_FILE, KEY_FILE
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
         # Negotiate h2 like a real h2 server would, so the client's

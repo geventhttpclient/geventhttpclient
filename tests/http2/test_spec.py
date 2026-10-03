@@ -28,10 +28,10 @@ import gevent.ssl
 import pytest
 
 sys.path.insert(0, "tests")
-from http2_test_server import H2ServerConfig, H2TestServer
-
 from geventhttpclient.client import HTTPClient
 from geventhttpclient.http2_session import HTTP2ResponseHandle, HTTP2Session
+
+from .test_server import H2ServerConfig, H2TestServer
 
 
 def _drive(handle: HTTP2ResponseHandle, session: HTTP2Session) -> None:
