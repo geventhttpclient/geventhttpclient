@@ -4,7 +4,7 @@ Compiles two native extensions, both statically linking their vendored
 protocol library (llhttp-Muster: sources directly, no CMake):
 
 - ``_parser``:       HTTP/1.1 sans-IO wrapper around llhttp
-- ``_http2_parser``: HTTP/2 sans-IO wrapper around nghttp2 (lib/ only)
+- ``_http2_parser``: HTTP/2 sans-IO wrapper around nghttp2 (vendor/nghttp2/lib/ only)
 """
 
 import os
@@ -13,7 +13,7 @@ import sys
 from setuptools import setup
 from setuptools.extension import Extension
 
-# Version of the pinned nghttp2 submodule (third-party/nghttp2).
+# Version of the pinned nghttp2 submodule (vendor/nghttp2).
 # Update together with the submodule pin. Used to generate
 # lib/includes/nghttp2/nghttp2ver.h, which nghttp2 does not check in
 # (only the nghttp2ver.h.in template is tracked).
@@ -22,7 +22,7 @@ NGHTTP2_VERSION = "1.70.0"
 
 def _nghttp2_sources() -> list[str]:
     """Collect the C source files of nghttp2's lib/ directory."""
-    src_dir = os.path.join("third-party", "nghttp2", "lib")
+    src_dir = os.path.join("vendor", "nghttp2", "lib")
     return sorted(
         os.path.join(src_dir, name)
         for name in os.listdir(src_dir)
@@ -38,7 +38,7 @@ def _generate_nghttp2ver_h() -> str:
     add to include_dirs, so it shadows the missing in-tree header.
     """
     template_path = os.path.join(
-        "third-party", "nghttp2", "lib", "includes", "nghttp2", "nghttp2ver.h.in"
+        "vendor", "nghttp2", "lib", "includes", "nghttp2", "nghttp2ver.h.in"
     )
     out_dir = os.path.join("build", "include", "nghttp2")
     out_path = os.path.join(out_dir, "nghttp2ver.h")
@@ -68,13 +68,13 @@ http_parser = Extension(
     "geventhttpclient._parser",
     sources=[
         "ext/_parser.c",
-        "llhttp/src/api.c",
-        "llhttp/src/http.c",
-        "llhttp/src/llhttp.c",
+        "vendor/llhttp/src/api.c",
+        "vendor/llhttp/src/http.c",
+        "vendor/llhttp/src/llhttp.c",
     ],
     include_dirs=[
         "ext",
-        "llhttp/include",
+        "vendor/llhttp/include",
     ],
 )
 
@@ -118,8 +118,8 @@ http2_parser = Extension(
     include_dirs=[
         "ext",
         nghttp2_include,
-        "third-party/nghttp2/lib/includes",
-        "third-party/nghttp2/lib",
+        "vendor/nghttp2/lib/includes",
+        "vendor/nghttp2/lib",
     ],
     define_macros=NGHTTP2_DEFINES,
 )
