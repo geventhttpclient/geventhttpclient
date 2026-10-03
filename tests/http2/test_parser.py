@@ -357,6 +357,21 @@ class TestWindowUpdate:
         pump_frames(client, server, to_client=tail)
 
 
+class TestSessionLatch:
+    def test_fatal_recv_error_latches_session(self):
+        """After a fatal nghttp2 error the session refuses all further
+        mutating calls (R2; mirrors the HTTP/1 parser error latch)."""
+        server = session_server_new()
+        with pytest.raises(RuntimeError, match="mem_recv"):
+            server.recv(b"this is not the HTTP/2 client connection preface")
+        with pytest.raises(RuntimeError, match="unusable"):
+            server.recv(b"")
+        with pytest.raises(RuntimeError, match="unusable"):
+            server.submit_settings({0x3: 10})
+        with pytest.raises(RuntimeError, match="unusable"):
+            server.submit_response(1, [(":status", "200")])
+
+
 class TestHeaderEncoding:
     """Header names/values are opaque octets on the wire; the binding
     speaks latin-1 in both directions (1:1 byte mapping), matching the

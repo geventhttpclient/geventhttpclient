@@ -58,6 +58,11 @@ typedef struct {
     /* stream_id -> {"headers": [(name, value), ...]} accumulating the
      * header block of the HEADERS frame currently being received. */
     PyObject *stream_headers;
+    /* Fatal-error latch: set once nghttp2 reported an unrecoverable
+     * failure (mem_recv/mem_send error). All mutating entry points
+     * refuse to run afterwards -- mirrors the error latch of the
+     * HTTP/1 wrapper (_parser.c feed() refuses after HPE_*). */
+    int failed;
     /* events collected by the callbacks of the current recv() call */
     PyObject *pending_events;
     /* linked list of request-body collectors awaiting EOF */
@@ -106,6 +111,19 @@ bodies_free_all(PyHTTP2Session *self)
 }
 
 /* === helpers === */
+
+/* Entry-point guard for the fatal-error latch. Returns 0 when the
+ * session is usable, -1 with RuntimeError set when it is latched. */
+static int
+session_check_alive(PyHTTP2Session *self)
+{
+    if (self->failed) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "HTTP/2 session is unusable after a fatal error");
+        return -1;
+    }
+    return 0;
+}
 
 static int
 dict_set_long(PyObject *dict, const char *key, long value)
@@ -515,10 +533,12 @@ body_read(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
 /* === send-side helpers === */
 
 /* Drain the nghttp2 outbound queue into one bytes object. Returns a new
- * reference (possibly b"") or NULL with an exception set. */
+ * reference (possibly b"") or NULL with an exception set. A nghttp2-level
+ * send failure latches the session as broken (fatal-error latch). */
 static PyObject *
-drain_send(nghttp2_session *session)
+drain_send(PyHTTP2Session *self)
 {
+    nghttp2_session *session = self->session;
     /* Frames are pulled one by one; accumulate in a bytearray for the
      * common multi-frame case (preface SETTINGS, HEADERS, DATA, ACKs). */
     PyObject *out = PyByteArray_FromStringAndSize("", 0);
@@ -527,6 +547,7 @@ drain_send(nghttp2_session *session)
         const uint8_t *frame = NULL;
         ssize_t n = nghttp2_session_mem_send(session, &frame);
         if (n < 0) {
+            self->failed = 1;
             Py_DECREF(out);
             PyErr_Format(PyExc_RuntimeError,
                          "nghttp2_session_mem_send failed: %zd", n);
@@ -629,6 +650,7 @@ session_new(int is_client)
     self->stream_headers = PyDict_New();
     self->pending_events = PyList_New(0);
     self->bodies = NULL;
+    self->failed = 0;
     if (self->stream_headers == NULL || self->pending_events == NULL) {
         Py_XDECREF(self->stream_headers);
         Py_XDECREF(self->pending_events);
@@ -724,12 +746,14 @@ session_recv(PyObject *self_obj, PyObject *data_obj)
 {
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     Py_buffer view;
+    if (session_check_alive(self) < 0) return NULL;
     if (PyObject_GetBuffer(data_obj, &view, PyBUF_SIMPLE) < 0) return NULL;
 
     ssize_t consumed = nghttp2_session_mem_recv(
         self->session, (const uint8_t *)view.buf, (size_t)view.len);
     PyBuffer_Release(&view);
     if (consumed < 0) {
+        self->failed = 1;
         PyErr_Format(PyExc_RuntimeError,
                      "nghttp2_session_mem_recv failed: %zd", consumed);
         /* Surface the events that nghttp2 fired in this batch anyway:
@@ -749,7 +773,7 @@ session_recv(PyObject *self_obj, PyObject *data_obj)
         Py_DECREF(events);
         return NULL;
     }
-    PyObject *outbound = drain_send(self->session);
+    PyObject *outbound = drain_send(self);
     if (outbound == NULL) return NULL;
     PyObject *events = self->pending_events; /* hand over, replace */
     self->pending_events = PyList_New(0);
@@ -792,6 +816,7 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
     PyObject *headers = NULL;
     int with_body = 0;
     static char *kwlist[] = {"headers", "with_body", NULL};
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!|p", kwlist,
                                      &PyList_Type, &headers, &with_body))
         return NULL;
@@ -834,7 +859,7 @@ session_submit_request(PyObject *self_obj, PyObject *args, PyObject *kwds)
         return NULL;
     }
     if (body != NULL) body->stream_id = stream_id;
-    PyObject *outbound = drain_send(self->session);
+    PyObject *outbound = drain_send(self);
     if (outbound == NULL) return NULL;
     PyObject *sid_obj = PyLong_FromLong(stream_id);
     if (sid_obj == NULL) {
@@ -855,6 +880,7 @@ session_submit_data(PyObject *self_obj, PyObject *args, PyObject *kwds)
     PyObject *data = NULL;
     int end_stream = 0;
     static char *kwlist[] = {"stream_id", "data", "end_stream", NULL};
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "iOp", kwlist,
                                      &stream_id, &data, &end_stream))
         return NULL;
@@ -892,7 +918,7 @@ session_submit_data(PyObject *self_obj, PyObject *args, PyObject *kwds)
     if (rv != 0 && PyErr_Occurred()) {
         PyErr_Clear();
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -903,6 +929,7 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
     PyObject *headers = NULL;
     int with_body = 0;
     static char *kwlist[] = {"stream_id", "headers", "with_body", NULL};
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "iO!|p", kwlist,
                                      &stream_id, &PyList_Type, &headers,
                                      &with_body))
@@ -953,7 +980,7 @@ session_submit_response(PyObject *self_obj, PyObject *args, PyObject *kwds)
                      "nghttp2_submit_response failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -963,6 +990,7 @@ session_submit_headers(PyObject *self_obj, PyObject *args)
     int32_t stream_id = 0;
     PyObject *headers = NULL;
     int end_stream = 0;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "iO!p", &stream_id, &PyList_Type, &headers,
                           &end_stream))
         return NULL;
@@ -984,7 +1012,7 @@ session_submit_headers(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_headers failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -993,6 +1021,7 @@ session_submit_trailer(PyObject *self_obj, PyObject *args)
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     int32_t stream_id = 0;
     PyObject *headers = NULL;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "iO!", &stream_id, &PyList_Type, &headers))
         return NULL;
     PyObject *keepalive = PyList_New(0);
@@ -1011,7 +1040,7 @@ session_submit_trailer(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_trailer failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1019,6 +1048,7 @@ session_submit_settings(PyObject *self_obj, PyObject *args)
 {
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     PyObject *settings = NULL;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "O!", &PyDict_Type, &settings)) return NULL;
 
     PyObject *items = PyDict_Items(settings);
@@ -1052,7 +1082,7 @@ session_submit_settings(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_settings failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1060,6 +1090,7 @@ session_submit_ping(PyObject *self_obj, PyObject *args)
 {
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     Py_buffer view;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "y*", &view)) return NULL;
     if (view.len != 8) {
         PyBuffer_Release(&view);
@@ -1073,7 +1104,7 @@ session_submit_ping(PyObject *self_obj, PyObject *args)
         PyErr_Format(PyExc_RuntimeError, "nghttp2_submit_ping failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1083,6 +1114,7 @@ session_submit_goaway(PyObject *self_obj, PyObject *args)
     int last_stream_id = 0;
     unsigned long error_code = 0;
     Py_buffer view = {0};
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "ik|y*", &last_stream_id, &error_code, &view))
         return NULL;
     int rv = nghttp2_submit_goaway(
@@ -1094,7 +1126,7 @@ session_submit_goaway(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_goaway failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1103,6 +1135,7 @@ session_submit_window_update(PyObject *self_obj, PyObject *args)
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     int stream_id = 0;
     int increment = 0;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "ii", &stream_id, &increment)) return NULL;
     int rv = nghttp2_submit_window_update(self->session, NGHTTP2_FLAG_NONE,
                                           (int32_t)stream_id,
@@ -1112,7 +1145,7 @@ session_submit_window_update(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_window_update failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1121,6 +1154,7 @@ session_submit_rst_stream(PyObject *self_obj, PyObject *args)
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     int stream_id = 0;
     unsigned long error_code = 0;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "ik", &stream_id, &error_code)) return NULL;
     int rv = nghttp2_submit_rst_stream(self->session, NGHTTP2_FLAG_NONE,
                                        (int32_t)stream_id,
@@ -1130,7 +1164,7 @@ session_submit_rst_stream(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_rst_stream failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1139,6 +1173,7 @@ session_submit_priority_update(PyObject *self_obj, PyObject *args)
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
     int stream_id = 0;
     Py_buffer view;
+    if (session_check_alive(self) < 0) return NULL;
     if (!PyArg_ParseTuple(args, "iy*", &stream_id, &view)) return NULL;
     int rv = nghttp2_submit_priority_update(self->session, NGHTTP2_FLAG_NONE,
                                             (int32_t)stream_id,
@@ -1150,7 +1185,7 @@ session_submit_priority_update(PyObject *self_obj, PyObject *args)
                      "nghttp2_submit_priority_update failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
@@ -1158,13 +1193,14 @@ session_submit_shutdown_notice(PyObject *self_obj,
                                PyObject *Py_UNUSED(ignored))
 {
     PyHTTP2Session *self = (PyHTTP2Session *)self_obj;
+    if (session_check_alive(self) < 0) return NULL;
     int rv = nghttp2_submit_shutdown_notice(self->session);
     if (rv != 0) {
         PyErr_Format(PyExc_RuntimeError,
                      "nghttp2_submit_shutdown_notice failed: %d", rv);
         return NULL;
     }
-    return drain_send(self->session);
+    return drain_send(self);
 }
 
 static PyObject *
