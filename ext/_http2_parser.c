@@ -176,8 +176,8 @@ dict_set_bytes(PyObject *dict, const char *key, const char *buf, size_t len)
     return rc;
 }
 
-/* Append the event to the pending list; steals a reference on failure
- * paths only (always decrefs the event). Returns 0 or -1 (exception
+/* Append the event to the pending list; always consumes (decrefs) the
+ * reference, on success and on failure. Returns 0 or -1 (exception
  * set; nghttp2 callback failure must be returned by the caller). */
 static int
 emit_event(PyHTTP2Session *self, PyObject *event)
@@ -486,8 +486,14 @@ on_stream_close(nghttp2_session *session, int32_t stream_id,
      * request-body collector (e.g. after RST_STREAM mid-upload). */
     PyObject *sid_key = PyLong_FromLong(stream_id);
     if (sid_key == NULL) return NGHTTP2_ERR_CALLBACK_FAILURE;
-    if (PyDict_DelItem(self->stream_headers, sid_key) < 0 &&
-        PyErr_ExceptionMatches(PyExc_KeyError)) {
+    if (PyDict_DelItem(self->stream_headers, sid_key) < 0) {
+        /* KeyError (no accumulator for this stream) is expected;
+         * anything else must not leak a pending exception into a
+         * callback that returns success. */
+        if (!PyErr_ExceptionMatches(PyExc_KeyError)) {
+            Py_DECREF(sid_key);
+            return NGHTTP2_ERR_CALLBACK_FAILURE;
+        }
         PyErr_Clear();
     }
     Py_DECREF(sid_key);
@@ -972,10 +978,11 @@ session_submit_data(PyObject *self_obj, PyObject *args, PyObject *kwds)
      * 0 on success and a negative code if there is nothing to
      * resume; the negative case is not an error and we clear only the
      * specific SystemError nghttp2 would surface if at all. */
-    int rv = nghttp2_session_resume_data(self->session, stream_id);
-    if (rv != 0 && PyErr_Occurred()) {
-        PyErr_Clear();
-    }
+    /* resume_data returns 0 on success and a negative code when the
+     * stream has nothing to resume (not deferred) -- the latter is
+     * expected and not an error. nghttp2 never sets Python
+     * exceptions, so the return value can be ignored outright. */
+    (void)nghttp2_session_resume_data(self->session, stream_id);
     return drain_send(self);
 }
 
@@ -1431,7 +1438,7 @@ static PyMethodDef session_methods[] = {
 
 static PyTypeObject PyHTTP2Session_Type = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name = "geventhttpclient._http2_parser.Session",
+    .tp_name = "geventhttpclient.http2._parser.Session",
     .tp_basicsize = sizeof(PyHTTP2Session),
     .tp_dealloc = session_dealloc,
     .tp_flags = Py_TPFLAGS_DEFAULT,
@@ -1449,7 +1456,7 @@ static PyMethodDef module_methods[] = {
 
 static struct PyModuleDef module_def = {
     PyModuleDef_HEAD_INIT,
-    "geventhttpclient._http2_parser",
+    "geventhttpclient.http2._parser",
     "HTTP/2 sans-IO wrapper around the vendored nghttp2 library.",
     -1,
     module_methods,

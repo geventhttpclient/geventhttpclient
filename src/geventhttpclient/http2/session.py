@@ -132,7 +132,9 @@ class HTTP2ResponseHandle:
         self.trailers.extend(trailers)
 
     def _on_informational(
-        self, status_code: int, headers: list[tuple[str, str]],
+        self,
+        status_code: int,
+        headers: list[tuple[str, str]],
     ) -> None:
         # 1xx early hints (RFC 9113 §8.1.1) are accumulated on the
         # handle so callers can inspect them after the response is
@@ -327,7 +329,12 @@ class HTTP2Session(HTTP2Wire):
         # call ``submit_data`` again here -- doing so would either be a
         # no-op (stream already finished) or duplicate the body.
         stream_id = self._connection.submit_request(
-            method, path, authority, headers=headers, scheme=scheme, body=body,
+            method,
+            path,
+            authority,
+            headers=headers,
+            scheme=scheme,
+            body=body,
         )
         handle = HTTP2ResponseHandle(self, stream_id)
         self._handles[stream_id] = handle
@@ -405,7 +412,7 @@ class HTTP2Session(HTTP2Wire):
             handle._on_reset(event)
         # Drop the handle so the body buffer is collected. The
         # ``HTTP2ResponseHandle`` already received its ``on_reset``
-        # notification above and closed its ``AsyncResult``.
+        # notification above and set its ``_closed`` event.
         self._handles.pop(event.stream_id, None)
 
     def _on_closed(self, event: StreamClosed) -> None:
