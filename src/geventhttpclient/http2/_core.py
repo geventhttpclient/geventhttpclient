@@ -569,32 +569,16 @@ class HTTP2Connection:
         obtain the ACK / response / PING-reply frames nghttp2 emitted
         during the recv() pass.
 
-        nghttp2's C callbacks fire ``stream_closed`` twice for streams
-        that end via DATA + END_STREAM (once from ``on_frame_recv``,
-        once from ``on_stream_close``). The state machine is
-        idempotent on the second event; here we suppress the
-        duplicate ``StreamClosed`` event at the boundary so callers do
-        not have to dedupe themselves.
+        The C extension emits ``stream_closed`` from a single source
+        (``on_stream_close``, invoked by nghttp2 exactly once per
+        stream); a DATA-frame END_STREAM surfaces as
+        :class:`DataReceived` with ``end_stream=True`` instead, so no
+        deduplication is needed here.
         """
         events, outbound = self._session.recv(bytes(data))
         if outbound:
             self._outbound.append(outbound)
-        converted: list[Http2Event] = []
-        seen_stream_closed: set[int] = set()
-        for raw in events:
-            event = self._convert_event(raw)
-            # nghttp2 fires ``stream_closed`` twice for streams that end
-            # via DATA + END_STREAM: once from ``on_frame_recv``, once
-            # from ``on_stream_close``. The state machine is idempotent
-            # on the second event, but the event itself would still be
-            # delivered to callers -- the set below suppresses the
-            # duplicate at the boundary.
-            if isinstance(event, StreamClosed):
-                if event.stream_id in seen_stream_closed:
-                    continue
-                seen_stream_closed.add(event.stream_id)
-            converted.append(event)
-        return converted
+        return [self._convert_event(raw) for raw in events]
 
     # -- Helpers -----------------------------------------------------------
 
@@ -745,22 +729,19 @@ class HTTP2Connection:
         self._open_streams = max(0, self._open_streams - 1)
 
     def _update_stream_state_on_close(self, stream_id: int, error_code: int) -> None:
-        """Process the terminal ``stream_closed`` event from
-        nghttp2. The C side emits ``stream_closed`` *twice* for streams
-        that end via DATA + END_STREAM: once from
-        :c:func:`on_frame_recv_callback` (with ``end_stream=True``)
-        and once from :c:func:`on_stream_close_callback` (with
-        ``end_stream=False``). We deduplicate here by ignoring the
-        second event whenever the state is already CLOSED.
-        """
+        """Process the terminal ``stream_closed`` event. The C side
+        emits it exactly once per stream (from
+        ``on_stream_close_callback``); a DATA-frame END_STREAM is a
+        separate ``data`` event, so no duplicate suppression is
+        needed. RST_STREAM already surfaced as ``stream_reset`` and
+        closed the state -- the follow-up ``stream_closed`` for the
+        same stream is then a no-op here."""
         state = self._streams.get(stream_id)
         if state is None:
             return
         # nghttp2 fires ``on_stream_close`` *after* RST_STREAM was
         # surfaced as a ``stream_reset`` event; the state was already
         # CLOSED and the counter already decremented in that path.
-        # Same applies to the duplicate DATA-END_STREAM /
-        # on_stream_close pair.
         if state.state == StreamLifecycle.CLOSED:
             return
         state.state = StreamLifecycle.CLOSED
