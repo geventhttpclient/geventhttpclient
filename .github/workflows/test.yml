@@ -6,6 +6,7 @@ jobs:
   mypy:
     name: mypy
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
@@ -24,6 +25,7 @@ jobs:
   tests:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
 
     strategy:
       fail-fast: false
@@ -57,6 +59,7 @@ jobs:
   tests-nongevent:
     name: non-gevent (3.14)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
