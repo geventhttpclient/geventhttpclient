@@ -489,12 +489,15 @@ body_read(nghttp2_session *session, int32_t stream_id, uint8_t *buf,
         /* Defensive: every chunk in the queue is a bytes object --
          * submit_data() normalises to PyBytes before appending. If a
          * caller ever bypasses submit_data() and patches the queue,
-         * we'd rather raise here than silently corrupt memory via
-         * PyBytes_GET_SIZE on a non-bytes object. */
+         * we'd rather fail than silently corrupt memory via
+         * PyBytes_GET_SIZE on a non-bytes object. This must be a
+         * *fatal* callback failure: NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE
+         * would only suspend the stream while a Python exception stays
+         * pending, which later clobbers unrelated error handling. */
         if (!PyBytes_Check(chunk)) {
             PyErr_SetString(PyExc_TypeError,
                             "body chunk is not bytes (HTTP/2 collector invariant violated)");
-            return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+            return NGHTTP2_ERR_CALLBACK_FAILURE;
         }
         Py_ssize_t remaining = PyBytes_GET_SIZE(chunk) - body->offset;
         size_t to_copy = (size_t)remaining < (length - copied)
