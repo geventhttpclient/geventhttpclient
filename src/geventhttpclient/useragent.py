@@ -815,14 +815,14 @@ class UserAgent:
                 sent_request=result._sent_request,
             )
         h2_resp = HTTP2Response(result)
-        bridge = HTTP2SocketResponseBridge(h2_resp)
-        # ``_conversation_str`` reads ``resp._sent_request`` to print
-        # the wire request; the h2 path never sees the raw head (the
-        # framing is internal to nghttp2). The bridge carries a stable
-        # string we synthesise from method/path/authority so debug
-        # streams do not crash with TypeError (review M4).
-        bridge._sent_request = (
-            f"{request.method} {request.url_split.quoted_uri} HTTP/2.0\r\n"
+        # The h2 path never sees the raw request head (the framing is
+        # internal to nghttp2); the bridge carries a synthesised
+        # request line so ``_conversation_str`` debug output works.
+        bridge = HTTP2SocketResponseBridge(
+            h2_resp,
+            sent_request=(
+                f"{request.method} {request.url_split.quoted_uri} HTTP/2.0\r\n"
+            ),
         )
         return self.response_type(bridge, request=request)  # type: ignore[arg-type]
 

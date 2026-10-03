@@ -278,14 +278,18 @@ class HTTP2SocketResponseBridge:
     The underlying h2 stream auto-closes; ``release`` is a no-op.
     """
 
-    def __init__(self, response: HTTP2Response) -> None:
+    def __init__(self, response: HTTP2Response, sent_request: str = "") -> None:
         self._response = response
         # ``CompatResponse`` expects a ``Headers`` instance with
         # ``getlist`` semantics; the raw tuple list does not have
         # that. We reuse the one the response already built -- a
         # second copy would just drift if more headers arrived.
         self._headers_index = response._headers_index
-        self._sent_request: str | None = None
+        # ``_conversation_str`` reads ``resp._sent_request`` to print
+        # the wire request; the h2 path never sees the raw head (the
+        # framing is internal to nghttp2), so the caller passes a
+        # synthesised request line.
+        self._sent_request = sent_request
 
     @property
     def length(self) -> int | None:
