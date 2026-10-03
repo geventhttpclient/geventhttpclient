@@ -177,6 +177,30 @@ class HTTP2Wire:
         # whether the subclass extended it.
         self._drive_lock = gevent.lock.RLock()
 
+    @property
+    def sock(self) -> gevent.socket.socket:
+        """The underlying TCP/SSL socket.
+
+        Exposed for read-only inspection (e.g. ALPN negotiation
+        results) by the higher layers; do not call ``send`` or
+        ``recv`` on it directly -- use :meth:`drive_once` and
+        :meth:`flush_outbound` so the wire lock applies.
+        """
+        return self._sock
+
+    def close_sock(self) -> None:
+        """Close the underlying socket. Idempotent.
+
+        Higher layers (``HTTP2ConnectionPool``) call this on shutdown
+        and when a session needs to be discarded (e.g. the peer
+        negotiated ``http/1.1`` after our h2 preface was already
+        written).
+        """
+        try:
+            self._sock.close()
+        except Exception:  # noqa: BLE001,S110
+            pass
+
     def flush_outbound(self) -> int:
         """Push all queued outbound bytes to the socket.
 

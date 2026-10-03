@@ -22,30 +22,23 @@ import pytest
 
 from geventhttpclient.client import HTTPClient
 
-# Reuse the shared nginx lifecycle from the live-suite module: same
-# daemon, same skip semantics, and the session finalizer stops nginx
-# again when this run was the one that started it.
+# Reuse the skip-if-no-nginx helper and the port constants from the
+# live-suite module. Tests that actually need nginx call
+# ``_require_nginx(...)`` explicitly so the skip message is
+# informative.
 from .test_session_live import (
+    NGINX_H1_PORT,
+    NGINX_H2_PORT,
     NGINX_HOST,
-    _start_nginx,
+    _require_nginx,
 )
-from .test_session_live import (
-    NGINX_PORT as NGINX_H2_PORT,
-)
-
-NGINX_H1_PORT = 8444
-
-
-@pytest.fixture(autouse=True)
-def _nginx_session():
-    _start_nginx()
-    yield
 
 
 class TestHttpxStyleEnable:
     """Verifies the default-off / opt-in behaviour."""
 
     def test_default_is_http1(self) -> None:
+        _require_nginx(NGINX_H1_PORT)
         c = HTTPClient(
             NGINX_HOST, port=NGINX_H1_PORT,
             ssl=True, insecure=True,
@@ -61,6 +54,7 @@ class TestHttpxStyleEnable:
             c.close()
 
     def test_http2_then_h2_succeeds(self) -> None:
+        _require_nginx(NGINX_H2_PORT)
         c = HTTPClient(
             NGINX_HOST, port=NGINX_H2_PORT,
             ssl=True, insecure=True, http2=True,
@@ -78,6 +72,7 @@ class TestHttpxStyleEnable:
         """http2=True + h1-only server -> transparent HTTP/1.1
         fallback. The client returns an ``HTTPSocketPoolResponse``,
         not a stream handle."""
+        _require_nginx(NGINX_H1_PORT)
         c = HTTPClient(
             NGINX_HOST, port=NGINX_H1_PORT,
             ssl=True, insecure=True, http2=True,
@@ -135,6 +130,7 @@ class TestALPNNeverForcesH2:
         """The end-to-end guarantee: ``http2=False`` + h2-only server
         negotiates ``http/1.1`` via ALPN and the request succeeds --
         no HTTPParseError, no silent upgrade."""
+        _require_nginx(NGINX_H2_PORT)
         c = HTTPClient(
             NGINX_HOST, port=NGINX_H2_PORT,
             ssl=True, insecure=True,

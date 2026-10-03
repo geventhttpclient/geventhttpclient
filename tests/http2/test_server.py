@@ -22,10 +22,9 @@ from __future__ import annotations
 
 import os
 
-# Default location of the test certs. Falls back to ``tests/certs/``
-# so contributors without ``/tmp/pi/nginx/`` can still run the suite
-# against the bundled self-signed cert.
-import os as _os
+# Default location of the test certs. The bundled self-signed cert
+# in ``tests/certs/`` is the default; override via the environment
+# variables below to point at your own PKI.
 import socket
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -38,18 +37,16 @@ import h2.connection
 import h2.events
 import h2.exceptions
 
-_HERE = _os.path.dirname(_os.path.abspath(__file__))
-CERT_FILE = _os.environ.get(
+_HERE = os.path.dirname(os.path.abspath(__file__))
+# Default to the bundled self-signed cert. Override with the
+# environment variables below if you have your own test PKI.
+CERT_FILE = os.environ.get(
     "GEVENTHTTPCLIENT_TEST_CERT",
-    "/tmp/pi/nginx/server.crt"
-    if _os.path.exists("/tmp/pi/nginx/server.crt")
-    else _os.path.join(_HERE, "certs", "server.crt"),
+    os.path.join(_HERE, "certs", "server.crt"),
 )
-KEY_FILE = _os.environ.get(
+KEY_FILE = os.environ.get(
     "GEVENTHTTPCLIENT_TEST_KEY",
-    "/tmp/pi/nginx/server.key"
-    if _os.path.exists("/tmp/pi/nginx/server.key")
-    else _os.path.join(_HERE, "certs", "server.key"),
+    os.path.join(_HERE, "certs", "server.key"),
 )
 
 # Default response builder: returns ``{"status": int, "headers": list,

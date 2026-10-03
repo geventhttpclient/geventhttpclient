@@ -98,12 +98,11 @@ class HTTP2Response:
     @property
     def content_length(self) -> int | None:
         # http.client parity: the first value of Content-Length wins.
-        for name, value in self._handle.headers:
-            if name.lower() == "content-length":
-                try:
-                    return int(value)
-                except ValueError:
-                    return None
+        for value in self._headers_index.getlist("Content-Length"):
+            try:
+                return int(value)
+            except ValueError:
+                return None
         return None
 
     def get_code(self) -> int | None:
@@ -166,6 +165,28 @@ class HTTP2Response:
         self._cursor += len(chunk)
         return chunk
 
+    def readline(self, sep: bytes = b"\r\n") -> bytes:
+        """Read up to and including the first ``sep`` boundary.
+
+        The body is fully buffered on the wire side, so the read is
+        a buffer scan: we walk the unread portion for the separator,
+        return the line up to and including it, and advance the
+        cursor past it. Bytes after the separator are left for the
+        next ``read()`` / ``readline()`` call (review M3 — the
+        earlier bridge-private-attr write is gone now).
+        """
+        body = self._body_cached()
+        start = self._cursor
+        idx = body.find(sep, start)
+        if idx < 0:
+            # No terminator: return the remainder like http.client does
+            # for an unterminated final line.
+            self._cursor = len(body)
+            return bytes(body[start:])
+        end = idx + len(sep)
+        self._cursor = end
+        return bytes(body[start:end])
+
     def iter_content(self, chunk_size: int = 4096) -> Iterator[bytes]:
         """Yield body chunks of at most ``chunk_size`` bytes.
 
@@ -183,69 +204,44 @@ class HTTP2Response:
             yield chunk
 
     def iter_lines(self, chunk_size: int = 4096) -> Iterator[bytes]:
-        """Yield body lines split on universal-newlines boundaries
-        (``\\r\\n``, ``\\r``, or ``\\n``).
+        """Yield body lines split on universal-newlines boundaries.
 
-        Matches :func:`requests._iter_lines_bytes` so a drop-in for
-        the http.client behaviour stays consistent across protocols.
-        The last line is yielded without a terminator when the body
-        does not end with one.
+        Matches :func:`requests._iter_lines_bytes` so the
+        ``http.client``-style behaviour stays consistent across
+        protocols. The last line is yielded without a terminator
+        when the body does not end with one.
 
-        Trailing-``\\r`` handling: when a chunk ends with ``\\r`` we
-        hold that byte back across iterations so the next chunk can
-        pair it with ``\\n`` to form a ``\\r\\n`` boundary. Without
-        this guard a body of ``b"a"*4095 + b"\\r\\nb"`` (chunked at
-        4096) would emit a phantom empty line — the held ``\\r`` is
-        paired with the leading ``\\n`` of the next chunk (review_http2_3
-        M2).
+        ``chunk_size`` is preserved on the signature for API parity
+        with the HTTP/1.1 path, but the HTTP/2 body is buffered
+        in full by the time we get here (DATA frames arrive as
+        discrete units and are concatenated), so the value does
+        not affect the output -- the function still streams the
+        underlying buffer lazily via the cursor.
         """
+        del chunk_size  # body is fully buffered, no chunking needed
         body = self._body_cached()
-        # Single in-memory buffer (HTTP/2 has no chunked encoding).
-        # We emulate the chunked interface so the ``\\r\\n``-over-chunk
-        # test from review M2 can be reproduced.
-        buf = bytearray()
         cursor = self._cursor
         total = len(body)
-        while True:
-            # Pull ``chunk_size`` bytes from the underlying buffer; on
-            # the last iteration this may be a short read.
-            end = min(cursor + chunk_size, total)
-            chunk = body[cursor:end]
-            buf.extend(chunk)
-            cursor = end
-            # Split the buffer on universal-newline boundaries.
-            while True:
-                crlf = buf.find(b"\r\n")
-                if crlf >= 0:
-                    yield bytes(buf[:crlf])
-                    del buf[:crlf + 2]
-                    continue
-                # If the buffer ends in ``\r`` and we are NOT at end-of-body
-                # we must hold it back so the next chunk can pair it
-                # with a leading ``\n`` to form ``\r\n``. If we are
-                # at end-of-body the trailing ``\r`` is its own line.
-                if buf.endswith(b"\r") and cursor < total:
-                    # Keep the trailing ``\r`` in the buffer; truncate
-                    # the local view by removing the carried byte from
-                    # the underlying cursor advance.
-                    del buf[-1:]
-                    cursor -= 1
-                    break
-                cr = buf.find(b"\r")
-                lf = buf.find(b"\n")
-                if cr >= 0 and (lf < 0 or cr <= lf):
-                    yield bytes(buf[:cr])
-                    del buf[:cr + 1]
-                elif lf >= 0:
-                    yield bytes(buf[:lf])
-                    del buf[:lf + 1]
-                else:
-                    break
-            if cursor >= total:
-                break
-        # Flush any leftover bytes that did not end in a terminator.
-        if buf:
-            yield bytes(buf)
+        while cursor < total:
+            # Universal-newline split: \r\n first (canonical), then \n or \r.
+            crlf = body.find(b"\r\n", cursor)
+            if crlf >= 0:
+                yield bytes(body[cursor:crlf])
+                cursor = crlf + 2
+                continue
+            lf = body.find(b"\n", cursor)
+            cr = body.find(b"\r", cursor)
+            if cr >= 0 and (lf < 0 or cr < lf):
+                yield bytes(body[cursor:cr])
+                cursor = cr + 1
+            elif lf >= 0:
+                yield bytes(body[cursor:lf])
+                cursor = lf + 1
+            else:
+                # Unterminated last line: yield the remainder.
+                yield bytes(body[cursor:total])
+                cursor = total
+        self._cursor = cursor
 
     def json(self) -> Any:
         """Decode the body as JSON (raises :exc:`json.JSONDecodeError`)."""
@@ -286,10 +282,9 @@ class HTTP2SocketResponseBridge:
         self._response = response
         # ``CompatResponse`` expects a ``Headers`` instance with
         # ``getlist`` semantics; the raw tuple list does not have
-        # that.
-        self._headers_index = Headers()
-        for name, value in response.headers:
-            self._headers_index.add(name, value)
+        # that. We reuse the one the response already built -- a
+        # second copy would just drift if more headers arrived.
+        self._headers_index = response._headers_index
         self._sent_request: str | None = None
 
     @property
@@ -307,26 +302,11 @@ class HTTP2SocketResponseBridge:
         return self._response.read(n)
 
     def readline(self, sep: bytes = b"\r\n") -> bytes:
-        # Compatibility shim: HTTP/2 has no chunked transfer-encoding,
-        # so the body has already been concatenated by the time we get
-        # here. We split on ``sep`` in the in-memory buffer and advance
-        # the cursor exactly past the first match -- leaving any bytes
-        # after the line for subsequent ``read()`` calls (review M3).
-        buf = bytearray()
-        for chunk in self._response.iter_content():
-            buf.extend(chunk)
-            sep_idx = buf.find(sep)
-            if sep_idx >= 0:
-                line = bytes(buf[:sep_idx + len(sep)])
-                # Push the leftover back into the underlying buffer so
-                # the next read() picks it up.
-                leftover = bytes(buf[sep_idx + len(sep):])
-                self._response._body = leftover + self._response._body_cached()[
-                    self._response._cursor:
-                ]
-                self._response._cursor = 0
-                return line
-        return bytes(buf)
+        # Thin pass-through: the real readline lives on HTTP2Response
+        # (it owns the cursor). Keeping the attribute on the bridge
+        # preserves the duck-typed surface that useragent.CompatResponse
+        # already calls into.
+        return self._response.readline(sep)
 
     def release(self) -> None:
         return None

@@ -1,8 +1,8 @@
 """Tests for HTTP2ConnectionPool.
 
 Fake-socket tests cover the pool bookkeeping (lazy creation, key reuse,
-graceful close). Live nginx tests are skipped when nginx is not
-running on 127.0.0.1:8443.
+graceful close). Live nginx tests skip when no nginx is reachable on
+the configured port.
 """
 
 from __future__ import annotations
@@ -11,12 +11,12 @@ import pytest
 
 from geventhttpclient.http2_pool import HTTP2ConnectionPool, HTTP2ConnectionPoolError
 
-# Reuse the live-test fixtures via direct invocation.
+# Reuse the skip-if-no-nginx helper from the live-suite module.
 from .test_session_live import (
+    NGINX_H2_PORT,
     NGINX_HOST,
-    NGINX_PORT,
     _drive_until_closed,
-    _start_nginx,
+    _require_nginx,
 )
 
 
@@ -112,22 +112,17 @@ def test_get_session_after_close_raises() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Live nginx tests
+# Live nginx tests (skipped when no nginx is reachable)
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _nginx_session():
-    _start_nginx()
-    yield
 
 
 class TestLivePool:
     def test_pool_round_trip(self) -> None:
+        _require_nginx(NGINX_H2_PORT)
         pool = HTTP2ConnectionPool(insecure=True)
         try:
-            session = pool.get_session(NGINX_HOST, NGINX_PORT)
-            handle = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_PORT}")
+            session = pool.get_session(NGINX_HOST, NGINX_H2_PORT)
+            handle = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
             _drive_until_closed(session, handle)
             assert handle.status_code == 200
             assert handle.body == b'{"hello":"http2","method":"GET"}'
@@ -135,13 +130,14 @@ class TestLivePool:
             pool.close()
 
     def test_two_requests_share_one_session(self) -> None:
+        _require_nginx(NGINX_H2_PORT)
         pool = HTTP2ConnectionPool(insecure=True)
         try:
-            session = pool.get_session(NGINX_HOST, NGINX_PORT)
+            session = pool.get_session(NGINX_HOST, NGINX_H2_PORT)
             assert pool.active_sessions() == 1
 
-            h1 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_PORT}")
-            h2 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_PORT}")
+            h1 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
+            h2 = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
             _drive_until_closed(session, h1)
             _drive_until_closed(session, h2)
 
@@ -154,11 +150,12 @@ class TestLivePool:
             pool.close()
 
     def test_close_sends_goaway(self) -> None:
+        _require_nginx(NGINX_H2_PORT)
         pool = HTTP2ConnectionPool(insecure=True)
-        session = pool.get_session(NGINX_HOST, NGINX_PORT)
+        session = pool.get_session(NGINX_HOST, NGINX_H2_PORT)
         session.flush_outbound()
         # Drain the initial preface to ensure the session is healthy.
-        h = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_PORT}")
+        h = session.submit_request("GET", "/get", f"{NGINX_HOST}:{NGINX_H2_PORT}")
         _drive_until_closed(session, h)
         assert h.status_code == 200
         # Close should submit GOAWAY and shut the socket.

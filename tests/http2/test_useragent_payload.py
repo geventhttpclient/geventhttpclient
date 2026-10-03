@@ -2,9 +2,9 @@
 
 Review_http2_3.md flagged three high-severity issues that did not have
 CI coverage: H1 (payload normalisation), H2 (no end-to-end
-timeout), H3 (raw ``RuntimeError`` instead of ``HTTPError``). We
-exercise the local nginx fixture for the H1 path and the in-process
-HTTP/2 server for H3.
+timeout), H3 (raw ``RuntimeError`` instead of ``HTTPError``). The
+H1 path uses local nginx when available and the H3 path uses
+in-process error injection.
 """
 
 from __future__ import annotations
@@ -18,16 +18,10 @@ from geventhttpclient.useragent import (
 )
 
 from .test_session_live import (
+    NGINX_H2_PORT,
     NGINX_HOST,
-    NGINX_PORT,
-    _start_nginx,
+    _require_nginx,
 )
-
-
-@pytest.fixture(autouse=True)
-def _nginx_session():
-    _start_nginx()
-    yield
 
 
 class TestH1PayloadNormalisation:
@@ -38,7 +32,7 @@ class TestH1PayloadNormalisation:
         ua = UserAgent(http2=True, insecure=True)
         try:
             req = _make_request(
-                f"https://{NGINX_HOST}:{NGINX_PORT}/post",
+                f"https://{NGINX_HOST}:{NGINX_H2_PORT}/post",
                 method="POST",
                 payload="raw-string-body",
             )
@@ -51,7 +45,7 @@ class TestH1PayloadNormalisation:
         ua = UserAgent(http2=True, insecure=True)
         try:
             req = _make_request(
-                f"https://{NGINX_HOST}:{NGINX_PORT}/post",
+                f"https://{NGINX_HOST}:{NGINX_H2_PORT}/post",
                 method="POST",
                 payload={"key": "value", "n": "1"},
             )
@@ -70,10 +64,11 @@ class TestH2DefaultTimeout:
         # server replies quickly. The point is that the call does
         # not blow up with ``None`` from request.timeout and that
         # the round trip completes against nginx.
+        _require_nginx(NGINX_H2_PORT)
         ua = UserAgent(http2=True, insecure=True)
         try:
             r = ua.urlopen(
-                f"https://{NGINX_HOST}:{NGINX_PORT}/get", method="GET",
+                f"https://{NGINX_HOST}:{NGINX_H2_PORT}/get", method="GET",
             )
             assert r.status_code == 200
         finally:

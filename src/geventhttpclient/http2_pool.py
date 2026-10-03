@@ -131,11 +131,9 @@ class HTTP2ConnectionPool:
             if key is None:
                 return
             del self._sessions[key]
-        try:
-            sock = session._sock  # type: ignore[attr-defined]
-            sock.close()
-        except Exception:  # noqa: BLE001,S110
-            pass
+        # ``close_sock`` swallows its own errors; the pool's job here
+        # is to detach the session and best-effort close the socket.
+        session.close_sock()
 
     def close(self) -> None:
         """Close every session. The pool refuses further requests after."""
@@ -149,11 +147,8 @@ class HTTP2ConnectionPool:
                 session.flush_outbound()
             except Exception:  # noqa: BLE001,S110
                 pass
-            try:
-                sock = session._sock  # type: ignore[attr-defined]
-                sock.close()
-            except Exception:  # noqa: BLE001,S110
-                pass
+            # ``close_sock`` swallows its own errors.
+            session.close_sock()
 
     def active_sessions(self) -> int:
         """How many h2 sessions this pool is currently keeping.
