@@ -23,7 +23,11 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import IntEnum
 
-from geventhttpclient.http2._parser import Session, session_client_new
+from geventhttpclient.http2._parser import (
+    Http2Event as RawHttp2Event,
+    Session,
+    session_client_new,
+)
 
 #: Stream-id 0 means "connection-level", not an actual stream.
 CONNECTION_STREAM_ID = 0
@@ -589,15 +593,13 @@ class HTTP2Connection:
 
     # -- Helpers -----------------------------------------------------------
 
-    def _convert_event(self, raw: dict[str, object]) -> Http2Event:
-        kind = raw.get("_kind", "")
-        if kind == "headers":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            end_stream = bool(raw["end_stream"])  # type: ignore[arg-type]
-            all_headers = tuple(
-                (str(name), str(value))
-                for name, value in raw["headers"]  # type: ignore[union-attr,attr-defined]
-            )
+    def _convert_event(self, raw: RawHttp2Event) -> Http2Event:
+        # ``_kind`` discriminates the raw TypedDict union; the type
+        # checker narrows ``raw`` in each branch.
+        if raw["_kind"] == "headers":
+            stream_id = raw["stream_id"]
+            end_stream = raw["end_stream"]
+            all_headers = tuple(raw["headers"])
             # RFC 9113 §8.1.1: 1xx informational responses (100, 103,
             # ...) precede the final response. They are *not* stored in
             # ``StreamState.response_status_code`` and are emitted as
@@ -637,46 +639,38 @@ class HTTP2Connection:
             # same filter in ``_update_stream_state_on_headers``.
             headers = tuple(h for h in all_headers if h[0] != ":status")
             return HeadersReceived(stream_id, headers, end_stream)
-        if kind == "data":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            data = bytes(raw["data"])  # type: ignore[arg-type,call-overload]
-            end_stream = bool(raw["end_stream"])  # type: ignore[arg-type]
+        if raw["_kind"] == "data":
+            stream_id = raw["stream_id"]
+            end_stream = raw["end_stream"]
             self._update_stream_state_on_data(stream_id, end_stream)
-            return DataReceived(stream_id, data, end_stream)
-        if kind == "stream_reset":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            error_code = int(raw["error_code"])  # type: ignore[call-overload]
+            return DataReceived(stream_id, raw["data"], end_stream)
+        if raw["_kind"] == "stream_reset":
+            stream_id = raw["stream_id"]
+            error_code = raw["error_code"]
             self._update_stream_state_on_reset(stream_id, error_code)
             return StreamReset(stream_id, error_code)
-        if kind == "stream_closed":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            error_code = int(raw["error_code"])  # type: ignore[call-overload]
-            end_stream = bool(raw["end_stream"])  # type: ignore[arg-type]
+        if raw["_kind"] == "stream_closed":
+            stream_id = raw["stream_id"]
+            error_code = raw["error_code"]
             self._update_stream_state_on_close(stream_id, error_code)
-            return StreamClosed(stream_id, error_code, end_stream)
-        if kind == "settings":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            settings = {int(k): int(v) for k, v in raw["settings"].items()}  # type: ignore[union-attr,call-overload,attr-defined]
-            ack = bool(raw["ack"])  # type: ignore[arg-type]
-            self._update_settings(settings, ack)
-            return SettingsReceived(stream_id, settings, ack)
-        if kind == "ping":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            opaque = bytes(raw["opaque_data"])  # type: ignore[arg-type,call-overload]
-            ack = bool(raw["ack"])  # type: ignore[arg-type]
-            return PingReceived(stream_id, opaque, ack)
-        if kind == "goaway":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            last = int(raw["last_stream_id"])  # type: ignore[call-overload]
-            error_code = int(raw["error_code"])  # type: ignore[call-overload]
-            debug = bytes(raw["debug_data"])  # type: ignore[arg-type,call-overload]
+            return StreamClosed(stream_id, error_code, raw["end_stream"])
+        if raw["_kind"] == "settings":
+            stream_id = raw["stream_id"]
+            settings = raw["settings"]
+            self._update_settings(settings, raw["ack"])
+            return SettingsReceived(stream_id, settings, raw["ack"])
+        if raw["_kind"] == "ping":
+            return PingReceived(
+                raw["stream_id"], raw["opaque_data"], raw["ack"])
+        if raw["_kind"] == "goaway":
+            stream_id = raw["stream_id"]
+            last = raw["last_stream_id"]
             self._update_last_accepted(last)
-            return GoAwayReceived(stream_id, last, error_code, debug)
-        if kind == "window_update":
-            stream_id = int(raw["stream_id"])  # type: ignore[call-overload]
-            increment = int(raw["increment"])  # type: ignore[call-overload]
-            return WindowUpdateReceived(stream_id, increment)
-        raise RuntimeError(f"unknown HTTP/2 event kind: {kind!r}")
+            return GoAwayReceived(
+                stream_id, last, raw["error_code"], raw["debug_data"])
+        if raw["_kind"] == "window_update":
+            return WindowUpdateReceived(raw["stream_id"], raw["increment"])
+        raise RuntimeError(f"unknown HTTP/2 event kind: {raw['_kind']!r}")
 
     def _update_settings(self, settings: dict[int, int], ack: bool) -> None:
         # ACKs are just for our SETTINGS; only update our model when the
