@@ -5,6 +5,9 @@ their frame outputs — no sockets involved. They verify framing, HPACK
 round-trips, event emission and the streaming body provider.
 """
 
+import h2.config
+import h2.connection
+import h2.events
 import pytest
 
 from geventhttpclient.http2._parser import session_client_new, session_server_new
@@ -396,15 +399,13 @@ class TestHeaderListSizeLimit:
         """A peer ignoring the advertised cap must not exhaust memory;
         the callback failure surfaces as a fatal session error (M2).
 
-        Uses hyper-h2 as the peer: our own server session cannot
-        produce an oversized block because nghttp2's send-side cap
-        (NGHTTP2_MAX_HEADERSLEN) drops it first."""
-        h2 = pytest.importorskip("h2.connection")
-        h2_config = pytest.importorskip("h2.config")
-
+        Uses hyper-h2 (a declared dev dependency) as the peer: our own
+        server session cannot produce an oversized block because
+        nghttp2's send-side cap (NGHTTP2_MAX_HEADERSLEN) drops it
+        first."""
         client = session_client_new()
-        peer = h2.H2Connection(
-            config=h2_config.H2Configuration(client_side=False))
+        peer = h2.connection.H2Connection(
+            config=h2.config.H2Configuration(client_side=False))
         peer.initiate_connection()
 
         stream_id, frames = client.submit_request(get_headers())
@@ -461,7 +462,11 @@ class TestStreamClosedSingleSource:
 
     def test_stream_closed_fires_exactly_once(self):
         """on_stream_close is the single source of stream_closed —
-        no duplicate from the DATA END_STREAM path (M3)."""
+        no duplicate from the DATA END_STREAM path (M3).
+
+        Regression guard: re-introducing a stream_closed emission in
+        the DATA-END_STREAM path of on_frame_recv would make this
+        count 2."""
         client, server, stream_id = self._open_response_stream()
         tail = server.submit_data(stream_id, b"payload", end_stream=True)
         events, _ = pump_frames(client, server, to_client=tail)
@@ -479,14 +484,11 @@ class TestPushRefusal:
     def test_pushed_stream_is_refused_and_connection_survives(self):
         """PUSH_PROMISE must be answered with RST_STREAM
         (REFUSED_STREAM) on the promised stream, keeping the
-        connection alive (M5). Uses hyper-h2 as the pushing server."""
-        h2 = pytest.importorskip("h2.connection")
-        h2_config = pytest.importorskip("h2.config")
-        h2_events = pytest.importorskip("h2.events")
-
+        connection alive (M5). Uses hyper-h2 (a declared dev
+        dependency) as the pushing server."""
         client = session_client_new()
-        peer = h2.H2Connection(
-            config=h2_config.H2Configuration(client_side=False))
+        peer = h2.connection.H2Connection(
+            config=h2.config.H2Configuration(client_side=False))
         peer.initiate_connection()
 
         stream_id, frames = client.submit_request(get_headers())
@@ -503,7 +505,7 @@ class TestPushRefusal:
         # The client must have queued a refusal for the promised stream.
         reset_events = peer.receive_data(outbound)
         resets = [e for e in reset_events
-                  if isinstance(e, h2_events.StreamReset)
+                  if isinstance(e, h2.events.StreamReset)
                   and e.stream_id == promised_id]
         assert resets, "promised stream must be reset"
         assert resets[0].error_code == 0x7  # REFUSED_STREAM
