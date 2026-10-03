@@ -208,6 +208,20 @@ class WindowUpdateReceived:
         return "window_update"
 
 
+def _parse_status_code(headers: tuple[tuple[str, str], ...]) -> int | None:
+    """Extract and parse the ``:status`` pseudo-header once.
+
+    Returns None when the header is absent or not an integer (the
+    caller treats both as "no final response status")."""
+    status_str = next((v for n, v in headers if n == ":status"), None)
+    if status_str is None:
+        return None
+    try:
+        return int(status_str)
+    except ValueError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # HTTP/2 review-commentary events (RFC 9113 §8.1.1 / §8.1)
 # ---------------------------------------------------------------------------
@@ -607,14 +621,7 @@ class HTTP2Connection:
             # ``StreamState.response_status_code`` and are emitted as
             # ``InformationalResponseReceived`` so callers can inspect
             # early hints without confusing them for the real answer.
-            status_str = next(
-                (v for n, v in all_headers if n == ":status"),
-                None,
-            )
-            try:
-                status_code = int(status_str) if status_str is not None else None
-            except ValueError:
-                status_code = None
+            status_code = _parse_status_code(all_headers)
             state = self._streams.get(stream_id)
             if (
                 status_code is not None
@@ -634,7 +641,8 @@ class HTTP2Connection:
                 if end_stream:
                     self._mark_remote_closed(state)
                 return TrailerReceived(stream_id, trailers)
-            self._update_stream_state_on_headers(stream_id, all_headers, end_stream)
+            self._update_stream_state_on_headers(
+                stream_id, all_headers, end_stream, status_code)
             # Surface to the user: the :status pseudo-header has been
             # captured into ``StreamState.response_status_code`` and is
             # filtered out of the public headers tuple. See also the
@@ -694,6 +702,7 @@ class HTTP2Connection:
         stream_id: int,
         headers: tuple[tuple[str, str], ...],
         end_stream: bool,
+        status_code: int | None,
     ) -> None:
         state = self._streams.get(stream_id)
         if state is None:
@@ -702,16 +711,13 @@ class HTTP2Connection:
         # Was-idle -> OPEN on first HEADERS (response from server).
         if state.state == StreamLifecycle.IDLE:
             state.state = StreamLifecycle.OPEN
-        # Capture :status for response aggregation. The :status
-        # pseudo-header itself is *not* stored in ``response_headers``.
-        for name, value in headers:
-            if name == ":status":
-                try:
-                    state.response_status_code = int(value)
-                except ValueError:
-                    state.response_status_code = None
-                continue
-            state.response_headers.append((name, value))
+        # Capture :status (parsed once by the caller) for response
+        # aggregation. The pseudo-header itself is *not* stored in
+        # ``response_headers``.
+        state.response_status_code = status_code
+        state.response_headers.extend(
+            (name, value) for name, value in headers if name != ":status"
+        )
         if end_stream:
             self._mark_remote_closed(state)
 
