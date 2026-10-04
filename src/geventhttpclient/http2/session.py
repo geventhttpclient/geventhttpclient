@@ -179,8 +179,11 @@ class HTTP2Wire:
         # whether the subclass extended it.
         self._drive_lock = gevent.lock.RLock()
         # Fatal-error latch: once the parser or the socket failed, the
-        # wire must not be driven again -- the underlying nghttp2
-        # session is unusable after a fatal error (it latches, too).
+        # wire must not be driven again. Two latches exist on purpose:
+        # the C session latches for itself (``session_check_alive`` in
+        # ``ext/_http2_parser.c``, guarding direct parser users), this
+        # one additionally covers socket and dispatch failures the C
+        # layer never sees, and owns the error taxonomy of the wire.
         self._wire_error: Exception | None = None
 
     @property
@@ -217,9 +220,30 @@ class HTTP2Wire:
         with self._drive_lock:
             try:
                 return self._flush_outbound_locked()
-            except Exception as e:
-                self._wire_error = e
-                raise
+            except Exception as e:  # noqa: BLE001
+                # Deliberately blind: whatever failed here, the wire is
+                # broken; ``_fatal`` latches it and maps it.
+                raise self._fatal(e)
+
+    def _fatal(self, error: Exception) -> Exception:
+        """Record *error* as fatal and return the exception to raise.
+
+        The wire owns the h2 error taxonomy: everything leaving it must
+        be a :class:`ConnectionError`, so that ``except ConnectionError``
+        catches this transport the way it catches HTTP/1 (see
+        :mod:`geventhttpclient.http2.errors`). An nghttp2 failure
+        reaches us as a bare :class:`RuntimeError` and would otherwise
+        escape that contract; the original type stays in the message and
+        in ``__cause__``, so an internal bug is still recognisable.
+        """
+        self._wire_error = error
+        if isinstance(error, ConnectionError):
+            return error
+        mapped = HTTP2WireError(
+            f"HTTP/2 wire failed: {type(error).__name__}: {error}",
+        )
+        mapped.__cause__ = error
+        return mapped
 
     def _raise_if_broken(self) -> None:
         """Refuse to drive a wire that already failed fatally."""
@@ -248,8 +272,9 @@ class HTTP2Wire:
 
         Returns True if work was done (either inbound bytes were consumed
         or outbound bytes were written). Returns False if the socket
-        would block. Raises :exc:`HTTP2WireError` if the peer has
-        closed the socket.
+        would block. Every fatal failure (peer close, parser error,
+        failing dispatch) surfaces as :exc:`HTTP2WireError`, a
+        :class:`ConnectionError`.
 
         ``drive_once`` is serialised against ``flush_outbound`` via
         ``self._drive_lock``; concurrent greenlets calling into the
@@ -274,13 +299,13 @@ class HTTP2Wire:
                 self._dispatch(events)
                 self._flush_outbound_locked()
                 return True
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 # Any failure above (parser error, dispatch error,
                 # socket write error) is fatal: latch so follow-up
                 # drive/flush calls fail fast instead of feeding the
-                # broken session again.
-                self._wire_error = e
-                raise
+                # broken session again, and map into the wire's error
+                # taxonomy so callers can catch a ConnectionError.
+                raise self._fatal(e)
 
     # Subclasses (HTTP2Session) override to do per-event work.
     def _dispatch(self, events: list[Http2Event]) -> None:
@@ -322,20 +347,31 @@ class HTTP2Session(HTTP2Wire):
         """Submit a single request and return a handle for the response.
 
         Raises :exc:`BlockingIOError` if the peer's MAX_CONCURRENT_STREAMS
-        is reached or if a peer GOAWAY forbids a new stream.
+        is reached or if a peer GOAWAY forbids a new stream. Any other
+        failure surfaces as :exc:`HTTP2WireError`.
         """
+        # A wire that already failed must not touch the (possibly
+        # latched) session a second time.
+        self._raise_if_broken()
         # ``HTTP2Connection.submit_request`` ships ``body`` through
         # ``submit_data(end_stream=True)`` internally, so we no longer
         # call ``submit_data`` again here -- doing so would either be a
         # no-op (stream already finished) or duplicate the body.
-        stream_id = self._connection.submit_request(
-            method,
-            path,
-            authority,
-            headers=headers,
-            scheme=scheme,
-            body=body,
-        )
+        try:
+            stream_id = self._connection.submit_request(
+                method,
+                path,
+                authority,
+                headers=headers,
+                scheme=scheme,
+                body=body,
+            )
+        except RuntimeError as e:
+            # ``BlockingIOError`` (the documented peer-limit signal) is an
+            # :class:`OSError`, so this ``except`` cannot swallow it. A
+            # bare ``RuntimeError`` comes from the C session and must not
+            # leave this layer as one.
+            raise self._fatal(e)
         handle = HTTP2ResponseHandle(self, stream_id)
         self._handles[stream_id] = handle
         # Push the request frames immediately so the peer can start

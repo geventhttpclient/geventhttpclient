@@ -339,6 +339,32 @@ class TestHTTP2Wire:
         with pytest.raises(HTTP2WireError, match="unusable"):
             wire.flush_outbound()
 
+    def test_session_failure_surfaces_as_connection_error(self) -> None:
+        """The *first* failure inside the nghttp2 session arrives as a
+        bare ``RuntimeError`` and used to escape the wire unmapped, so
+        ``except ConnectionError`` missed a peer protocol error while it
+        catches the HTTP/1 equivalent. The wire must map it and latch."""
+        fs = FakeSocket()
+        sock = fs.side_a()
+        conn = HTTP2Connection(session=session_server_new())
+        wire = HTTP2Wire(sock, conn)
+        fs.side_b().sendall(b"this is not the HTTP/2 client connection preface")
+
+        with pytest.raises(ConnectionError, match="RuntimeError") as excinfo:
+            wire.drive_once()
+        assert isinstance(excinfo.value, HTTP2WireError)
+        # The original exception stays reachable for debugging.
+        assert isinstance(excinfo.value.__cause__, RuntimeError)
+
+        # Latched through the same contract, not as a bare RuntimeError.
+        with pytest.raises(HTTP2WireError, match="unusable"):
+            wire.drive_once()
+        # A second wire over the same (now latched) session must not
+        # leak the C session's RuntimeError either.
+        with pytest.raises(HTTP2WireError, match="wire failed") as second:
+            HTTP2Session(sock, conn).submit_request("GET", "/", "example.com")
+        assert isinstance(second.value.__cause__, RuntimeError)
+
 
 class TestHTTP2SessionRoundTrip:
     def test_get_round_trip(self) -> None:
