@@ -133,6 +133,9 @@ addopts = ["--timeout=60", "--timeout-method=thread"]
 fix = false
 line-length = 100
 target-version = "py311"
+# Written by setuptools-scm at build time and gitignored; its template
+# uses single quotes, so ruff would reformat a generated file.
+extend-exclude = ["src/geventhttpclient/_version.py"]
 lint.extend-select = ["UP", "I", "W"]
 lint.ignore = ["F821", "E402"]
 [tool.mypy]
