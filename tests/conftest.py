@@ -14,11 +14,18 @@ else:
     # loop yields via gevent.sleep. Unpatched, blocking SSL handshakes
     # starve the server greenlet (CI showed handshake timeouts in the
     # non-gevent job). The sans-IO parser and connection tests stay in.
-    collect_ignore_glob = ["http2/test_alpn.py", "http2/test_pool.py",
-        "http2/test_response.py", "http2/test_session.py",
-        "http2/test_session_concurrent.py", "http2/test_session_live.py",
-        "http2/test_spec.py", "http2/test_useragent.py",
-        "http2/test_useragent_payload.py", "http2/test_network.py"]
+    collect_ignore_glob = [
+        "http2/test_alpn.py",
+        "http2/test_pool.py",
+        "http2/test_response.py",
+        "http2/test_session.py",
+        "http2/test_session_concurrent.py",
+        "http2/test_session_live.py",
+        "http2/test_spec.py",
+        "http2/test_useragent.py",
+        "http2/test_useragent_payload.py",
+        "http2/test_network.py",
+    ]
 
 
 def pytest_collection_modifyitems(config, items):

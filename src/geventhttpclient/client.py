@@ -732,8 +732,7 @@ class HTTPClient:
         """
         if self._h2_pool is None:
             raise HTTP2Error(
-                "http2=True must be set on the HTTPClient and the "
-                "URL must use https://",
+                "http2=True must be set on the HTTPClient and the URL must use https://",
             )
         path = request_uri
         if not path.startswith("/") and not path.startswith("http"):
@@ -771,8 +770,12 @@ class HTTPClient:
                     self._h2_pool.drop_session(session)  # type: ignore[attr-defined]
                     return self._http1_fallback(method, request_uri, body_bytes, headers)
                 handle = session.submit_request(
-                    method, path, str(authority), h2_headers,
-                    scheme=scheme, body=body_bytes,
+                    method,
+                    path,
+                    str(authority),
+                    h2_headers,
+                    scheme=scheme,
+                    body=body_bytes,
                 )
             except HTTP2ConnectionPoolError as e:
                 if "did not negotiate h2" in str(e):
@@ -828,8 +831,9 @@ class HTTPClient:
         """
         return getattr(session.sock, "selected_alpn_protocol", lambda: None)()
 
-    def _http1_fallback(self, method: str, request_uri: str, body: bytes | None,
-                        headers: HeadersDataType | None) -> "HTTPSocketPoolResponse":
+    def _http1_fallback(
+        self, method: str, request_uri: str, body: bytes | None, headers: HeadersDataType | None
+    ) -> "HTTPSocketPoolResponse":
         """Route an HTTP/2 attempt over the HTTP/1.1 pool instead.
 
         Used by :meth:`request_h2` when the peer chose ``http/1.1``

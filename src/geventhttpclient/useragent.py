@@ -820,9 +820,7 @@ class UserAgent:
         # request line so ``_conversation_str`` debug output works.
         bridge = HTTP2SocketResponseBridge(
             h2_resp,
-            sent_request=(
-                f"{request.method} {request.url_split.quoted_uri} HTTP/2.0\r\n"
-            ),
+            sent_request=(f"{request.method} {request.url_split.quoted_uri} HTTP/2.0\r\n"),
         )
         return self.response_type(bridge, request=request)  # type: ignore[arg-type]
 

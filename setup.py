@@ -24,9 +24,7 @@ def _nghttp2_sources() -> list[str]:
     """Collect the C source files of nghttp2's lib/ directory."""
     src_dir = os.path.join("vendor", "nghttp2", "lib")
     return sorted(
-        os.path.join(src_dir, name)
-        for name in os.listdir(src_dir)
-        if name.endswith(".c")
+        os.path.join(src_dir, name) for name in os.listdir(src_dir) if name.endswith(".c")
     )
 
 
