@@ -6,7 +6,7 @@ repos:
       - id: trailing-whitespace
       - id: debug-statements
       - id: detect-private-key
-        exclude: ^tests/(server\.key|oncert\.pem)$
+        exclude: ^tests/(server\.key|oncert\.pem|http2/certs/server\.key)$
       - id: check-builtin-literals
       - id: check-case-conflict
       - id: check-executables-have-shebangs
