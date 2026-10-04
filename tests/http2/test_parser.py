@@ -590,14 +590,14 @@ class TestHeaderEncoding:
 
         response = server.submit_response(
             stream_id,
-            [(":status", "200"), ("x-quoted", "caf\xe9 \x80raw")],
+            [(":status", "200"), ("x-quoted", "caf\xe9 \x80raw")],  # codespell-ignore
         )
         response_events, _ = pump_frames(client, server, to_client=response)
         headers = find(response_events, "headers")
         assert len(headers) == 1
         values = dict(headers[0]["headers"])
         # 1:1 byte mapping: the exact characters come back.
-        assert values["x-quoted"] == "caf\xe9 \x80raw"
+        assert values["x-quoted"] == "caf\xe9 \x80raw"  # codespell-ignore
 
     def test_obs_text_round_trip_is_lossless(self):
         """latin-1 in both directions: a str submitted on one side
