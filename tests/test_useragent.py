@@ -17,7 +17,15 @@ from geventhttpclient.useragent import (
     UserAgent,
     _encode_multipart_formdata,
 )
-from tests.common import HTTPBIN_HOST, LISTENER, LISTENER_URL, TEST_PORT, check_upload, wsgiserver
+from tests.common import (
+    HTTPBIN_HOST,
+    LISTENER,
+    LISTENER_URL,
+    TEST_PORT,
+    check_upload,
+    server,
+    wsgiserver,
+)
 
 
 @pytest.fixture
@@ -251,6 +259,80 @@ def test_redirect():
         resp = UserAgent().urlopen(LISTENER_URL)
         assert resp.status_code == 200
         assert b"redirected" == resp.content
+
+
+def _read_request_target(sock):
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = sock.recv(8192)
+        if not chunk:
+            break
+        data += chunk
+    return data.split(b" ", 2)[1]
+
+
+@pytest.mark.parametrize(
+    ("reference", "expected_target"),
+    [
+        ("resource;session=abc", "/resource;session=abc"),
+        (
+            "dir;prefix=value/resource;session=abc?query=1",
+            "/dir;prefix=value/resource;session=abc?query=1",
+        ),
+        (
+            "resource;name=two words?token=a%2Fb%3Bc#ignored",
+            "/resource;name=two%20words?token=a%2Fb%3Bc",
+        ),
+    ],
+)
+def test_path_parameters_reach_server(reference, expected_target):
+    received = []
+
+    def handler(sock, address):
+        received.append(_read_request_target(sock))
+        sock.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+
+    with server(handler), UserAgent() as useragent:
+        resp = useragent.urlopen(LISTENER_URL + reference)
+        assert resp.status_code == 200
+        assert resp.content == b"ok"
+    assert received == [expected_target.encode("ascii")]
+
+
+@pytest.mark.parametrize(
+    ("location", "expected_target"),
+    [
+        ("target;session=new?query=1", "/dir/target;session=new?query=1"),
+        (
+            LISTENER_URL + "target;token=a%2Fb%3Bc?query=1#ignored",
+            "/target;token=a%2Fb%3Bc?query=1",
+        ),
+        ("?query=2", "/dir/start;session=old?query=2"),
+    ],
+)
+def test_redirect_path_parameters_reach_server(location, expected_target):
+    received = []
+
+    def handler(sock, address):
+        received.append(_read_request_target(sock))
+        if len(received) == 1:
+            sock.sendall(
+                (
+                    f"HTTP/1.1 302 Found\r\nLocation: {location}\r\n"
+                    "Content-Length: 0\r\nConnection: close\r\n\r\n"
+                ).encode("ascii")
+            )
+        else:
+            sock.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+
+    with server(handler), UserAgent() as useragent:
+        resp = useragent.urlopen(LISTENER_URL + "dir/start;session=old?original=1")
+        assert resp.status_code == 200
+        assert resp.content == b"ok"
+    assert received == [
+        b"/dir/start;session=old?original=1",
+        expected_target.encode("ascii"),
+    ]
 
 
 def test_redirect_drops_authorization_across_origins():

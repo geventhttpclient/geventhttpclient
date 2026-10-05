@@ -125,9 +125,12 @@ class URL:
 
     @property
     def request_uri(self) -> str:
+        path = self.path
+        if self.params:
+            path += ";" + self.params
         if not self.query:
-            return self.path
-        return self.path + "?" + self.query
+            return path
+        return path + "?" + self.query
 
     def geturl(self) -> str:
         """Alias of str(url), mirroring the parse result's own name for it."""

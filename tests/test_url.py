@@ -88,6 +88,46 @@ def test_empty_path():
     assert URL("http://gevent.org").path == ""
 
 
+@pytest.mark.parametrize(
+    ("uri", "expected"),
+    [
+        ("http://example.com/resource;foo=bar", "/resource;foo=bar"),
+        ("https://example.com/resource;foo=bar?x=1#frag", "/resource;foo=bar?x=1"),
+        ("/resource;foo=bar", "/resource;foo=bar"),
+        ("/dir;foo/bar;baz?x=1", "/dir;foo/bar;baz?x=1"),
+        ("/resource;foo=bar;baz=qux", "/resource;foo=bar;baz=qux"),
+        ("/;foo=bar?x=1", "/;foo=bar?x=1"),
+        ("/resource%3Bfoo=bar?x=1", "/resource%3Bfoo=bar?x=1"),
+        ("/resource?foo=bar;baz=qux", "/resource?foo=bar;baz=qux"),
+        ("/resource#foo=bar;baz=qux", "/resource"),
+    ],
+)
+def test_request_uri_preserves_path_parameters(uri, expected):
+    url = URL(uri)
+    assert url.request_uri == expected
+    assert url.quoted_uri == expected
+
+
+def test_quoted_uri_encodes_path_parameters():
+    url = URL("http://example.com/resource;name=snowman \u2603?x=1#frag")
+    assert url.request_uri == "/resource;name=snowman \u2603?x=1"
+    assert url.quoted_uri == "/resource;name=snowman%20%E2%98%83?x=1"
+
+
+@pytest.mark.parametrize(
+    ("redirect", "expected"),
+    [
+        ("?x=2", "/dir/resource;foo=bar?x=2"),
+        ("#new", "/dir/resource;foo=bar?x=1"),
+        ("next;foo=baz", "/dir/next;foo=baz"),
+    ],
+)
+def test_redirect_request_uri_preserves_path_parameters(redirect, expected):
+    url = URL("https://example.com/dir/resource;foo=bar?x=1#frag").redirect(redirect)
+    assert url.request_uri == expected
+    assert url.quoted_uri == expected
+
+
 def test_consistent_reparsing():
     for surl in (url_full, url_path_only):
         url = URL(surl)

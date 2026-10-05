@@ -39,6 +39,7 @@ left out unless it affects users of the package.
 - 307/308 redirects resend the body, and `Authorization` is dropped when
   a redirect leaves the origin
 - `URL.redirect` keeps the base path and query
+- Requests retain semicolon path parameters, including after redirects
 - `follow_redirects=False` is honoured by the `httpx.Client` shortcuts
 
 ### Removed
