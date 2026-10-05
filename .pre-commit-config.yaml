@@ -38,3 +38,11 @@ repos:
     rev: v2.4.3
     hooks:
       - id: codespell
+
+  - repo: https://github.com/rvben/rumdl-pre-commit
+    rev: v0.2.78
+    hooks:
+      - id: rumdl-check
+        # llhttp is a git submodule (upstream files). pre-commit never traverses
+        # submodules, so this is belt-and-braces for hand-run configs.
+        exclude: ^llhttp/

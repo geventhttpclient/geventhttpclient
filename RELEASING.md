@@ -4,10 +4,10 @@
    must be named after the version, in the bare format without a "v"
    prefix (e.g. `2.5.2`). Existing release tags are lightweight tags.
    Either create tag and release in the web UI at
-   https://github.com/geventhttpclient/geventhttpclient/releases/new, or
+   <https://github.com/geventhttpclient/geventhttpclient/releases/new>, or
    from the command line:
 
-   ```
+   ```text
    git tag 2.5.2
    git push origin 2.5.2
    gh release create 2.5.2 --title "2.5.2" --generate-notes
@@ -15,7 +15,7 @@
 
    Creating the release, not pushing the tag, is what triggers the
    publish workflow:
-   https://github.com/geventhttpclient/geventhttpclient/actions/workflows/publish.yml
+   <https://github.com/geventhttpclient/geventhttpclient/actions/workflows/publish.yml>
 
    The package version is derived from the tag by setuptools-scm
    (configured in `pyproject.toml`). Nothing else needs to be bumped; the
@@ -46,7 +46,7 @@
    selected as ref. The workflow refuses to publish when the built sdist
    does not match the ref name, so dispatching from a branch is rejected.
 
-4. Verify the result on https://pypi.org/project/geventhttpclient/: the
+4. Verify the result on <https://pypi.org/project/geventhttpclient/>: the
    new version should list the expected wheels. As a sanity check, install
    from the source distribution in a fresh virtualenv and import the
    package (this exercises the C extension build).

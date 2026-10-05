@@ -709,7 +709,7 @@ class UserAgent:
                         break
                     else:
                         if not ret:
-                            # re-using the name bound by the except block above,
+                            # reusing the name bound by the except block above,
                             # which python deletes once the handler is left
                             e = EmptyResponse(url, "Empty response body received")  # type: ignore[misc]
                             if not self._may_retry(req):

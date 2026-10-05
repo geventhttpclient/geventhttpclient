@@ -130,3 +130,10 @@ known-first-party = ["geventhttpclient", "tests"]
 
 [tool.codespell]
 ignore-regex = ".*codespell-ignore$"
+
+[tool.rumdl]
+line-length = 100
+exclude = ["llhttp/**", "**/llhttp/**"]
+
+[tool.rumdl.MD013]
+reflow = true

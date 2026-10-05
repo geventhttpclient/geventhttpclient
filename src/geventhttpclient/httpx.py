@@ -186,7 +186,6 @@ def _translate(error: BaseException, request: CompatRequest | None) -> HTTPError
     return translated
 
 
-
 # ---------------------------------------------------------------------------
 # Response
 # ---------------------------------------------------------------------------
@@ -360,9 +359,7 @@ class Client(Session):
             # includes ``str`` / ``bytes`` / ``Iterable[tuple]`` which
             # have no ``__getitem__``); we only merge when both sides
             # are mappings.
-            if isinstance(self.session_params, Mapping) and isinstance(
-                request_params, Mapping
-            ):
+            if isinstance(self.session_params, Mapping) and isinstance(request_params, Mapping):
                 merged = dict(self.session_params)
                 merged.update(request_params)
                 return merged
