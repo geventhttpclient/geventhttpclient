@@ -30,7 +30,10 @@
    - Wheels via cibuildwheel (version pinned in the workflow, build and
      arch configuration in `pyproject.toml`): CPython 3.11-3.14 on
      manylinux and musllinux for x86_64, aarch64 and ppc64le, macOS for
-     x86_64, arm64 and universal2, and Windows for x86_64 and ARM64.
+     x86_64, arm64 and universal2, and Windows for x86, x86_64 and ARM64.
+     Linux runs as one job per architecture: x86_64 and aarch64 build
+     natively on `ubuntu-24.04` and `ubuntu-24.04-arm`, ppc64le runs on
+     `ubuntu-24.04` with QEMU.
      Each built wheel is installed and smoke-tested (import of the
      package and its C extension) before it is uploaded.
      Building requires the `llhttp` git submodule and the full tag
