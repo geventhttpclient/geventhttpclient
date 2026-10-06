@@ -10,19 +10,24 @@ jobs:
   build-wheels:
     name: Build wheels (${{ matrix.label }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: ${{ matrix.timeout || 45 }}
     strategy:
       fail-fast: false
-      # One job per architecture. The aarch64 wheels build natively on the
-      # arm64 runner instead of QEMU, which was what dominated the single
-      # ubuntu job; ppc64le keeps QEMU because GitHub hosts no ppc64le runner
-      # (those are IBM-provided via their own app and an approved repo list).
-      # `archs` is only set where it must override pyproject.toml.
+      # One job per slice. The aarch64 wheels build natively on the arm64
+      # runner instead of QEMU, which is what dominated the single ubuntu job.
+      # ppc64le keeps QEMU (GitHub hosts no ppc64le runner; those are
+      # IBM-provided via their own app and an approved repository list) and is
+      # split by libc, because its eight wheels need about 75 min in one job.
+      # `archs` and `skip` are only set where they must narrow the selection;
+      # `skip` subtracts from the build list in pyproject.toml, while CIBW_BUILD
+      # would replace it and silently re-admit Python versions excluded there.
+      # The artifact name must stay unique per slice.
       matrix:
         include:
           - {label: linux-x86_64, os: ubuntu-24.04, archs: x86_64}
           - {label: linux-aarch64, os: ubuntu-24.04-arm, archs: aarch64}
-          - {label: linux-ppc64le, os: ubuntu-24.04, archs: ppc64le, qemu: true}
+          - {label: linux-ppc64le-manylinux, os: ubuntu-24.04, archs: ppc64le, skip: "cp3*-musllinux_*", qemu: true, timeout: 90}
+          - {label: linux-ppc64le-musllinux, os: ubuntu-24.04, archs: ppc64le, skip: "cp3*-manylinux_*", qemu: true, timeout: 90}
           - {label: macos, os: macos-latest}
           - {label: windows-x86, os: windows-latest}
           - {label: windows-arm64, os: windows-11-arm}
@@ -44,12 +49,16 @@ jobs:
           if [ -n "${{ matrix.archs }}" ]; then
             args+=(--archs "${{ matrix.archs }}")
           fi
+          if [ -n "${{ matrix.skip }}" ]; then
+            # CIBW_SKIP subtracts from the build list in pyproject.toml
+            export CIBW_SKIP="${{ matrix.skip }}"
+          fi
           uvx cibuildwheel==4.2.1 "${args[@]}"
         shell: bash
         name: Run build wheel
       - uses: actions/upload-artifact@v4
         with:
-          name: dist-wheels-${{ matrix.os }}
+          name: dist-wheels-${{ matrix.label }}
           path: ./wheelhouse/*.whl
           if-no-files-found: error
 
