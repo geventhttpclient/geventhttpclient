@@ -92,10 +92,14 @@ build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*"]
 # Smoke test each built wheel: install it and import the package and the
 # C extension before upload. TOML line continuations keep the line length
 # in check; the resulting command is a single line.
+# Double quotes, not single: cibuildwheel runs this through a shell, and
+# cmd.exe (Windows) does not treat single quotes as quoting, so the -c
+# argument would be split at spaces and python would see `'import`.
+# /bin/sh (Linux, macOS) handles the double quotes just as well.
 test-command = """\
-python -c 'import geventhttpclient, \
+python -c "import geventhttpclient, \
 geventhttpclient._parser; \
-print(geventhttpclient.__version__)'\
+print(geventhttpclient.__version__)"\
 """
 
 [tool.cibuildwheel.linux]
