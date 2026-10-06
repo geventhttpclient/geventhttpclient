@@ -26,8 +26,8 @@ jobs:
         include:
           - {label: linux-x86_64, os: ubuntu-24.04, archs: x86_64}
           - {label: linux-aarch64, os: ubuntu-24.04-arm, archs: aarch64}
-          - {label: linux-ppc64le-manylinux, os: ubuntu-24.04, archs: ppc64le, skip: "cp3*-musllinux_*", qemu: true, timeout: 90}
-          - {label: linux-ppc64le-musllinux, os: ubuntu-24.04, archs: ppc64le, skip: "cp3*-manylinux_*", qemu: true, timeout: 90}
+          - {label: linux-ppc64le-manylinux, os: ubuntu-24.04, archs: ppc64le, skip: "cp3*-musllinux_*", qemu: true, timeout: 60}
+          - {label: linux-ppc64le-musllinux, os: ubuntu-24.04, archs: ppc64le, skip: "cp3*-manylinux_*", qemu: true, timeout: 60}
           - {label: macos, os: macos-latest}
           - {label: windows-x86, os: windows-latest}
           - {label: windows-arm64, os: windows-11-arm}
@@ -84,10 +84,27 @@ jobs:
           path: dist/*.tar.gz
           if-no-files-found: error
 
-  publish:
+  test-publish:
     if: github.repository == 'geventhttpclient/geventhttpclient'
     runs-on: ubuntu-latest
     needs: [build-wheels, build-sdist]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        name: Publish package to TestPyPI
+        with:
+          password: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true
+
+  publish:
+    if: github.repository == 'geventhttpclient/geventhttpclient'
+    runs-on: ubuntu-latest
+    needs: test-publish
     steps:
       - uses: actions/download-artifact@v4
         with:

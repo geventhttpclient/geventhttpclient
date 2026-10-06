@@ -42,10 +42,9 @@
    - The source distribution via `uv build`, including the complete test
      suite and the `py.typed` marker. Its version is derived the same way.
 
-   Artifacts are uploaded straight to PyPI. TestPyPI is deliberately not used:
-it is a separate service that can be down on its own (an outage there
-blocked the 2.6.0 upload), and every built wheel is already installed and
-imported in its own build job.
+   Artifacts are first uploaded to TestPyPI for a last sanity check, then
+   to PyPI. Both jobs use `skip-existing: true`, so a re-run that has
+   already pushed a version is a no-op.
 
 3. If the automatic trigger did not start the workflow, or it has to be
    re-run, dispatch it manually from the Actions tab with the release tag
