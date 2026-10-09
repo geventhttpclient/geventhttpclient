@@ -22,13 +22,14 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Python :: 3 :: Only",
     "Topic :: Software Development :: Libraries",
     "Typing :: Typed",
 ]
 dependencies = [
     # Single floor for all supported interpreters, verified against the
-    # full test suite on Python 3.11-3.14: gevent 25.9 is the first
+    # full test suite on Python 3.11-3.15: gevent 25.9 is the first
     # release shipping wheels for Python 3.14. Older gevent releases are
     # not supported.
     "gevent>=25.9",
@@ -86,9 +87,9 @@ version_file = "src/geventhttpclient/_version.py"
 fallback_version = "0.0.0"
 
 [tool.cibuildwheel]
-# CPython 3.11-3.14, no free-threaded variants (cp3xxt) and no unreleased
-# Python versions; musllinux is included via the cp3xx-* globs.
-build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*"]
+# CPython 3.11-3.15, no free-threaded variants (cp3xxt); musllinux is
+# included via the cp3xx-* globs.
+build = ["cp311-*", "cp312-*", "cp313-*", "cp314-*", "cp315-*"]
 # Smoke test each built wheel: install it and import the package and the
 # C extension before upload. TOML line continuations keep the line length
 # in check; the resulting command is a single line.
