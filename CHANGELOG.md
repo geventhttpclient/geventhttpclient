@@ -3,7 +3,7 @@
 API changes, deprecations and notable fixes. CI and packaging noise is
 left out unless it affects users of the package.
 
-## Unreleased
+## 2.6.1 (2026-10-09)
 
 ### Added
 
