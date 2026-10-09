@@ -28,7 +28,7 @@
 2. The publish workflow builds and uploads, in this order:
 
    - Wheels via cibuildwheel (version pinned in the workflow, build and
-     arch configuration in `pyproject.toml`): CPython 3.11-3.14 on
+     arch configuration in `pyproject.toml`): CPython 3.11-3.15 on
      manylinux and musllinux for x86_64, aarch64 and ppc64le, macOS for
      x86_64, arm64 and universal2, and Windows for x86, x86_64 and ARM64.
      Linux runs as one job per architecture: x86_64 and aarch64 build

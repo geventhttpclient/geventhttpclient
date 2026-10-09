@@ -27,7 +27,7 @@ requests.get("https://github.com").text
   changing an import or adding one patch line. See [Choose your interface](#choose-your-interface).
 - **Secure by default.** SSL verification using the `certifi` CA bundle (the same one `requests`
   ships).
-- **Modern packaging.** Python 3.11-3.14, wheels for common platforms, fully type annotated
+- **Modern packaging.** Python 3.11-3.15, wheels for common platforms, fully type annotated
   (`py.typed`).
 
 > **What it is not:** a full replacement for `requests` or `httpx`. It covers the common cases

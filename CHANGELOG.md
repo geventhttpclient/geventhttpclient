@@ -3,6 +3,12 @@
 API changes, deprecations and notable fixes. CI and packaging noise is
 left out unless it affects users of the package.
 
+## Unreleased
+
+### Added
+
+- Python 3.15 is supported explicitly
+
 ## 2.6.0 (2026-10-05)
 
 ### Added
