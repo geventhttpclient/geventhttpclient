@@ -102,6 +102,9 @@ s.get("http://httpbingo.org/headers").json()
 s.get("https://github.com").content
 ```
 
+A header whose value is `None` is left out, like in `requests`, and a `None` in the request headers
+also drops the session header of the same name.
+
 ### httpx-compatible
 
 Same engine and gevent concurrency, with lower HTTP parsing overhead than the `httpx` default.
@@ -118,6 +121,8 @@ with httpx.Client() as client:
 
 Limitations: per-request options are not plumbed through (the engine is configured at session
 level); HTTP/2 and mounts are out of scope.
+
+A header whose value is `None` raises a `TypeError`, like in `httpx`.
 
 ### http.client / httplib
 

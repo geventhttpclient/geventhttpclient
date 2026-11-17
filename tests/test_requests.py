@@ -7,6 +7,8 @@ from geventhttpclient.header import Headers
 from geventhttpclient.requests import RequestsResponse, Session
 from geventhttpclient.response import HTTPResponse
 from tests.common import HTTPBIN_HOST
+from tests.common import header_echo_server as _header_echo_server
+from tests.common import parse_request_headers as _parse_request_headers
 
 
 @pytest.mark.network
@@ -534,3 +536,52 @@ def test_raise_for_status_attaches_response_and_request():
     assert exc_info.value.response is response
     assert exc_info.value.request is not None
     assert exc_info.value.request.method == "GET"
+
+
+# ---------------------------------------------------------------------------
+# Headers whose value is None - the requests semantics: they are left out
+# ---------------------------------------------------------------------------
+
+
+def test_none_header_is_not_sent():
+    with _header_echo_server() as received, _Session() as session:
+        session.get(f"{_BASE}/", headers={"X-None": None, "X-Kept": "yes"})
+    headers = _parse_request_headers(received[0])
+    assert "x-none" not in headers
+    assert headers["x-kept"] == "yes"
+
+
+def test_none_header_removes_the_session_header_of_the_same_name():
+    with _header_echo_server() as received, _Session(headers={"X-Tenant": "acme"}) as session:
+        session.get(f"{_BASE}/", headers={"X-Tenant": None})
+    headers = _parse_request_headers(received[0])
+    assert "x-tenant" not in headers
+
+
+def test_none_header_in_the_session_headers_is_not_sent():
+    with _header_echo_server() as received, _Session(headers={"X-Tenant": None}) as session:
+        session.get(f"{_BASE}/")
+    headers = _parse_request_headers(received[0])
+    assert "x-tenant" not in headers
+
+
+def test_headers_without_none_are_sent_unchanged():
+    with _header_echo_server() as received, _Session(headers={"X-Default": "keep"}) as session:
+        session.get(f"{_BASE}/", headers={"X-Other": "value"})
+    headers = _parse_request_headers(received[0])
+    assert headers["x-default"] == "keep"
+    assert headers["x-other"] == "value"
+
+
+def test_none_in_a_multi_value_header_drops_only_that_value():
+    with _header_echo_server() as received, _Session() as session:
+        session.get(f"{_BASE}/", headers={"X-Multi": ["a", None]})
+    headers = _parse_request_headers(received[0])
+    assert headers["x-multi"] == "a"
+
+
+def test_none_line_of_a_headers_instance_is_dropped():
+    with _header_echo_server() as received, _Session() as session:
+        session.get(f"{_BASE}/", headers=Headers({"X-Multi": ["a", None]}))
+    headers = _parse_request_headers(received[0])
+    assert headers["x-multi"] == "a"

@@ -313,6 +313,9 @@ class Client(Session):
     base_url: str | None
     auth_header: str | None
 
+    #: A header whose value is ``None`` is rejected, like in ``httpx``.
+    drop_none_headers = False
+
     def __init__(
         self,
         *,
@@ -424,6 +427,10 @@ class Client(Session):
                 ),
             )
         except HTTPError:
+            raise
+        except TypeError:
+            # a programming error, not a transport error: httpx raises
+            # those as they are
             raise
         except BaseException as error:  # noqa: BLE001 - translated into the hierarchy below
             translated = _translate(error, None)

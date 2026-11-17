@@ -7,7 +7,7 @@ from urllib.request import Request
 
 import pytest
 
-from geventhttpclient.header import Headers
+from geventhttpclient.header import Headers, check_header_values, filter_invalid_fields
 from geventhttpclient.response import HTTPResponse
 
 CUR_YEAR = datetime.now().year
@@ -320,3 +320,41 @@ def test_setitem_with_tuple_value():
     h["X-Multi"] = ("a", "b")
     assert h.getlist("x-multi") == ["a", "b"]
     assert list(h.items()) == [("X-Multi", "a"), ("X-Multi", "b")]
+
+
+def test_the_container_does_not_validate_the_values():
+    # the container is also used to store the headers of a response, so it
+    # does not check the values: a value of None is rejected when the
+    # headers of a request are created
+    h = Headers({"X-None": None})
+    assert h["X-None"] is None
+    h = Headers({"X-Multi": ["a", None]})
+    assert h.getlist("x-multi") == ["a", None]
+    # other value types are stored as they are, they are stringified when
+    # the request is built
+    h = Headers({"X-Int": 7})
+    assert h["X-Int"] == 7
+
+
+def test_check_header_values_accepts_a_mapping_and_a_headers_instance():
+    with pytest.raises(TypeError):
+        check_header_values({"X-None": None})
+    with pytest.raises(TypeError):
+        check_header_values(Headers({"X-None": None}))
+    with pytest.raises(TypeError):
+        check_header_values({"X-Multi": ["a", None]})
+    with pytest.raises(TypeError):
+        check_header_values(Headers({"X-Multi": ["a", None]}))
+    # a valid header set passes
+    check_header_values({"X-Kept": "1"})
+    check_header_values(Headers({"X-Kept": "1"}))
+
+
+def test_filter_invalid_fields_accepts_a_mapping_and_a_headers_instance():
+    filtered = filter_invalid_fields({"X-None": None, "X-Kept": "1"})
+    assert filtered == Headers({"X-Kept": "1"})
+    filtered = filter_invalid_fields(Headers({"X-None": None, "X-Kept": "1"}))
+    assert filtered == Headers({"X-Kept": "1"})
+    # a multi value header keeps the lines that have a value
+    filtered = filter_invalid_fields({"X-Multi": ["a", None]})
+    assert filtered.getlist("x-multi") == ["a"]

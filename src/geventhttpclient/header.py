@@ -57,6 +57,9 @@ class Headers(dict[str, _StoredEntry]):
     Field names and values are plain str: the parser decodes the bytes of
     the wire as latin-1, and bytes passed in here are not handled.
 
+    The container does not validate the values: a value of ``None`` is
+    rejected when the headers of a request are created.
+
     >>> headers = Headers()
     >>> headers.add('Set-Cookie', 'foo=bar')
     >>> headers.add('set-cookie', 'baz=quxx')
@@ -377,3 +380,39 @@ def parse_content_type_charset(content_type: str) -> str | None:
             charset = parameter[len("charset=") :].strip().strip("\"'")
             return charset or None
     return None
+
+
+def check_header_values(headers: HeadersDataType) -> None:
+    """Reject the headers whose value is ``None``.
+
+    ``None`` is not a header value: sending it would put the literal string
+    "None" on the wire. The httpx-like surface rejects such a header, the
+    requests-like surface leaves it out, see ``filter_invalid_fields()``.
+
+    Only called when the headers of a request are created, never when the
+    headers of a response are read.
+    """
+    for field, value in headers.items():
+        if value is None:
+            raise TypeError(f"Header value must be str or bytes, not NoneType: {field!r}")
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                if item is None:
+                    raise TypeError(f"Header value must be str or bytes, not NoneType: {field!r}")
+
+
+def filter_invalid_fields(headers: HeadersDataType) -> Headers:
+    """The headers without the fields whose value is ``None``.
+
+    Such a field is left out completely, a field with several lines keeps
+    the lines that have a value. This is what the requests-like surface
+    does, like ``requests`` does.
+    """
+    if not isinstance(headers, Headers):
+        headers = Headers(headers)
+    filtered = type(headers)()
+    for field, value in headers.items():
+        if value is None:
+            continue
+        filtered.add(field, value)
+    return filtered

@@ -9,7 +9,7 @@ import gevent.socket
 
 from geventhttpclient import __version__
 from geventhttpclient.connectionpool import ConnectionPool, SSLConnectionPool
-from geventhttpclient.header import Headers, HeadersDataType
+from geventhttpclient.header import Headers, HeadersDataType, check_header_values
 from geventhttpclient.response import (
     HTTPConnectionClosed,
     HTTPParseError,
@@ -268,6 +268,10 @@ class HTTPClient:
         self.headers_type = headers_type
         self.default_headers = headers_type()
         self.default_headers.update(self.DEFAULT_HEADERS)
+        if headers:
+            # only the headers of a request are checked, not the ones of a
+            # response
+            check_header_values(headers)
         self.default_headers.update(headers)
         self.block_size = block_size
 
@@ -382,6 +386,10 @@ class HTTPClient:
         for field, value in header_fields.items():
             if not isinstance(field, str) or not _TOKEN_RE.fullmatch(field):
                 raise ValueError(f"invalid header field name {field!r}")
+            if value is None:
+                # the last guard before the wire: a None value would end up
+                # as the literal string "None" on the wire
+                raise TypeError(f"Header value must be str or bytes, not NoneType: {field!r}")
             if isinstance(value, str) and not _FIELD_VALUE_RE.fullmatch(value):
                 raise ValueError(f"invalid value for header field {field!r}: {value!r}")
             request += field + FIELD_VALUE_SEP + str(value) + CRLF
@@ -414,6 +422,10 @@ class HTTPClient:
         # deciding on the Content-Length header
         merged_headers = self.headers_type()
         merged_headers.update(self.default_headers)
+        if headers:
+            # only the headers of a request are checked, not the ones of a
+            # response
+            check_header_values(headers)
         merged_headers.update(headers or {})
         chunked = _uses_chunked_transfer(merged_headers, body)
         if chunked and self.version != self.HTTP_11:

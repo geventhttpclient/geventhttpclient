@@ -18,7 +18,13 @@ import brotli
 import gevent
 
 from geventhttpclient.client import IDEMPOTENT_METHODS, HTTPClient, HTTPClientPool
-from geventhttpclient.header import Headers, HeadersDataType, parse_content_type_charset
+from geventhttpclient.header import (
+    Headers,
+    HeadersDataType,
+    check_header_values,
+    filter_invalid_fields,
+    parse_content_type_charset,
+)
 from geventhttpclient.response import HTTPSocketResponse
 from geventhttpclient.url import URL, ParamsDataType, to_key_val_list
 
@@ -470,6 +476,11 @@ class UserAgent:
     valid_response_codes: ClassVar[frozenset[int]] = frozenset([200, 206, 301, 302, 303, 307, 308])
     redirect_response_codes: ClassVar[frozenset[int]] = REDIRECT_RESPONSE_CODES
 
+    #: How a header whose value is ``None`` is handled: dropped (the
+    #: requests-like surface, like ``requests``) or rejected with a
+    #: TypeError (the httpx-like surface, like ``httpx``).
+    drop_none_headers: ClassVar[bool] = False
+
     max_redirects: int
     max_retries: int
     retry_delay: float
@@ -494,6 +505,12 @@ class UserAgent:
         self.default_headers = HTTPClient.DEFAULT_HEADERS.copy()
         if headers:
             self.default_headers.update(headers)
+            if self.drop_none_headers:
+                # requests semantics: leave out the headers whose value is
+                # None
+                self.default_headers = filter_invalid_fields(self.default_headers)
+            else:
+                check_header_values(self.default_headers)
         self.cookiejar = cookiejar
         # Forward the explicit args so HTTPClient / HTTPClientPool pick
         # them up; previously only ``**kw`` carried them, which made
@@ -612,6 +629,13 @@ class UserAgent:
         req_headers = self.default_headers.copy()
         if headers:
             req_headers.update(headers)
+            if self.drop_none_headers:
+                # requests semantics: a header whose value is None is not
+                # sent, and it also removes the default header of the same
+                # name
+                req_headers = filter_invalid_fields(req_headers)
+            else:
+                check_header_values(req_headers)
         if kw:
             if method.upper() == "POST":
                 if payload is None:
