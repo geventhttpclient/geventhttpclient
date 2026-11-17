@@ -303,6 +303,9 @@ class Session(useragent.UserAgent):
     request_type = RequestsRequest
     response_type = RequestsResponse
 
+    #: A header whose value is ``None`` is left out, like in ``requests``.
+    drop_none_headers = True
+
     def get(self, url: str | URL, **kw: Any) -> RequestsResponse:
         r"""Sends a GET request. Returns a HTTP Response object.
 

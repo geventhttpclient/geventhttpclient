@@ -67,6 +67,40 @@ def wsgiserver(handler):
         _raise_stored_exception(exception_queue)
 
 
+@contextmanager
+def header_echo_server():
+    """Serve requests and collect the raw request head they carried.
+
+    Yields a list, one entry per request, with the request head as text.
+    """
+    received: list[str] = []
+
+    def handler(sock, addr):
+        data = b""
+        while b"\r\n\r\n" not in data:
+            block = sock.recv(4096)
+            if not block:
+                break
+            data += block
+        received.append(data.decode("latin-1"))
+        sock.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        sock.close()
+
+    with server(handler):
+        yield received
+
+
+def parse_request_headers(head: str) -> dict[str, str]:
+    """The headers of a raw request head, lowercased names, stripped values."""
+    headers = {}
+    for line in head.split("\r\n")[1:]:
+        if not line:
+            break
+        name, _, value = line.partition(":")
+        headers[name.strip().lower()] = value.strip()
+    return headers
+
+
 def check_upload(body, headers=None, length=None):
     def wsgi_handler(env, start_response):
         assert body == env["wsgi.input"].read()

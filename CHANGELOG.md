@@ -3,6 +3,16 @@
 API changes, deprecations and notable fixes. CI and packaging noise is
 left out unless it affects users of the package.
 
+## Unreleased
+
+### Changed
+
+- A header whose value is `None` is no longer sent as the literal string
+  `None`. `geventhttpclient.requests` leaves such a header out, like
+  `requests` does, and a `None` in the request headers also drops the
+  session header of the same name. Every other surface (`HTTPClient`,
+  `geventhttpclient.httpx`) raises a `TypeError`, like `httpx` does.
+
 ## 2.6.1 (2026-10-09)
 
 ### Added

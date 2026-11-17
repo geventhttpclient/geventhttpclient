@@ -174,3 +174,14 @@ def test_connection_error_is_translated():
 
     with Client(max_retries=0) as client, pytest.raises(ConnectError):
         client.request("GET", f"http://127.0.0.1:{dead_port}/")
+
+
+def test_none_header_value_raises_a_type_error():
+    # httpx rejects a header whose value is None, it does not leave it out
+    with Client() as client, pytest.raises(TypeError):
+        client.request("GET", BASE, headers={"X-None": None})
+
+
+def test_none_default_header_value_raises_a_type_error():
+    with pytest.raises(TypeError):
+        Client(headers={"X-None": None})

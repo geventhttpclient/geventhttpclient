@@ -17,8 +17,17 @@ from geventhttpclient.client import (
     _may_retry_after_send_error,
 )
 from geventhttpclient.connectionpool import ConnectionPool
+from geventhttpclient.header import Headers
 from geventhttpclient.response import HTTPConnectionClosed
-from tests.common import HTTPBIN_HOST, LISTENER, check_upload, server, wsgiserver
+from tests.common import (
+    HTTPBIN_HOST,
+    LISTENER,
+    check_upload,
+    header_echo_server,
+    parse_request_headers,
+    server,
+    wsgiserver,
+)
 
 
 def httpbin_client(
@@ -758,3 +767,42 @@ def test_request_head_is_encoded_as_latin1():
         assert resp.status_code == 200
     assert b"X-City: K\xf6ln\r\n" in received[0]
     assert "Köln".encode() not in received[0]
+
+
+# ---------------------------------------------------------------------------
+# Headers whose value is None
+# ---------------------------------------------------------------------------
+
+
+def test_client_rejects_a_none_header_value():
+    with header_echo_server():
+        client = HTTPClient(*LISTENER)
+        with pytest.raises(TypeError):
+            client.get("/", headers={"X-None": None})
+        client.close()
+
+
+def test_client_rejects_a_none_default_header_value():
+    with pytest.raises(TypeError):
+        HTTPClient(*LISTENER, headers={"X-None": None})
+
+
+def test_client_sends_other_value_types_as_strings():
+    with header_echo_server() as received:
+        client = HTTPClient(*LISTENER)
+        client.get("/", headers={"X-Int": 7})
+        client.close()
+    headers = parse_request_headers(received[0])
+    assert headers["x-int"] == "7"
+
+
+def test_request_head_rejects_a_none_header_value():
+    # the last guard before the wire: a value that entered the headers
+    # without going through the checks (Headers.add does not check) must
+    # not end up on the wire as the literal string "None"
+    headers = Headers()
+    headers.add("X-None", None)
+    client = HTTPClient(*LISTENER)
+    with pytest.raises(TypeError):
+        client._build_request("GET", "/", headers=headers)
+    client.close()
