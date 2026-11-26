@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """Minimal OAuth 2.0 client credentials grant with geventhttpclient.
 
 geventhttpclient needs no third-party OAuth library: the token endpoint is
